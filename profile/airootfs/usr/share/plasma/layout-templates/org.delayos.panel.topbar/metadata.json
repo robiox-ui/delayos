@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/LayoutTemplate",
+    "KPlugin": {
+        "Authors": [{ "Name": "DelayOS" }],
+        "Description": "DelayOS top bar",
+        "Id": "org.delayos.panel.topbar",
+        "License": "GPL-2.0+",
+        "Name": "DelayOS top bar",
+        "Name[ko]": "DelayOS 상단 바",
+        "Version": "1.0"
+    },
+    "X-Plasma-ContainmentCategories": ["panel"],
+    "X-Plasma-Shell": "org.kde.plasma.desktop"
+}

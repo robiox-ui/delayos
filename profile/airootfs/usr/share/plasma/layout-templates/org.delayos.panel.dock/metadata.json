@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/LayoutTemplate",
+    "KPlugin": {
+        "Authors": [{ "Name": "DelayOS" }],
+        "Description": "DelayOS floating dock",
+        "Id": "org.delayos.panel.dock",
+        "License": "GPL-2.0+",
+        "Name": "DelayOS dock",
+        "Name[ko]": "DelayOS 독",
+        "Version": "1.0"
+    },
+    "X-Plasma-ContainmentCategories": ["panel"],
+    "X-Plasma-Shell": "org.kde.plasma.desktop"
+}

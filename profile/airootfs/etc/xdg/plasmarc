@@ -1,6 +1,6 @@
 [Theme]
-# TEMUOS glass desktop theme (dark); the light look uses "TemuOS-Light"
-name=TemuOS
+# DelayOS glass desktop theme (dark); the light look uses "DelayOS-Light"
+name=DelayOS
 
 [Wallpapers]
 usersWallpapers=

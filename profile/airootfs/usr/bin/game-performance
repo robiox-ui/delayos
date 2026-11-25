@@ -17,8 +17,8 @@ fi
 # Set performance governors, as long the game is launched
 if [ -n "$GAME_PERFORMANCE_SCREENSAVER_ON" ]; then
     exec "$PROFILE_CMD" launch -p performance \
-        -r "Launched with TEMUOS_LINUX game-performance utility" -- "$@"
+        -r "Launched with DelayOS game-performance utility" -- "$@"
 else
-    exec systemd-inhibit --why "TEMUOS_LINUX game-performance is running" "$PROFILE_CMD" launch \
-        -p performance -r "Launched with TEMUOS_LINUX game-performance utility" -- "$@"
+    exec systemd-inhibit --why "DelayOS game-performance is running" "$PROFILE_CMD" launch \
+        -p performance -r "Launched with DelayOS game-performance utility" -- "$@"
 fi

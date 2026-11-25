@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Windows Engine
+Name[ko]=Windows Engine
+GenericName=Windows app runner
+GenericName[ko]=Windows 앱 실행기
+Comment=Run Windows programs (.exe, .msi) in the Windows Engine
+Comment[ko]=Windows 프로그램(.exe, .msi)을 Windows Engine에서 실행합니다
+Icon=delayos-winengine
+Exec=delay-winengine %f
+Terminal=false
+NoDisplay=true
+StartupNotify=false
+Categories=System;Emulator;
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/vnd.microsoft.portable-executable;application/x-msi;application/x-ms-installer;application/x-ms-shortcut;application/x-bat;application/x-apple-diskimage;

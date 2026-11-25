@@ -16,3 +16,6 @@ protonup-qt
 # Mac apps (Darling) compiles for hours and is experimental: install later with
 #   yay -S darling
 ?shim-signed
+# Proton launcher outside Steam (Welcome and Settings > App support offer it). yay installs it from
+# the Arch repos when it is there, otherwise from the AUR.
+?umu-launcher

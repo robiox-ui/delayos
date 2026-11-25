@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Android apps
+Name[ko]=Android 앱
+Comment=Run Android apps on DelayOS — Play Store, install .apk files
+Exec=/usr/local/bin/delay-android
+Icon=waydroid
+Categories=System;Emulator;
+Keywords=android;apk;play;store;mobile;
+# superseded by org.delayos.AndroidApps.desktop (kept for the delay-android CLI wrapper, hidden from menus)
+NoDisplay=true

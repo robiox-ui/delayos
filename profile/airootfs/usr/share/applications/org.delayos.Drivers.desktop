@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Drivers
+Name[ko]=드라이버
+GenericName=Driver manager
+GenericName[ko]=드라이버 관리자
+Comment=Install recommended graphics, Wi-Fi and audio drivers
+Comment[ko]=그래픽, Wi-Fi, 오디오 장치에 권장되는 드라이버를 설치합니다
+Icon=delayos-drivers
+Exec=delay-drivers
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Drivers
+Categories=System;Settings;HardwareSettings;Qt;
+Keywords=driver;nvidia;amd;intel;gpu;wifi;드라이버;그래픽;

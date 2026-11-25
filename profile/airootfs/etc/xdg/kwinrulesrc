@@ -1,11 +1,11 @@
-# KWin window rules shipped by TEMUOS (users' own rules in ~/.config/kwinrulesrc are merged on top)
+# KWin window rules shipped by DelayOS (users' own rules in ~/.config/kwinrulesrc are merged on top)
 [General]
 count=1
-rules=temuos-installer
+rules=delayos-installer
 
 # Calamares installer (ui-spec 11.1): a centred card without a title bar; never minimised behind the wallpaper
-[temuos-installer]
-Description=TEMUOS 설치 프로그램
+[delayos-installer]
+Description=DelayOS 설치 프로그램
 wmclass=calamares
 wmclasscomplete=false
 wmclassmatch=2

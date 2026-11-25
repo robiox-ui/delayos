@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Run by Calamares (shellprocess, chroot) after the live image is copied to disk.
+# Turns the live system into a normal installed DelayOS.
+set -eu
+
+# Kernels/microcode live on the ISO, not in the squashfs: bring them over
+BOOTMNT=/run/archiso/bootmnt/arch/boot
+for k in linux-delayos linux-lts; do
+  if [[ -f /tmp/delay-boot/x86_64/vmlinuz-$k ]]; then
+    install -m644 /tmp/delay-boot/x86_64/vmlinuz-$k /boot/vmlinuz-$k
+  fi
+  cat > /etc/mkinitcpio.d/$k.preset <<EOF
+ALL_kver='/boot/vmlinuz-$k'
+PRESETS=('default' 'fallback')
+default_image='/boot/initramfs-$k.img'
+fallback_image='/boot/initramfs-$k-fallback.img'
+fallback_options='-S autodetect'
+EOF
+done
+cp /tmp/delay-boot/*-ucode.img /boot/ 2>/dev/null || true
+: "$BOOTMNT"
+
+# Remove live-only bits
+rm -f /etc/mkinitcpio.conf.d/archiso.conf
+rm -f /etc/sddm.conf.d/00-live-autologin.conf
+rm -f /etc/sudoers.d/10-live
+userdel -rf live 2>/dev/null || true
+rm -f /etc/systemd/system/getty@tty1.service.d/autologin.conf
+pacman -Rns --noconfirm calamares mkinitcpio-archiso 2>/dev/null || true
+
+# Fast, quiet boot with gaming-friendly kernel options
+sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=3/' /etc/default/grub
+sed -i 's/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
+grep -q '^GRUB_DISABLE_OS_PROBER' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
+sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0 splash nowatchdog nvme_core.default_ps_max_latency_us=0 split_lock_detect=off zswap.enabled=0 mitigations=auto"/' /etc/default/grub
+sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="DelayOS"/' /etc/default/grub
+
+# Services
+systemctl enable sddm NetworkManager bluetooth fstrim.timer irqbalance \
+  ananicy-cpp power-profiles-daemon systemd-oomd delay-firstboot delay-eac-facts scx_loader rtkit-daemon 2>/dev/null || true
+systemctl enable thermald 2>/dev/null || true
+systemctl disable earlyoom 2>/dev/null || true   # systemd-oomd is used instead
+rm -f /var/lib/delay/firstboot.done
+
+# Installer "Minimal" choice: drop the big optional app set
+if [[ ${DELAYOS_SOFTWARE:-} == minimal ]]; then
+  pacman -Rns --noconfirm libreoffice-fresh libreoffice-fresh-ko gimp vlc lutris bottles 2>/dev/null || true
+fi

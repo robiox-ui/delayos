@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Start
-Name[ko]=시작
-Exec=sh -c "qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.activateLauncherMenu"
-Icon=temuos-logo
-NoDisplay=true
-StartupNotify=false

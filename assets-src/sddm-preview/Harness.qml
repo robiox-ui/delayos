@@ -5,7 +5,7 @@ Item {
     QtObject {
         id: config
         property string background: ""
-        property string accent: "#F47D67"
+        property string accent: "#4D6BFE"
         property string font: "Inter"
         property string dim: "0.30"
     }

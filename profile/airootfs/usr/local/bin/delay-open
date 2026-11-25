@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# delay-open: double-click any app file and it just runs.
+#   .exe/.msi/.bat  -> Windows Engine (WinBoat VM if set up, else Wine/Proton prefix)
+#   .apk            -> Android layer (Waydroid)
+#   .deb/.rpm       -> Debian/Fedora container (distrobox), exported to the Start menu
+#   .dmg            -> Mac apps (Darling, experimental)
+#   .AppImage       -> run directly
+set -u
+f="${1:?usage: delay-open FILE}"
+name="$(basename "$f")"
+note() { notify-send -a "$1" -i "$2" "$3" "${4:-}" 2>/dev/null; }
+# the PySide6 helper (delay-winengine) shows its own dialog/toast; route double-clicks through it
+ui() { [[ "${DELAY_ENGINE_UI:-0}" == 1 ]]; }
+if ! ui && command -v delay-winengine >/dev/null; then
+  case "${f,,}" in *.exe|*.msi|*.bat|*.lnk|*.dmg) exec delay-winengine "$f" ;; esac
+fi
+
+case "${f,,}" in
+  *.exe|*.msi|*.bat|*.lnk)
+    if command -v winboat >/dev/null && [[ -f "$HOME/.winboat/docker-compose.yml" ]] \
+       && [[ "${DELAY_WINE:-0}" != 1 ]] && ! grep -qi -E 'setup|install|game' <<<"$name"; then
+      ui || note "Windows Engine" computer "$name 여는 중..." "Windows Engine에서 실행합니다"
+      exec winboat --open "$f"
+    fi
+    prefix="$HOME/.local/share/delay/windows"
+    mkdir -p "$prefix"
+    ui || note "Windows Engine" wine "$name 여는 중..." "처음 한 번은 시간이 걸릴 수 있습니다."
+    export WINEPREFIX="$prefix" WINEDEBUG=-all WINEFSYNC=1 DXVK_LOG_LEVEL=none
+    # Prefer Valve's Proton-based runtime (umu) when available: DXVK/VKD3D included
+    if command -v umu-run >/dev/null; then
+      exec env GAMEID=0 PROTONPATH=GE-Proton umu-run "$f"
+    fi
+    [[ -f "$prefix/.delay-dxvk" ]] || { winetricks -q dxvk vkd3d >/dev/null 2>&1; touch "$prefix/.delay-dxvk"; }
+    case "${f,,}" in
+      *.msi) exec gamemoderun wine msiexec /i "$f" ;;
+      *)     exec gamemoderun wine "$f" ;;
+    esac
+    ;;
+  *.apk|*.xapk)
+    note "Android apps" android "Installing $name..." "It will appear in Start when it's ready."
+    if ! waydroid status 2>/dev/null | grep -q "RUNNING"; then
+      waydroid session start >/dev/null 2>&1 &
+      for _ in $(seq 60); do waydroid status 2>/dev/null | grep -q "RUNNING" && break; sleep 1; done
+    fi
+    waydroid app install "$f" && note "Android apps" android "$name is ready" "Open it from Start."
+    ;;
+  *.deb)
+    note "Linux apps" debian-logo "Installing $name..." "Using a Debian container"
+    distrobox list 2>/dev/null | grep -q delay-debian || distrobox create -Y -n delay-debian -i debian:stable
+    distrobox enter delay-debian -- sudo apt-get install -y "$f"
+    pkg=$(dpkg-deb -f "$f" Package 2>/dev/null || basename "$f" .deb)
+    distrobox enter delay-debian -- distrobox-export --app "$pkg" 2>/dev/null
+    note "Linux apps" debian-logo "$pkg is ready" "Open it from Start."
+    ;;
+  *.rpm)
+    note "Linux apps" fedora-logo "Installing $name..." "Using a Fedora container"
+    distrobox list 2>/dev/null | grep -q delay-fedora || distrobox create -Y -n delay-fedora -i fedora:latest
+    distrobox enter delay-fedora -- sudo dnf install -y "$f"
+    pkg=$(rpm -qp --qf '%{NAME}' "$f" 2>/dev/null || basename "$f" .rpm)
+    distrobox enter delay-fedora -- distrobox-export --app "$pkg" 2>/dev/null
+    note "Linux apps" fedora-logo "$pkg is ready" "Open it from Start."
+    ;;
+  *.dmg)
+    if command -v darling >/dev/null; then
+      ui || note "Mac 앱 (미리 보기)" applications-other "$name 여는 중" "처음에는 시간이 걸릴 수 있습니다."
+      exec darling shell open "$f"
+    fi
+    ui || note "Mac 앱" dialog-warning "Mac 앱 지원이 설치되어 있지 않습니다" "DelayOS Store에서 'darling'을 설치하세요 (실험적)."
+    exit 1
+    ;;
+  *.appimage)
+    chmod +x "$f" && exec "$f"
+    ;;
+  *)
+    exec xdg-open "$f"
+    ;;
+esac

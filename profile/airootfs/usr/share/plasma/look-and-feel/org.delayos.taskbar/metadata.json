@@ -1,0 +1,15 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [{ "Name": "DelayOS" }],
+        "Category": "",
+        "Description": "Full-width taskbar, glass, blue accent",
+        "Description[ko]": "전체 너비 작업 표시줄, 유리 효과, 파란 강조색",
+        "Id": "org.delayos.taskbar",
+        "License": "GPL-2.0+",
+        "Name": "DelayOS (Taskbar)",
+        "Name[ko]": "DelayOS (작업 표시줄)",
+        "Version": "2.0"
+    },
+    "X-Plasma-APIVersion": "2"
+}

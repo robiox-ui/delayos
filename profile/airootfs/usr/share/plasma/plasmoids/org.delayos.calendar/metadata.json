@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [ { "Name": "DelayOS" } ],
+        "Category": "Date and Time",
+        "Description": "DelayOS calendar popover",
+        "Description[ko]": "DelayOS 달력",
+        "Icon": "view-calendar",
+        "Id": "org.delayos.calendar",
+        "License": "GPL-2.0-or-later",
+        "Name": "Calendar",
+        "Name[ko]": "달력",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

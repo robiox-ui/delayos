@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Generate the TEMUOS logo and the TemuOS icon theme (original artwork).
+"""Generate the DelayOS logo and the DelayOS icon theme (original artwork).
 
 Usage: python3 gen_icons.py <out-root>
-<out-root> mirrors profile/airootfs (usr/share/icons/TemuOS, usr/share/temuos/logo).
+<out-root> mirrors profile/airootfs (usr/share/icons/DelayOS, usr/share/delayos/logo).
 PNG renditions need rsvg-convert.
 """
 import math, os, shutil, subprocess, sys
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else 'out'
-THEME = os.path.join(OUT, 'usr/share/icons/TemuOS')
-LOGO = os.path.join(OUT, 'usr/share/temuos/logo')
+THEME = os.path.join(OUT, 'usr/share/icons/DelayOS')
+LOGO = os.path.join(OUT, 'usr/share/delayos/logo')
 SVGNS = 'xmlns="http://www.w3.org/2000/svg"'
 
 
@@ -122,9 +122,9 @@ def logo_svg(size=64):
     t, m, b = logo_paths()
     return f'''<svg {SVGNS} viewBox="0 0 64 64" width="{size}" height="{size}">
   <defs>
-    <linearGradient id="lt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF8FA8"/><stop offset="1" stop-color="#F0507A"/></linearGradient>
-    <linearGradient id="lm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8325F"/><stop offset="1" stop-color="#C21E55"/></linearGradient>
-    <linearGradient id="lb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A3173F"/><stop offset="1" stop-color="#6E0D30"/></linearGradient>
+    <linearGradient id="lt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A9B8FF"/><stop offset="1" stop-color="#7C93FF"/></linearGradient>
+    <linearGradient id="lm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6480FF"/><stop offset="1" stop-color="#4D6BFE"/></linearGradient>
+    <linearGradient id="lb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3350D8"/><stop offset="1" stop-color="#1F2F94"/></linearGradient>
   </defs>
   <path d="{t}" fill="url(#lt)"/>
   <path d="{m}" fill="url(#lm)"/>
@@ -299,45 +299,50 @@ def g_rules(c):
     return s
 
 
+def g_winengine(c):
+    return f'<circle cx="32" cy="32" r="12.5" fill="none" stroke="{c("#FFFFFF")}" stroke-width="5.5"/>'
+
+
 APPS = {
-    'temuos-files': ('#EC5C8E', '#B8174D', g_files),
-    'temuos-notepad': ('#FBC56A', '#E8922E', g_notepad),
-    'temuos-calculator': ('#545A66', '#2C3038', g_calc),
-    'temuos-settings': ('#6B707C', '#3E424C', g_settings),
-    'temuos-taskmanager': ('#8A2545', '#4A2A36', g_taskman),
-    'temuos-android': ('#4BE08F', '#1E9E58', g_android),
-    'temuos-terminal': ('#3A3D45', '#1E2026', g_terminal),
-    'temuos-snip': ('#F57AA6', '#D6336C', g_snip),
-    'temuos-drivers': ('#F9A64B', '#D8731E', g_drivers),
-    'temuos-welcome': ('#F9B8A8', '#F08C8C', g_welcome),
-    'temuos-store': ('#8B5CF6', '#5B21B6', g_store),
-    'temuos-activity-monitor': ('#2BD3B4', '#0F7A6A', g_activity),
-    'temuos-disks': ('#7C8AA3', '#3B475C', g_disks),
-    'temuos-archive': ('#D69A5E', '#8F5527', g_archive),
-    'temuos-media-player': ('#FF8A57', '#E04A2C', g_media),
-    'temuos-network-monitor': ('#5EA2F8', '#1F4FC6', g_netmon),
-    'temuos-pdf-reader': ('#F26B6B', '#B4232A', g_pdf),
-    'temuos-photos': ('#7CD4FA', '#1592D6', g_photos),
-    'temuos-ping-monitor': ('#3FD8A0', '#0B7F57', g_ping),
-    'temuos-process-rules': ('#8A93F7', '#4639C4', g_rules),
+    'delayos-files': ('#EC5C8E', '#B8174D', g_files),
+    'delayos-notepad': ('#FBC56A', '#E8922E', g_notepad),
+    'delayos-calculator': ('#545A66', '#2C3038', g_calc),
+    'delayos-settings': ('#6B707C', '#3E424C', g_settings),
+    'delayos-taskmanager': ('#8A2545', '#4A2A36', g_taskman),
+    'delayos-android': ('#4BE08F', '#1E9E58', g_android),
+    'delayos-winengine': ('#3DDC84', '#16864A', g_winengine),
+    'delayos-terminal': ('#3A3D45', '#1E2026', g_terminal),
+    'delayos-snip': ('#F57AA6', '#D6336C', g_snip),
+    'delayos-drivers': ('#F9A64B', '#D8731E', g_drivers),
+    'delayos-welcome': ('#F9B8A8', '#F08C8C', g_welcome),
+    'delayos-store': ('#8B5CF6', '#5B21B6', g_store),
+    'delayos-activity-monitor': ('#2BD3B4', '#0F7A6A', g_activity),
+    'delayos-disks': ('#7C8AA3', '#3B475C', g_disks),
+    'delayos-archive': ('#D69A5E', '#8F5527', g_archive),
+    'delayos-media-player': ('#FF8A57', '#E04A2C', g_media),
+    'delayos-network-monitor': ('#5EA2F8', '#1F4FC6', g_netmon),
+    'delayos-pdf-reader': ('#F26B6B', '#B4232A', g_pdf),
+    'delayos-photos': ('#7CD4FA', '#1592D6', g_photos),
+    'delayos-ping-monitor': ('#3FD8A0', '#0B7F57', g_ping),
+    'delayos-process-rules': ('#8A93F7', '#4639C4', g_rules),
 }
 
 # Standard / third-party names that should look like our apps (copies, no symlinks)
 ALIASES = {
-    'temuos-files': ['system-file-manager', 'org.kde.dolphin', 'folder-manager'],
-    'temuos-notepad': ['accessories-text-editor', 'org.kde.kwrite', 'org.kde.kate'],
-    'temuos-calculator': ['accessories-calculator', 'org.kde.kcalc', 'org.gnome.Calculator'],
-    'temuos-settings': ['preferences-system', 'systemsettings', 'org.kde.systemsettings'],
-    'temuos-taskmanager': ['utilities-system-monitor', 'org.kde.plasma-systemmonitor', 'ksysguard'],
-    'temuos-android': ['waydroid', 'Waydroid'],
-    'temuos-terminal': ['utilities-terminal', 'org.kde.konsole', 'konsole', 'terminal'],
-    'temuos-snip': ['org.kde.spectacle', 'spectacle', 'applets-screenshooter', 'accessories-screenshot'],
-    'temuos-store': ['org.kde.discover', 'plasmadiscover', 'system-software-install'],
-    'temuos-disks': ['org.gnome.DiskUtility', 'gnome-disks', 'partitionmanager', 'org.kde.partitionmanager'],
-    'temuos-archive': ['org.kde.ark', 'ark', 'org.gnome.FileRoller', 'file-roller', 'utilities-file-archiver'],
-    'temuos-media-player': ['org.kde.haruna', 'haruna', 'vlc', 'multimedia-video-player'],
-    'temuos-pdf-reader': ['org.kde.okular', 'okular'],
-    'temuos-photos': ['org.kde.gwenview', 'gwenview', 'multimedia-photo-viewer'],
+    'delayos-files': ['system-file-manager', 'org.kde.dolphin', 'folder-manager'],
+    'delayos-notepad': ['accessories-text-editor', 'org.kde.kwrite', 'org.kde.kate'],
+    'delayos-calculator': ['accessories-calculator', 'org.kde.kcalc', 'org.gnome.Calculator'],
+    'delayos-settings': ['preferences-system', 'systemsettings', 'org.kde.systemsettings'],
+    'delayos-taskmanager': ['utilities-system-monitor', 'org.kde.plasma-systemmonitor', 'ksysguard'],
+    'delayos-android': ['waydroid', 'Waydroid'],
+    'delayos-terminal': ['utilities-terminal', 'org.kde.konsole', 'konsole', 'terminal'],
+    'delayos-snip': ['org.kde.spectacle', 'spectacle', 'applets-screenshooter', 'accessories-screenshot'],
+    'delayos-store': ['org.kde.discover', 'plasmadiscover', 'system-software-install'],
+    'delayos-disks': ['org.gnome.DiskUtility', 'gnome-disks', 'partitionmanager', 'org.kde.partitionmanager'],
+    'delayos-archive': ['org.kde.ark', 'ark', 'org.gnome.FileRoller', 'file-roller', 'utilities-file-archiver'],
+    'delayos-media-player': ['org.kde.haruna', 'haruna', 'vlc', 'multimedia-video-player'],
+    'delayos-pdf-reader': ['org.kde.okular', 'okular'],
+    'delayos-photos': ['org.kde.gwenview', 'gwenview', 'multimedia-photo-viewer'],
 }
 
 
@@ -502,10 +507,10 @@ def sym_svg(inner):
 
 
 INDEX = '''[Icon Theme]
-Name=TemuOS
-Comment=TEMUOS 아이콘 테마
+Name=DelayOS
+Comment=DelayOS 아이콘 테마
 Inherits=Papirus-Dark,breeze-dark,hicolor
-Example=temuos-files
+Example=delayos-files
 DisplayDepth=32
 FollowsColorScheme=true
 DesktopDefault=48
@@ -565,12 +570,12 @@ def main():
         shutil.rmtree(THEME)
     w(os.path.join(THEME, 'index.theme'), INDEX)
     # logo
-    w(os.path.join(LOGO, 'temuos.svg'), logo_svg())
-    w(os.path.join(LOGO, 'temuos-symbolic.svg'), logo_symbolic())
-    for name in ('temuos-logo', 'start-here', 'start-here-kde', 'start-here-kde-plasma', 'distributor-logo', 'temuos'):
+    w(os.path.join(LOGO, 'delayos.svg'), logo_svg())
+    w(os.path.join(LOGO, 'delayos-symbolic.svg'), logo_symbolic())
+    for name in ('delayos-logo', 'start-here', 'start-here-kde', 'start-here-kde-plasma', 'distributor-logo', 'delayos'):
         sub = 'places' if name.startswith('start-here') else 'apps'
         w(os.path.join(THEME, 'scalable', sub, name + '.svg'), logo_svg())
-    w(os.path.join(THEME, 'symbolic/status/temuos-logo-symbolic.svg'), logo_symbolic())
+    w(os.path.join(THEME, 'symbolic/status/delayos-logo-symbolic.svg'), logo_symbolic())
     w(os.path.join(THEME, 'symbolic/status/start-here-symbolic.svg'), logo_symbolic())
     # apps
     for name, (top, bot, g) in APPS.items():
@@ -580,15 +585,15 @@ def main():
             w(os.path.join(THEME, 'scalable/apps', alias + '.svg'), svg)
     # settings categories
     for name, inner in CATS.items():
-        w(os.path.join(THEME, 'scalable/categories', 'temuos-settings-' + name + '.svg'), cat_icon(inner))
+        w(os.path.join(THEME, 'scalable/categories', 'delayos-settings-' + name + '.svg'), cat_icon(inner))
     # symbolic
     for name, inner in SYM.items():
-        w(os.path.join(THEME, 'symbolic/actions', 'temuos-sym-' + name + '.svg'), sym_svg(inner))
+        w(os.path.join(THEME, 'symbolic/actions', 'delayos-sym-' + name + '.svg'), sym_svg(inner))
     # logo PNGs
     if shutil.which('rsvg-convert'):
         for s in (16, 22, 24, 32, 48, 64, 96, 128, 256, 512):
-            subprocess.run(['rsvg-convert', '-w', str(s), '-h', str(s), os.path.join(LOGO, 'temuos.svg'),
-                            '-o', os.path.join(LOGO, 'temuos-%d.png' % s)], check=True)
+            subprocess.run(['rsvg-convert', '-w', str(s), '-h', str(s), os.path.join(LOGO, 'delayos.svg'),
+                            '-o', os.path.join(LOGO, 'delayos-%d.png' % s)], check=True)
     print('apps', len(APPS), 'cats', len(CATS), 'sym', len(SYM))
 
 

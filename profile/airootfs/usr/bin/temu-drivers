@@ -1,8 +1,0 @@
-#!/usr/bin/python3
-# TEMUOS 드라이버 (org.temuos.Drivers)
-import sys
-sys.path[:0] = ["/usr/share/temuos/apps/syskit"]
-from syskit import run_app, single_instance
-if single_instance("org.temuos.Drivers", []):
-    sys.exit(0)
-sys.exit(run_app("org.temuos.Drivers", "드라이버", "/usr/share/temuos/apps/drivers/qml/main.qml", icon="temuos-drivers"))

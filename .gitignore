@@ -3,6 +3,8 @@
 *.pem
 *.p12
 *.der.key
+delayos-keys/
+# old project name: key folders made before the rename must stay ignored too
 temuos-keys/
 keys/
 # build outputs
@@ -16,6 +18,7 @@ work/
 src/
 pkg/
 # local scratch
-*.log# internal working notes (local paths, test VM details)
+*.log
+# internal working notes (local paths, test VM details)
 docs/dev-guide.md
 docs/reports/

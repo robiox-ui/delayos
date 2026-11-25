@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Edit game controls
+Name[ko]=게임 컨트롤 편집
+Comment=Meta+Shift+G: edit the Android game controls layout
+Comment[ko]=Meta+Shift+G: Android 게임 컨트롤 배치 편집
+Icon=input-gaming
+Exec=delay-gamecontrols --edit
+StartupNotify=false
+X-KDE-Shortcuts=Meta+Shift+G

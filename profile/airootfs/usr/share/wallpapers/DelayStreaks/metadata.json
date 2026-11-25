@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DelayOS"
+            }
+        ],
+        "Id": "DelayStreaks",
+        "License": "CC-BY-SA-4.0",
+        "Name": "DelayOS Streaks",
+        "Name[ko]": "DelayOS 빛줄기"
+    }
+}

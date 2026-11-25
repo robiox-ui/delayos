@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Android apps
+Name[ko]=Android 앱
+GenericName=Android app support
+GenericName[ko]=Android 앱 지원
+Comment=Run Android apps on DelayOS: set up Android, Google Play, install .apk files
+Comment[ko]=DelayOS에서 Android 앱 실행: Android와 Google Play를 설정하고 .apk 파일을 설치합니다
+Icon=delayos-android
+Exec=delay-android-apps
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.AndroidApps
+Categories=System;Emulator;Qt;
+Keywords=android;apk;google play;waydroid;안드로이드;구글 플레이;

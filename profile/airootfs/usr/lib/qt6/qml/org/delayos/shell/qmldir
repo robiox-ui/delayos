@@ -1,0 +1,7 @@
+module org.delayos.shell
+Glyph 1.0 Glyph.qml
+Logo 1.0 Logo.qml
+Exec 1.0 Exec.qml
+Activator 1.0 Activator.qml
+GamingPill 1.0 GamingPill.qml
+Apps 1.0 apps.js

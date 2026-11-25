@@ -46,7 +46,7 @@ BorderActivate=9
 TouchBorderActivate=9
 
 [Round-Corners]
-# 12 px window corners (kwin-effect-rounded-corners); shadows come from the TemuOS decoration
+# 12 px window corners (kwin-effect-rounded-corners); shadows come from the DelayOS decoration
 Size=12
 InactiveCornerRadius=12
 UseNativeDecorationShadows=true
@@ -77,9 +77,9 @@ BorderlessMaximizedWindows=false
 Placement=Centered
 
 [org.kde.kdecoration2]
-# TemuOS Aurorae frame (ui-spec 9.1): 28 px title bar in the body colour, grouped - [] x pill
+# DelayOS Aurorae frame (ui-spec 9.1): 28 px title bar in the body colour, grouped - [] x pill
 library=org.kde.kwin.aurorae
-theme=__aurorae__svg__TemuOS
+theme=__aurorae__svg__DelayOS
 # Windows-style buttons on the right
 ButtonsOnLeft=M
 ButtonsOnRight=IAX

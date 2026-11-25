@@ -1,6 +1,6 @@
-# TEMUOS_LINUX: sched-ext scheduler loaded at boot by scx_loader.service.
+# DelayOS: sched-ext scheduler loaded at boot by scx_loader.service.
 # scx_lavd (latency-aware, built for gaming; CachyOS's choice for games/handhelds).
-# Gaming mode switches it to its gaming profile (temu-gamemode-root). Falls back to the
+# Gaming mode switches it to its gaming profile (delay-gamemode-root). Falls back to the
 # kernel's BORE scheduler automatically if sched-ext is unavailable.
 default_sched = "scx_lavd"
 default_mode = "Auto"

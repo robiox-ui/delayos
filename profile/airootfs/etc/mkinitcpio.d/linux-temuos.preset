@@ -1,7 +1,0 @@
-# Live ISO preset (replaced by a normal preset on the installed system)
-PRESETS=('archiso')
-
-ALL_kver='/boot/vmlinuz-linux-temuos'
-archiso_config='/etc/mkinitcpio.conf.d/archiso.conf'
-
-archiso_image="/boot/initramfs-linux-temuos.img"

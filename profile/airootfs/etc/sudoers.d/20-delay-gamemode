@@ -1,0 +1,1 @@
+%wheel ALL=(root) NOPASSWD: /usr/local/bin/delay-gamemode-root on, /usr/local/bin/delay-gamemode-root off

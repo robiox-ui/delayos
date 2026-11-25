@@ -1,4 +1,4 @@
-# TEMUOS default global shortcuts (Windows-style, ui-spec 13).
+# DelayOS default global shortcuts (Windows-style, ui-spec 13).
 # This file is the new user's ~/.config/kglobalshortcutsrc (from /etc/skel): kglobalacceld opens it
 # as a simple config and never reads /etc/xdg/kglobalshortcutsrc, so defaults cannot live there.
 # Plasma 6 format: launch shortcuts of apps live in [services][<desktop file>] as _launch=<keys>
@@ -6,14 +6,14 @@
 # are "active,default,label".
 #
 # Set elsewhere:
-#   Meta (tap)        Start            org.temuos.start provides org.kde.plasma.launchermenu
+#   Meta (tap)        Start            org.delayos.start provides org.kde.plasma.launchermenu
 #   Meta+Space/A/V/X  command bar / Control Center / clipboard / quick menu: widget shortcuts
-#                     written by the panel layout (layout-templates/org.temuos.panel.*)
-#   Meta+.            emoji panel      /usr/share/kglobalaccel/org.temuos.emoji-panel.desktop
-#   Meta+1..9         dock apps        /usr/share/applications/temu-dock-entry-N.desktop
-#   Meta+E, Meta+Shift+S, Print, Ctrl+Shift+Esc, Ctrl+Alt+T: X-KDE-Shortcuts of the TEMUOS apps
+#                     written by the panel layout (layout-templates/org.delayos.panel.*)
+#   Meta+.            emoji panel      /usr/share/kglobalaccel/org.delayos.emoji-panel.desktop
+#   Meta+1..9         dock apps        /usr/share/applications/delay-dock-entry-N.desktop
+#   Meta+E, Meta+Shift+S, Print, Ctrl+Shift+Esc, Ctrl+Alt+T: X-KDE-Shortcuts of the DelayOS apps
 
-# ---- KDE apps give their keys to the TEMUOS apps ----
+# ---- KDE apps give their keys to the DelayOS apps ----
 [services][org.kde.krunner.desktop]
 _launch=Alt+F2\tSearch
 
@@ -33,22 +33,38 @@ _launch=Meta+Ctrl+Alt+Shift+Space
 _launch=Tools
 
 # Win+I = Settings
-[services][org.temuos.Settings.desktop]
+[services][org.delayos.Settings.desktop]
 _launch=Meta+I
 
-# Win+G = Gaming mode on/off
-[services][temu-gamemode-toggle.desktop]
+# Win+G is shared (the top bar uses it for Gaming mode, ui-spec 13 for the Android game controls):
+# /usr/local/bin/delay-game-key toggles the Android
+# game controls while Android (Waydroid) runs and Gaming mode otherwise. F12 = game controls
+# on/off (does nothing unless Android runs), Win+Shift+G = edit the game controls.
+# The three launchers live in /usr/share/kglobalaccel/ (kglobalacceld skips NoDisplay entries).
+# Note: F12 is grabbed globally, so apps no longer see it (Steam screenshot key, browser dev tools);
+# set the second entry to "none" to give it back.
+[services][org.delayos.game-key.desktop]
 _launch=Meta+G
 
+[services][org.delayos.gamecontrols-toggle.desktop]
+_launch=F12
+
+[services][org.delayos.gamecontrols-edit.desktop]
+_launch=Meta+Shift+G
+
+# Gaming mode alone (top-bar pill, start menu entry): no key of its own, Win+G above reaches it
+[services][delay-gamemode-toggle.desktop]
+_launch=none
+
 [plasmashell]
-# Meta+V belongs to the TEMUOS clipboard panel (org.temuos.clipboard)
+# Meta+V belongs to the DelayOS clipboard panel (org.delayos.clipboard)
 clipboard_action=none,Meta+Ctrl+X,Automatic Action Popup Menu
 show-on-mouse-pos=none,Meta+V,Show Clipboard Items at Mouse Position
-# Meta+A belongs to the TEMUOS Control Center (org.temuos.controlcenter)
+# Meta+A belongs to the DelayOS Control Center (org.delayos.controlcenter)
 next activity=none,Meta+A,Walk through activities
 previous activity=none,Meta+Shift+A,Walk through activities (Reverse)
 show system tray=none,none,Show System Tray
-# Meta+1..9 = dock apps by position (temu-dock-entry-N.desktop), not the stock task manager
+# Meta+1..9 = dock apps by position (delay-dock-entry-N.desktop), not the stock task manager
 activate task manager entry 1=none,Meta+1,Activate Task Manager Entry 1
 activate task manager entry 2=none,Meta+2,Activate Task Manager Entry 2
 activate task manager entry 3=none,Meta+3,Activate Task Manager Entry 3
@@ -64,7 +80,7 @@ activate task manager entry 9=none,Meta+9,Activate Task Manager Entry 9
 Overview=Meta+Tab\tMeta+W,Meta+W,Toggle Overview
 Walk Through Windows=Alt+Tab,Alt+Tab\tMeta+Tab,Walk Through Windows
 Walk Through Windows (Reverse)=Alt+Shift+Tab,Alt+Shift+Tab\tMeta+Shift+Tab,Walk Through Windows (Reverse)
-# Meta+G belongs to Gaming mode
+# Meta+G belongs to Gaming mode / game controls (delay-game-key)
 Grid View=none,Meta+G,Toggle Grid View
 Window Close=Alt+F4,Alt+F4,Close Window
 Window Maximize=Meta+Up,Meta+PgUp,Maximize Window

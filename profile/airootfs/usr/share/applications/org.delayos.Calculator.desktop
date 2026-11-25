@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=계산기
+GenericName=계산기
+Comment=표준, 공학용, 프로그래머용 계산과 날짜 계산, 단위 변환
+Exec=delay-calc
+Icon=delayos-calculator
+Terminal=false
+Categories=Utility;Calculator;
+Keywords=calculator;calc;계산;계산기;
+StartupWMClass=org.delayos.Calculator
+StartupNotify=true

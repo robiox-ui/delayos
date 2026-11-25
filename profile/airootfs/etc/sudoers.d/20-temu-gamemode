@@ -1,1 +1,0 @@
-%wheel ALL=(root) NOPASSWD: /usr/local/bin/temu-gamemode-root on, /usr/local/bin/temu-gamemode-root off

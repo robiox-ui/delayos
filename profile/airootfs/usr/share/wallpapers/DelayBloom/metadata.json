@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DelayOS"
+            }
+        ],
+        "Id": "DelayBloom",
+        "License": "CC-BY-SA-4.0",
+        "Name": "DelayOS Bloom",
+        "Name[ko]": "DelayOS 불꽃"
+    }
+}

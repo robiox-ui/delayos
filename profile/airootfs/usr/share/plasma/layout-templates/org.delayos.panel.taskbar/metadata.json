@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/LayoutTemplate",
+    "KPlugin": {
+        "Authors": [{ "Name": "DelayOS" }],
+        "Description": "DelayOS taskbar",
+        "Id": "org.delayos.panel.taskbar",
+        "License": "GPL-2.0+",
+        "Name": "DelayOS taskbar",
+        "Name[ko]": "DelayOS 작업 표시줄",
+        "Version": "1.0"
+    },
+    "X-Plasma-ContainmentCategories": ["panel"],
+    "X-Plasma-Shell": "org.kde.plasma.desktop"
+}

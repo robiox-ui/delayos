@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Game controls on/off
+Name[ko]=게임 컨트롤 켜기/끄기
+Comment=F12: turn the Android game controls on or off (only while Android runs)
+Comment[ko]=F12: Android 게임 컨트롤 켜기 또는 끄기 (Android 실행 중에만)
+Icon=input-gaming
+Exec=/usr/local/bin/delay-game-key controls
+StartupNotify=false
+X-KDE-Shortcuts=F12

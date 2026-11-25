@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DelayOS"
+            }
+        ],
+        "Id": "DelayCloud",
+        "License": "CC-BY-SA-4.0",
+        "Name": "DelayOS Cloud",
+        "Name[ko]": "DelayOS 구름"
+    }
+}

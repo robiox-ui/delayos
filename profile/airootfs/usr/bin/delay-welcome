@@ -1,0 +1,21 @@
+#!/usr/bin/python3
+# DelayOS 시작하기 (org.delayos.Welcome). `delay-welcome --autostart` exits at once when the wizard was finished or in the live session.
+import os
+import sys
+sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/store"]
+if "--autostart" in sys.argv:
+    from syskit import kread
+    if kread("delayosrc", "Welcome", "Done", "false") == "true" or os.path.exists("/run/archiso"):
+        sys.exit(0)
+from syskit import run_app, single_instance
+if single_instance("org.delayos.Welcome", []):
+    sys.exit(0)
+
+
+def ctx():
+    from installer import Installer
+    return {"installer": Installer()}
+
+
+sys.exit(run_app("org.delayos.Welcome", "시작하기", "/usr/share/delayos/apps/welcome/qml/main.qml",
+                 icon="delayos-welcome", extra_ctx=ctx))

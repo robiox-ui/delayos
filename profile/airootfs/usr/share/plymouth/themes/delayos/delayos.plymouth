@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=DelayOS
+Description=DelayOS boot splash: logo on a dark blue glow with a 3-dot pulse
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/delayos
+ScriptFile=/usr/share/plymouth/themes/delayos/delayos.script

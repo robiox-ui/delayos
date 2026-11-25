@@ -1,0 +1,8 @@
+#!/usr/bin/python3
+# DelayOS "Android 앱" launcher (org.delayos.AndroidApps): set up Waydroid + Google Play, install .apk, launch apps.
+import sys
+sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/android"]
+from syskit import run_app, single_instance
+if single_instance("org.delayos.AndroidApps", sys.argv[1:]):
+    sys.exit(0)
+sys.exit(run_app("org.delayos.AndroidApps", "Android 앱", "/usr/share/delayos/apps/android/qml/main.qml", icon="delayos-android"))

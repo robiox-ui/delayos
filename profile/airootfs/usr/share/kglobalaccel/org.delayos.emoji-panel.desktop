@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Emoji panel
+Name[ko]=이모지 패널
+Comment=Open the DelayOS emoji panel
+Comment[ko]=DelayOS 이모지 패널 열기
+Icon=face-smile
+Exec=delay-shell toggle emoji
+StartupNotify=false
+X-KDE-Shortcuts=Meta+.

@@ -1,5 +1,0 @@
-#!/usr/bin/python3
-import runpy
-import sys
-sys.argv[0] = "temu-files"
-runpy.run_path("/usr/share/temuos/apps/files/main.py", run_name="__main__")

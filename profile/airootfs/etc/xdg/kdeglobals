@@ -1,19 +1,19 @@
 [General]
-ColorScheme=TemuDark
+ColorScheme=DelayDark
 AccentColor=77,107,254
 font=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 fixed=JetBrains Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 smallestReadableFont=Inter,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 toolBarFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 menuFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
-TerminalApplication=konsole
+TerminalApplication=delay-terminal
 BrowserApplication=firefox.desktop
 
 [Icons]
-Theme=TemuOS
+Theme=DelayOS
 
 [KDE]
-LookAndFeelPackage=org.temuos.dock
+LookAndFeelPackage=org.delayos.dock
 widgetStyle=Breeze
 SingleClick=false
 # Snappier animations, same as CachyOS (1.0 = default; lower = faster)

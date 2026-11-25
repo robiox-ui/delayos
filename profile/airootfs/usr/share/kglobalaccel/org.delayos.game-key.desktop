@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Gaming mode / game controls
+Name[ko]=게이밍 모드 / 게임 컨트롤
+Comment=Meta+G: Android game controls while Android runs, otherwise Gaming mode
+Comment[ko]=Meta+G: Android 실행 중에는 게임 컨트롤, 그 외에는 게이밍 모드
+Icon=input-gaming
+Exec=/usr/local/bin/delay-game-key
+StartupNotify=false
+X-KDE-Shortcuts=Meta+G

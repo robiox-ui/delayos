@@ -1,4 +1,4 @@
-# TEMUOS_LINUX desktop UI specification
+# DelayOS desktop UI specification
 
 This spec rebuilds the FlowOS desktop as it appears in its demo videos, for KDE Plasma 6 on Wayland at a 1920×1080 reference screen. Only the branding changes. Layout, sizes, colours, texts, behaviour, icon style and wallpaper style should match the videos.
 
@@ -22,9 +22,9 @@ Rules for reading the source tags:
 
 ### 0.2 Brand substitution markers
 
-`⟦FlowOS⟧` → **TEMUOS** · `⟦Velotic Store⟧` → **TEMUOS Store** (suggested) · `⟦Velotic⟧` (logo word) → **TEMUOS** · `⟦Velotic Studios⟧` → your publisher name · `⟦flowos.veloticstudios.com⟧` → your URL · `⟦LOGO⟧` → the TEMUOS logo.
+`⟦FlowOS⟧` → **DelayOS** · `⟦Velotic Store⟧` → **DelayOS Store** (suggested) · `⟦Velotic⟧` (logo word) → **DelayOS** · `⟦Velotic Studios⟧` → your publisher name · `⟦flowos.veloticstudios.com⟧` → your URL · `⟦LOGO⟧` → the DelayOS logo.
 
-FlowOS's own logo is a circle split into 4 quadrants by a thin cross-shaped gap. The top-left and bottom-right quadrants are light pink `#F0506E`, the other two are crimson `#A3173F`. Do **not** copy it. Use a TEMUOS mark of the same size class: a 16–18 px glyph in the top bar, and a 26 px glyph in the dock and Start button.
+FlowOS's own logo is a circle split into 4 quadrants by a thin cross-shaped gap. The top-left and bottom-right quadrants are light pink `#F0506E`, the other two are crimson `#A3173F`. Do **not** copy it. Use a DelayOS mark of the same size class: a 16–18 px glyph in the top bar, and a 26 px glyph in the dock and Start button.
 
 ### 0.3 Global design tokens (dark mode = default)
 
@@ -1003,7 +1003,7 @@ Reference frames: [T] `TrNP_05m05.5s_installer_welcome.png`, `TrNP_05m10.0s_inst
   - Done: dim-accent dot (accent at 45%) + `text-2` label.
   - **Current: an accent pill 30×9 + a bold white label.**
   - Upcoming: grey dot (#4A4D55) + `text-3` label.
-- The **Activate** step (product key) does not apply to TEMUOS; drop it or keep it as a no-op.
+- The **Activate** step (product key) does not apply to DelayOS; drop it or keep it as a no-op.
 
 **Page body**
 - Content column 640 px wide, centred.
@@ -1020,7 +1020,7 @@ Reference frames: [T] `TrNP_05m05.5s_installer_welcome.png`, `TrNP_05m10.0s_inst
 
 **1. Welcome**
 - ⟦LOGO⟧ 84 px, then **"Welcome to ⟦FlowOS⟧"**.
-- Body: "Let's put ⟦FlowOS⟧ on your computer. You'll need your product key and an internet connection: ⟦FlowOS⟧ downloads its newest version while it installs. You can keep Windows and all your files." Drop the product-key clause for TEMUOS.
+- Body: "Let's put ⟦FlowOS⟧ on your computer. You'll need your product key and an internet connection: ⟦FlowOS⟧ downloads its newest version while it installs. You can keep Windows and all your files." Drop the product-key clause for DelayOS.
 - Primary button **"→ Install ⟦FlowOS⟧"** (centred, 147×46).
 
 **2. Network, 3. Activate, 5. You, 6. Region:** not shown. Build them with the same components:

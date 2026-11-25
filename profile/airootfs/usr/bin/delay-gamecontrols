@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+# Android game controls overlay (§10.3). Bound through /usr/local/bin/delay-game-key: Meta+G / F12 -> `delay-gamecontrols --toggle` (while Android runs), Meta+Shift+G -> `delay-gamecontrols --edit`.
+# Optional last argument: Android package name (default: the game that has a layout / Free Fire MAX).
+import sys
+sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/android"]
+from syskit import run_app, single_instance
+if single_instance("org.delayos.GameControls", sys.argv[1:]):
+    sys.exit(0)
+sys.exit(run_app("org.delayos.GameControls", "게임 컨트롤", "/usr/share/delayos/apps/android/qml/GameControls.qml", icon="input-gaming"))

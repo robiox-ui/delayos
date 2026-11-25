@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DelayOS"
+            }
+        ],
+        "Id": "DelayHorizon",
+        "License": "CC-BY-SA-4.0",
+        "Name": "DelayOS Horizon",
+        "Name[ko]": "DelayOS 수평선"
+    }
+}

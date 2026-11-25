@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# One key, two jobs: the top bar uses Win+G for Gaming mode, ui-spec 13 for the Android game controls.
+#
+#   delay-game-key            Meta+G: while Android (Waydroid) is running -> game controls on/off,
+#                            otherwise -> Gaming mode on/off (the top-bar pill)
+#   delay-game-key controls   F12: game controls on/off, only while Android is running (else nothing)
+#
+# Bound in /usr/share/kglobalaccel/org.delayos.game-key.desktop and
+# org.delayos.gamecontrols-toggle.desktop; Meta+Shift+G (edit) calls delay-gamecontrols --edit directly.
+set -u
+
+android_running() {
+  # the overlay itself, or a Waydroid session of this user
+  pgrep -u "$UID" -f 'delay-gamecontrols' >/dev/null 2>&1 && return 0
+  pgrep -u "$UID" -f 'waydroid (session|show-full-ui|app )' >/dev/null 2>&1 && return 0
+  return 1
+}
+
+if android_running && command -v delay-gamecontrols >/dev/null; then
+  exec delay-gamecontrols --toggle
+fi
+[[ ${1:-} == controls ]] && exit 0
+exec /usr/local/bin/delay-gamemode toggle

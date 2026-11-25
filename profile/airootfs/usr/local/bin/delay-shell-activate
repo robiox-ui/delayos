@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Opens DelayOS shell surfaces from scripts, the dock and the top bar.
+#
+#   delay-shell-activate start          Start menu (applet providing org.kde.plasma.launchermenu)
+#   delay-shell-activate search         command bar (org.delayos.commandbar applet, delay-commandbar, or KRunner)
+#   delay-shell-activate taskview       KWin Overview (Task View)
+#   delay-shell-activate controlcenter  org.delayos.controlcenter
+#   delay-shell-activate calendar       org.delayos.calendar (also clipboard, emoji, winx, allapps)
+#   delay-shell-activate <plugin id>    any plasmoid in any panel
+#   delay-shell-activate dock-entry N   N-th app of the dock (Meta+N)
+#   delay-shell-activate gaming-changed  re-read the Gaming mode state (call from delay-gamemode)
+#   delay-shell-activate uninstall <desktop id>
+set -u
+Q=$(command -v qdbus6 || command -v qdbus)
+
+# toggles a plasmoid by invoking its "activate widget <id>" global action
+plasmoid() {
+  local id
+  id=$("$Q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+      "var r=''; panels().concat(desktops()).forEach(function(c){ c.widgets('$1').forEach(function(w){ if (!r) r = String(w.id); }); }); print(r);" 2>/dev/null)
+  [[ -n $id ]] || return 1
+  "$Q" org.kde.kglobalaccel /component/plasmashell org.kde.kglobalaccel.Component.invokeShortcut "activate widget $id" >/dev/null 2>&1
+}
+
+case "${1:-}" in
+  start)
+    "$Q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.activateLauncherMenu ;;
+  search)
+    # DelayOS command bar (shell-popups: /usr/bin/delay-shell), KRunner as a fallback
+    if command -v delay-shell >/dev/null; then exec delay-shell toggle commandbar; fi
+    plasmoid org.delayos.commandbar && exit 0
+    "$Q" org.kde.krunner /App org.kde.krunner.App.toggleDisplay >/dev/null 2>&1 || exec krunner ;;
+  taskview)
+    "$Q" org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut Overview ;;
+  controlcenter|calendar|clipboard|emoji|winx|allapps)
+    if command -v delay-shell >/dev/null; then exec delay-shell toggle "$1"; fi
+    plasmoid "org.delayos.$1" ;;
+  dock-entry)
+    n=${2:?number}
+    "$Q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+      "panels().forEach(function(p){ p.widgets('org.delayos.dock').forEach(function(w){ w.currentConfigGroup=['General']; w.writeConfig('activateRequest', '$n:$(date +%s%N)'); }); });" >/dev/null ;;
+  gaming-changed)
+    "$Q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+      "panels().forEach(function(p){ p.widgets('org.delayos.gamingtoggle').forEach(function(w){ w.currentConfigGroup=['General']; w.writeConfig('refreshToken', '$(date +%s%N)'); }); });" >/dev/null ;;
+  uninstall)
+    id=${2:?desktop id}
+    if command -v delay-store >/dev/null; then exec delay-store --uninstall "$id"; fi
+    exec plasma-discover --application "appstream://$id" ;;
+  "")
+    sed -n '3,13p' "$0"; exit 1 ;;
+  *)
+    plasmoid "$1" ;;
+esac

@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DelayOS"
+            }
+        ],
+        "Id": "DelayTide",
+        "License": "CC-BY-SA-4.0",
+        "Name": "DelayOS Tide",
+        "Name[ko]": "DelayOS 물결"
+    }
+}

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=DelayOS Lite (low memory)
+Comment=Lightweight session for PCs with 512 MB–1.5 GB of RAM
+Exec=/usr/local/bin/delay-lowmem-session
+Type=Application
+DesktopNames=sway

@@ -1,6 +1,0 @@
-[Desktop Entry]
-Name=TEMUOS_LINUX Lite (low memory)
-Comment=Lightweight session for PCs with 512 MB–1.5 GB of RAM
-Exec=/usr/local/bin/temu-lowmem-session
-Type=Application
-DesktopNames=sway

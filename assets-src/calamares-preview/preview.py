@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offscreen preview of the TEMUOS Calamares QML pages with mocked Calamares singletons.
+"""Offscreen preview of the DelayOS Calamares QML pages with mocked Calamares singletons.
 
   QT_QPA_PLATFORM=offscreen python3 preview.py <branding-dir> <out-dir> [wallpaper.png]
 

@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [ { "Name": "DelayOS" } ],
+        "Category": "System Information",
+        "Description": "DelayOS Control Center and notifications",
+        "Description[ko]": "DelayOS 제어 센터 및 알림",
+        "Icon": "preferences-system",
+        "Id": "org.delayos.controlcenter",
+        "License": "GPL-2.0-or-later",
+        "Name": "Control Center",
+        "Name[ko]": "제어 센터",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

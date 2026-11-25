@@ -1,0 +1,100 @@
+# DelayOS Secure Boot boot loaders, signed with the DelayOS key.
+# Second stage behind the Microsoft-signed shim (shim-signed): shim verifies these
+# files against the DelayOS CA, which delay-eac setup enrolls as a MOK.
+#
+#   /usr/share/delayos/secureboot/grubx64.efi       standalone GRUB (all modules built in, tpm =
+#                                                  measured boot, shim lock, SBAT), signed
+#   /usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed
+#                                                  systemd-boot of the build host, signed
+#                                                  (bootctl install/update prefer *.efi.signed)
+#   /usr/share/delayos/secureboot/delayos-sb-ca.{cer,crt}
+#                                                  public DelayOS CA (DER for mokutil, PEM)
+#
+# Build (keys from tools/make-delayos-sb-key.sh, never commit them):
+#   DELAYOS_SB_KEY=.../delayos-sb-signing.key DELAYOS_SB_CERT=.../delayos-sb-signing.crt \
+#   DELAYOS_SB_CA=.../delayos-sb-ca.crt makepkg -f
+# Rebuild it whenever grub or systemd get a security update (pkgver is the build date).
+
+pkgname=delayos-sb-signed
+pkgver=$(date -u +%Y.%m.%d)
+pkgrel=1
+pkgdesc='DelayOS Secure Boot: GRUB and systemd-boot signed with the DelayOS key, DelayOS CA certificate'
+arch=('x86_64')
+url='https://github.com/robiox-ui/delayos'
+license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
+makedepends=('grub' 'systemd' 'sbsigntools' 'openssl')
+optdepends=('shim-signed: Microsoft-signed shim, the first stage under Secure Boot'
+            'mokutil: enroll the DelayOS CA as a Machine Owner Key')
+options=('!strip' '!debug')
+
+# GRUB under shim lock cannot load modules from disk, so everything is built in.
+# tpm: measured boot (PCR 8/9). bli: tells the OS which partition GRUB started from.
+_grub_modules=(
+    all_video bli boot btrfs cat chain configfile cpuid cryptodisk echo efifwsetup efinet exfat ext2
+    f2fs fat font gcry_rijndael gcry_sha256 gcry_sha512 gettext gfxmenu gfxterm gfxterm_background
+    gzio halt help hfsplus iso9660 jpeg keystatus linux loadenv loopback ls lsefi lsefimmap
+    lsefisystab luks luks2 lvm mdraid09 mdraid1x memdisk minicmd normal ntfs part_apple part_gpt
+    part_msdos password_pbkdf2 pbkdf2 play png probe raid5rec raid6rec reboot regexp search
+    search_fs_file search_fs_uuid search_label serial sleep smbios squash4 test tpm true video xfs zstd
+)
+
+# Must match ESP_SUBDIR in /usr/local/bin/delay-eac: GRUB reads <ESP>/EFI/DELAYOS_SB/grub.cfg
+_esp_prefix=/EFI/DELAYOS_SB
+
+build() {
+    [ -n "${DELAYOS_SB_KEY:-}" ] && [ -n "${DELAYOS_SB_CERT:-}" ] && [ -n "${DELAYOS_SB_CA:-}" ] \
+        || { error "Set DELAYOS_SB_KEY, DELAYOS_SB_CERT and DELAYOS_SB_CA"; return 1; }
+    local f
+    for f in "$DELAYOS_SB_KEY" "$DELAYOS_SB_CERT" "$DELAYOS_SB_CA"; do
+        [ -r "$f" ] || { error "Cannot read $f"; return 1; }
+    done
+    openssl verify -CAfile "$DELAYOS_SB_CA" "$DELAYOS_SB_CERT" \
+        || { error "The signing certificate was not issued by the DelayOS CA"; return 1; }
+
+    cd "$srcdir"
+
+    # SBAT: Arch's grub entries (generation numbers that shim checks for
+    # revocation) plus our own vendor line
+    local grubver
+    grubver="$(pacman -Q grub | awk '{print $2}')"
+    if [ -s /usr/share/grub/sbat.csv ]; then
+        sed '/^[[:space:]]*$/d' /usr/share/grub/sbat.csv > sbat.csv
+    else
+        warning "/usr/share/grub/sbat.csv is missing, writing a generic SBAT (check the grub generation!)"
+        printf '%s\n' \
+            'sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md' \
+            "grub,5,Free Software Foundation,grub,${grubver#*:},https://www.gnu.org/software/grub/" \
+            > sbat.csv
+    fi
+    printf '%s\n' "grub.delayos,1,DelayOS,grub,${grubver},${url}" >> sbat.csv
+    echo "GRUB SBAT:"; cat sbat.csv
+
+    local mods=() m
+    for m in "${_grub_modules[@]}"; do
+        if [ -f "/usr/lib/grub/x86_64-efi/${m}.mod" ]; then
+            mods+=("$m")
+        else
+            warning "GRUB module $m does not exist, leaving it out"
+        fi
+    done
+
+    grub-mkimage -O x86_64-efi -p "$_esp_prefix" --sbat sbat.csv -o grubx64.efi "${mods[@]}"
+    sbsign --key "$DELAYOS_SB_KEY" --cert "$DELAYOS_SB_CERT" --output grubx64.signed.efi grubx64.efi
+    sbverify --cert "$DELAYOS_SB_CA" grubx64.signed.efi
+
+    sbsign --key "$DELAYOS_SB_KEY" --cert "$DELAYOS_SB_CERT" --output systemd-bootx64.efi.signed \
+        /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+    sbverify --cert "$DELAYOS_SB_CA" systemd-bootx64.efi.signed
+
+    openssl x509 -in "$DELAYOS_SB_CA" -outform DER -out delayos-sb-ca.cer
+    openssl x509 -in "$DELAYOS_SB_CA" -out delayos-sb-ca.crt
+}
+
+package() {
+    cd "$srcdir"
+    install -Dm644 grubx64.signed.efi "$pkgdir/usr/share/delayos/secureboot/grubx64.efi"
+    install -Dm644 sbat.csv "$pkgdir/usr/share/delayos/secureboot/grub-sbat.csv"
+    install -Dm644 systemd-bootx64.efi.signed "$pkgdir/usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed"
+    install -Dm644 delayos-sb-ca.cer "$pkgdir/usr/share/delayos/secureboot/delayos-sb-ca.cer"
+    install -Dm644 delayos-sb-ca.crt "$pkgdir/usr/share/delayos/secureboot/delayos-sb-ca.crt"
+}

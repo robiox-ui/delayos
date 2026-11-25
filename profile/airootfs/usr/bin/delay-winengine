@@ -1,0 +1,29 @@
+#!/usr/bin/python3
+# Windows Engine launcher UI (§10.1): delay-winengine FILE.exe | delay-winengine --mac FILE.dmg
+# Default handler for .exe/.msi/.bat/.lnk/.dmg (org.delayos.WinEngine.desktop); the real work is /usr/local/bin/delay-open.
+import os
+import sys
+sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/winengine"]
+args = [a for a in sys.argv[1:] if a]
+mac = "--mac" in args
+files = [a for a in args if not a.startswith("--")]
+if not files:
+    sys.stderr.write("usage: delay-winengine [--mac] FILE\n")
+    sys.exit(2)
+path = files[0]
+if path.startswith("file://"):
+    from urllib.parse import unquote
+    path = unquote(path[7:])
+if path.lower().endswith(".dmg"):
+    mac = True
+from syskit import run_app
+
+
+def ctx():
+    from engine import Engine
+    return {"engine": Engine(path, mac)}
+
+
+# QGuiApplication must not quit when the (hidden) dialog closes before the app maps
+sys.exit(run_app("org.delayos.WinEngine", "Windows Engine", "/usr/share/delayos/apps/winengine/qml/main.qml",
+                 icon="delayos-winengine", extra_ctx=ctx))

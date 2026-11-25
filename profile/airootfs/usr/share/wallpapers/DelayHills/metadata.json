@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DelayOS"
+            }
+        ],
+        "Id": "DelayHills",
+        "License": "CC-BY-SA-4.0",
+        "Name": "DelayOS Hills",
+        "Name[ko]": "DelayOS 언덕"
+    }
+}

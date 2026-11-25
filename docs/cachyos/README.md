@@ -1,4 +1,4 @@
-# CachyOS 분석 → TEMUOS_LINUX 적용 정리
+# CachyOS 분석 → DelayOS 적용 정리
 
 CachyOS GitHub 조직의 저장소 129개를 5개 묶음으로 나눠 읽었습니다(2026-11-25). 자세한 내용은 아래 보고서에 있습니다.
 
@@ -12,7 +12,7 @@ CachyOS GitHub 조직의 저장소 129개를 5개 묶음으로 나눠 읽었습�
 
 ## 적용한 것
 
-- **커널 `linux-temuos`** (`kernel/linux-temuos/`): CachyOS PKGBUILD와 config를 그대로 씁니다.
+- **커널 `linux-delayos`** (`kernel/linux-delayos/`): CachyOS PKGBUILD와 config를 그대로 씁니다.
   - 소스: CachyOS 패치가 적용된 7.3.6 소스
   - 스케줄러와 컴파일: BORE 스케줄러, Clang ThinLTO, `-O3`
   - 타이머와 선점: 1000Hz, full tickless, full preempt
@@ -27,7 +27,7 @@ CachyOS GitHub 조직의 저장소 129개를 5개 묶음으로 나눠 읽었습�
 - **게임:** `* hard nice -15` (proton-cachyos 권장)
 - **라이브 ISO 커널 옵션:** `copytoram=auto cow_spacesize=10G nvme_load=yes i915/amdgpu.modeset=1 module_blacklist=pcspkr`
 - **설치기:** Btrfs `noatime,compress=zstd:1`, zram, `zswap.enabled=0`, fstrim. 이미 CachyOS와 같았습니다.
-- **makepkg** (`/etc/makepkg.conf.d/temuos.conf`): `-O3 -pipe -fno-plt`, `-flto=auto`, Rust `opt-level=3`, zstd `-20`. CPU 대상은 일반 x86-64입니다.
+- **makepkg** (`/etc/makepkg.conf.d/delayos.conf`): `-O3 -pipe -fno-plt`, `-flto=auto`, Rust `opt-level=3`, zstd `-20`. CPU 대상은 일반 x86-64입니다.
 
 ## 적용하지 않은 것과 이유
 

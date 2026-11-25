@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Procedural TEMUOS wallpapers (original artwork, numpy + Pillow).
+"""Procedural DelayOS wallpapers (original artwork, numpy + Pillow).
 
   python3 gen_wallpapers.py <out-root> [name ...]      # render packages
   python3 gen_wallpapers.py <out-root> --preview       # small previews only (preview/<name>-<variant>.jpg)
@@ -619,20 +619,20 @@ def wp_pebble(c, variant):
 
 WALLS = {
     # package name: (function, variants, korean name, english name)
-    'TemuPeaks': (wp_peaks, ('dark', 'day'), '봉우리', 'Peaks'),
-    'TemuAurora': (wp_aurora, ('dark', 'day'), '오로라', 'Aurora'),
-    'TemuCloud': (wp_cloud, ('dark', 'day'), '구름', 'Cloud'),
-    'TemuBubbles': (wp_bubbles, ('dark', 'day'), '버블', 'Bubbles'),
-    'TemuSlate': (wp_slate, ('dark', 'day'), '슬레이트', 'Slate'),
-    'TemuHorizon': (wp_horizon, ('dark', 'day'), '수평선', 'Horizon'),
-    'TemuArcs': (wp_arcs, ('dark', 'day'), '아크', 'Arcs'),
-    'TemuHills': (wp_hills, ('dark', 'day'), '언덕', 'Hills'),
-    'TemuPetals': (wp_petals, ('dark', 'day'), '꽃잎', 'Petals'),
-    'TemuPills': (wp_pills, ('dark', 'day'), '캡슐', 'Pills'),
-    'TemuRibbons': (wp_ribbons, ('dark', 'day'), '리본', 'Ribbons'),
-    'TemuStreaks': (wp_streaks, ('dark', 'day'), '빛줄기', 'Streaks'),
-    'TemuTide': (wp_tide, ('dark', 'day'), '물결', 'Tide'),
-    'TemuBloom': (wp_bloom, ('dark', 'day'), '불꽃', 'Bloom'),
+    'DelayPeaks': (wp_peaks, ('dark', 'day'), '봉우리', 'Peaks'),
+    'DelayAurora': (wp_aurora, ('dark', 'day'), '오로라', 'Aurora'),
+    'DelayCloud': (wp_cloud, ('dark', 'day'), '구름', 'Cloud'),
+    'DelayBubbles': (wp_bubbles, ('dark', 'day'), '버블', 'Bubbles'),
+    'DelaySlate': (wp_slate, ('dark', 'day'), '슬레이트', 'Slate'),
+    'DelayHorizon': (wp_horizon, ('dark', 'day'), '수평선', 'Horizon'),
+    'DelayArcs': (wp_arcs, ('dark', 'day'), '아크', 'Arcs'),
+    'DelayHills': (wp_hills, ('dark', 'day'), '언덕', 'Hills'),
+    'DelayPetals': (wp_petals, ('dark', 'day'), '꽃잎', 'Petals'),
+    'DelayPills': (wp_pills, ('dark', 'day'), '캡슐', 'Pills'),
+    'DelayRibbons': (wp_ribbons, ('dark', 'day'), '리본', 'Ribbons'),
+    'DelayStreaks': (wp_streaks, ('dark', 'day'), '빛줄기', 'Streaks'),
+    'DelayTide': (wp_tide, ('dark', 'day'), '물결', 'Tide'),
+    'DelayBloom': (wp_bloom, ('dark', 'day'), '불꽃', 'Bloom'),
 }
 ORDER = list(WALLS)
 PICTURES = {'Aurora': (wp_aurora, 'day'), 'Drift': (wp_drift, 'day'), 'Pebble': (wp_pebble, 'day'), 'Tide': (wp_tide, 'dark')}
@@ -648,8 +648,8 @@ def save_pkg(root, name, png=False):
     fn, variants, ko, en = WALLS[name]
     pkg = os.path.join(root, 'usr/share/wallpapers', name)
     os.makedirs(pkg, exist_ok=True)
-    meta = {"KPlugin": {"Authors": [{"Name": "TEMUOS"}], "Id": name, "License": "CC-BY-SA-4.0",
-                        "Name": "TEMUOS %s" % en, "Name[ko]": "TEMUOS %s" % ko}}
+    meta = {"KPlugin": {"Authors": [{"Name": "DelayOS"}], "Id": name, "License": "CC-BY-SA-4.0",
+                        "Name": "DelayOS %s" % en, "Name[ko]": "DelayOS %s" % ko}}
     with open(os.path.join(pkg, 'metadata.json'), 'w', encoding='utf-8', newline='\n') as f:
         json.dump(meta, f, ensure_ascii=False, indent=4); f.write('\n')
     sizes = [(3840, 2160), (2560, 1440), (1920, 1080)]
@@ -694,7 +694,7 @@ def main():
         return
     names = args or ORDER
     for n in names:
-        save_pkg(root, n, png=(n == 'TemuTide'))
+        save_pkg(root, n, png=(n == 'DelayTide'))
 
 
 if __name__ == '__main__':

@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DelayOS"
+            }
+        ],
+        "Id": "DelayPeaks",
+        "License": "CC-BY-SA-4.0",
+        "Name": "DelayOS Peaks",
+        "Name[ko]": "DelayOS 봉우리"
+    }
+}

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=파일 탐색기
+GenericName=파일 관리자
+Comment=파일과 폴더를 찾아보고 정리해요
+Exec=delay-files %u
+Icon=delayos-files
+Terminal=false
+Categories=System;FileTools;FileManager;
+MimeType=inode/directory;
+Keywords=files;file manager;explorer;파일;탐색기;폴더;
+StartupWMClass=org.delayos.Files
+StartupNotify=true
+X-KDE-Shortcuts=Meta+E

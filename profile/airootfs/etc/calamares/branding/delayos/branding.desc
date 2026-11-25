@@ -1,0 +1,47 @@
+---
+# DelayOS installer branding (ui-spec §11). Card 1035×714, stepper on top, buttons bottom-right.
+componentName: delayos
+
+welcomeStyleCalamares: false
+welcomeExpandingLogo: false
+
+windowExpanding: noexpand
+windowSize: 1035px,714px
+windowPlacement: center
+
+# Stepper on top (calamares-sidebar.qml), button row at the bottom (calamares-navigation.qml)
+sidebar: qml,top
+navigation: qml,bottom
+
+strings:
+    productName:         DelayOS
+    shortProductName:    DelayOS
+    version:             rolling
+    shortVersion:        rolling
+    versionedName:       DelayOS
+    shortVersionedName:  DelayOS
+    bootloaderEntryName: DelayOS
+    productUrl:          ""
+    supportUrl:          ""
+    knownIssuesUrl:      ""
+    releaseNotesUrl:     ""
+    donateUrl:           ""
+
+images:
+    productLogo:         "/usr/share/delayos/logo/delayos.svg"
+    productIcon:         "/usr/share/delayos/logo/delayos.svg"
+    productWelcome:      "/usr/share/delayos/logo/delayos.svg"
+
+style:
+    SidebarBackground:        "#0E0F13"
+    SidebarText:              "#9AA0AA"
+    SidebarTextCurrent:       "#FFFFFF"
+    SidebarBackgroundCurrent: "#4D6BFE"
+
+slideshow: "show.qml"
+slideshowAPI: 2
+
+uploadServer:
+    type: "none"
+    url: ""
+    sizeLimit: -1

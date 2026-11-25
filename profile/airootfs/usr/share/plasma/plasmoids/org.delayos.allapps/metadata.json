@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [ { "Name": "DelayOS" } ],
+        "Category": "Application Launchers",
+        "Description": "DelayOS full-screen app grid",
+        "Description[ko]": "DelayOS 전체 화면 앱 목록",
+        "Icon": "view-app-grid",
+        "Id": "org.delayos.allapps",
+        "License": "GPL-2.0-or-later",
+        "Name": "All apps",
+        "Name[ko]": "모든 앱",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

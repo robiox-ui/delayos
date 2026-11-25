@@ -1,9 +1,0 @@
-#!/usr/bin/python3
-# Android game controls overlay (§10.3). Bind: Meta+G / F12 -> `temu-gamecontrols --toggle`, Meta+Shift+G -> `temu-gamecontrols --edit`.
-# Optional last argument: Android package name (default: the game that has a layout / Free Fire MAX).
-import sys
-sys.path[:0] = ["/usr/share/temuos/apps/syskit", "/usr/share/temuos/apps/android"]
-from syskit import run_app, single_instance
-if single_instance("org.temuos.GameControls", sys.argv[1:]):
-    sys.exit(0)
-sys.exit(run_app("org.temuos.GameControls", "게임 컨트롤", "/usr/share/temuos/apps/android/qml/GameControls.qml", icon="input-gaming"))

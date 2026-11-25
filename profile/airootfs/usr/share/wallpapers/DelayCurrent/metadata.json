@@ -1,0 +1,8 @@
+{
+    "KPlugin": {
+        "Authors": [{ "Name": "DelayOS" }],
+        "Id": "DelayCurrent",
+        "License": "CC-BY-SA-4.0",
+        "Name": "Delay Current"
+    }
+}

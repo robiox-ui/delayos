@@ -1,0 +1,83 @@
+#!/usr/bin/python3
+"""DelayOS shell popups remote control (stream shell-popups).
+
+    delay-shell toggle|show|hide <popup>
+    delay-shell query <start|commandbar> "<text>"   (open with a search text)
+    delay-shell launch <files|settings|snip|...>     (start a DelayOS app, KDE fallback)
+
+popups: start commandbar controlcenter calendar clipboard emoji winx allapps
+        ("hide all" closes every popup)
+
+Briefly owns the session-bus name org.delayos.Shell and emits the signal
+org.delayos.Shell.<Toggle|Show|Hide>(s popup) on /org/delayos/Shell. Every popup
+plasmoid listens for it (DelayShell/ShellListener.qml, a Plasma SignalWatcher,
+which only accepts signals from that well-known name).
+"""
+import sys
+
+NAMES = ("start", "commandbar", "controlcenter", "calendar", "clipboard", "emoji",
+         "winx", "allapps", "all")
+
+
+# delay-shell launch <app>: first installed desktop id wins (DelayOS app, then KDE fallback)
+APPS = {
+    "files": ["org.delayos.Files", "org.kde.dolphin"],
+    "store": ["org.delayos.Store", "org.kde.discover"],
+    "notepad": ["org.delayos.Notepad", "org.kde.kwrite", "org.kde.kate"],
+    "calculator": ["org.delayos.Calculator", "org.kde.kcalc"],
+    "settings": ["org.delayos.Settings", "systemsettings"],
+    "taskmanager": ["org.delayos.TaskManager", "org.kde.plasma-systemmonitor"],
+    "android": ["org.delayos.AndroidApps", "delay-android"],
+    "terminal": ["org.delayos.Terminal", "org.kde.konsole"],
+    "snip": ["org.delayos.Snip", "org.kde.spectacle"],
+    "drivers": ["org.delayos.Drivers"],
+    "welcome": ["org.delayos.Welcome", "org.kde.plasma-welcome"],
+    "disks": ["org.delayos.Disks", "org.kde.partitionmanager", "gnome-disks", "org.gnome.DiskUtility"],
+}
+
+
+def launch(key, extra):
+    import os
+    import subprocess
+    dirs = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":")
+    dirs.insert(0, os.path.expanduser("~/.local/share"))
+    for app in APPS.get(key, [key]):
+        for d in dirs:
+            path = os.path.join(d, "applications", app + ".desktop")
+            if os.path.exists(path):
+                subprocess.Popen(["kioclient", "exec", path] + extra, start_new_session=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return 0
+    sys.stderr.write("delay-shell: no app installed for %s\n" % key)
+    return 1
+
+
+def main():
+    if len(sys.argv) >= 3 and sys.argv[1] == "launch":
+        return launch(sys.argv[2], sys.argv[3:])
+    query =len(sys.argv) == 4 and sys.argv[1] == "query"
+    if not query and (len(sys.argv) != 3 or sys.argv[1] not in ("toggle", "show", "hide")) or sys.argv[2:3] == [] or sys.argv[2] not in NAMES:
+        sys.stderr.write("usage: delay-shell toggle|show|hide <%s>\n" % "|".join(NAMES))
+        return 2
+    from PySide6.QtDBus import QDBusConnection, QDBusMessage, QDBusConnectionInterface
+    bus = QDBusConnection.sessionBus()
+    if not bus.isConnected():
+        sys.stderr.write("delay-shell: no session bus\n")
+        return 1
+    # wait in the queue if another delay-shell holds the name right now
+    reply = bus.interface().registerService("org.delayos.Shell",
+                                            QDBusConnectionInterface.QueueService,
+                                            QDBusConnectionInterface.AllowReplacement)
+    member = sys.argv[1].capitalize()
+    sig = QDBusMessage.createSignal("/org/delayos/Shell", "org.delayos.Shell", member)
+    sig.setArguments(sys.argv[2:4] if query else [sys.argv[2]])
+    bus.send(sig)
+    # a blocking round trip flushes the signal before we exit and drop the name
+    bus.call(QDBusMessage.createMethodCall("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                           "org.freedesktop.DBus", "GetId"))
+    bus.unregisterService("org.delayos.Shell")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

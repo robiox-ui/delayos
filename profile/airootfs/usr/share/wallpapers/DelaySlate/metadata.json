@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DelayOS"
+            }
+        ],
+        "Id": "DelaySlate",
+        "License": "CC-BY-SA-4.0",
+        "Name": "DelayOS Slate",
+        "Name[ko]": "DelayOS 슬레이트"
+    }
+}

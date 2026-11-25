@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Dock app 6
+Name[ko]=독 앱 6
+Comment=Opens or switches to app 6 in the dock (Meta+6)
+Exec=/usr/local/bin/delay-shell-activate dock-entry 6
+Icon=user-desktop
+NoDisplay=true
+StartupNotify=false
+X-KDE-Shortcuts=Meta+6

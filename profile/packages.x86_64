@@ -1,8 +1,8 @@
 ## ───────── Base / boot ─────────
 base
 base-devel
-linux-temuos
-linux-temuos-headers
+linux-delayos
+linux-delayos-headers
 linux-lts
 linux-firmware
 linux-firmware-marvell
@@ -206,14 +206,13 @@ greetd
 greetd-tuigreet
 waybar
 fuzzel
-mako
 swaylock
 grim
 slurp
 wl-clipboard
 
 ## AUR packages are listed in ../aur-packages.txt — build.sh builds them into
-## the temuos-local repo and appends whatever built successfully below.
+## the delayos-local repo and appends whatever built successfully below.
 pciutils
 scx-scheds
 scx-tools
@@ -231,3 +230,10 @@ papirus-icon-theme
 mokutil
 sbsigntools
 tpm2-tools
+## DelayOS apps (Settings, Store, Task Manager, Files): explicit so they never depend on what plasma-meta pulls in
+kirigami
+python-gobject
+pacman-contrib
+desktop-file-utils
+xdg-utils
+polkit

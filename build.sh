@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# TEMUOS_LINUX ISO builder. Run as root on Arch Linux (real install, VM or WSL2).
-#   sudo ./build.sh            -> out/temuos-YYYY.MM.DD-x86_64.iso
+# DelayOS ISO builder. Run as root on Arch Linux (real install, VM or WSL2).
+#   sudo ./build.sh            -> out/delayos-YYYY.MM.DD-x86_64.iso
 #   sudo ./build.sh --clean    -> wipe work dir first
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORK="${WORK:-/var/tmp/temuos-build}"
+WORK="${WORK:-/var/tmp/delayos-build}"
 OUT="${OUT:-$HERE/out}"
 PROFILE="$WORK/profile"
 LOCALREPO="$WORK/localrepo"
-BUILDER=temubuilder
+BUILDER=delaybuilder
 
 log()  { printf '\e[1;36m==>\e[0m %s\n' "$*"; }
 warn() { printf '\e[1;33m==> WARNING:\e[0m %s\n' "$*"; }
@@ -25,12 +25,12 @@ grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc
 pacman -Syu --noconfirm --needed archiso git base-devel sudo
 mkdir -p "$WORK" "$OUT" "$LOCALREPO"
 # Build AUR packages with the same CachyOS-style flags the ISO ships for users
-install -Dm644 "$HERE/profile/airootfs/etc/makepkg.conf.d/temuos.conf" /etc/makepkg.conf.d/temuos.conf
+install -Dm644 "$HERE/profile/airootfs/etc/makepkg.conf.d/delayos.conf" /etc/makepkg.conf.d/delayos.conf
 
 # --------------------------------------------------------- AUR -> local repo
 id "$BUILDER" >/dev/null 2>&1 || useradd -m "$BUILDER"
-echo "$BUILDER ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/90-temubuilder
-chmod 440 /etc/sudoers.d/90-temubuilder
+echo "$BUILDER ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/90-delaybuilder
+chmod 440 /etc/sudoers.d/90-delaybuilder
 
 as_builder() { sudo -u "$BUILDER" -H bash -c "$*"; }
 
@@ -54,7 +54,7 @@ while read -r line; do
   fi
 done < "$HERE/aur-packages.txt"
 
-# ------------------------------------------- TEMUOS_LINUX kernel (CachyOS-based)
+# ------------------------------------------- DelayOS kernel (CachyOS-based)
 # CachyOS pahole 1:1.32-2 (BTF fix for Rust modules in Clang-LTO kernels) - the kernel needs it
 PDIR="/home/$BUILDER/pahole"
 if ! ls "$PDIR"/pahole-1:*.pkg.tar.zst >/dev/null 2>&1; then
@@ -68,77 +68,77 @@ fi
 pacman -U --noconfirm --needed "$PDIR"/pahole-1:*.pkg.tar.zst
 cp -u "$PDIR"/pahole-1:*.pkg.tar.zst "$LOCALREPO/"
 
-KDIR="/home/$BUILDER/linux-temuos"
-if ! ls "$KDIR"/linux-temuos-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
-  log "Building linux-temuos kernel (CachyOS sources, BORE, ThinLTO, -O3) - this takes a while"
+KDIR="/home/$BUILDER/linux-delayos"
+if ! ls "$KDIR"/linux-delayos-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
+  log "Building linux-delayos kernel (CachyOS sources, BORE, ThinLTO, -O3) - this takes a while"
   pacman -S --noconfirm --needed clang llvm lld rust rust-bindgen rust-src bc cpio xmlto   # pahole: CachyOS build above
   if [[ -f "$KDIR/src/version" || -f $(ls -d "$KDIR"/src/cachyos-*/version 2>/dev/null | head -1) ]] \
      && ls -d "$KDIR"/src/cachyos-*/.config >/dev/null 2>&1; then
     # An earlier run already extracted + configured the tree: continue the compile where it stopped
-    log "Resuming the interrupted linux-temuos compile"
+    log "Resuming the interrupted linux-delayos compile"
     KFLAGS="-e"
   else
     rm -rf "$KDIR"; KFLAGS=""
   fi
-  mkdir -p "$KDIR"; cp "$HERE/kernel/linux-temuos/"{PKGBUILD,config} "$KDIR/"
+  mkdir -p "$KDIR"; cp "$HERE/kernel/linux-delayos/"{PKGBUILD,config} "$KDIR/"
   sed -i 's/\r$//' "$KDIR/PKGBUILD"
   chown -R "$BUILDER:$BUILDER" "$KDIR"
-  as_builder "cd ~/linux-temuos && MAKEFLAGS=-j$(nproc) makepkg -s $KFLAGS --noconfirm --skippgpcheck" \
-    || die "linux-temuos kernel failed to build"
+  as_builder "cd ~/linux-delayos && MAKEFLAGS=-j$(nproc) makepkg -s $KFLAGS --noconfirm --skippgpcheck" \
+    || die "linux-delayos kernel failed to build"
 fi
-cp -u "$KDIR"/linux-temuos-*.pkg.tar.zst "$LOCALREPO/"
+cp -u "$KDIR"/linux-delayos-*.pkg.tar.zst "$LOCALREPO/"
 
-# ------------------- EAC Linux v2: TEMUOS-signed boot loaders + linux-temuos-eac (optional)
-# Needs the TEMUOS Secure Boot keys (tools/make-temuos-sb-key.sh). Skipped without them.
-KEYS="${TEMUOS_KEYS:-/root/temuos-keys}"
+# ------------------- EAC Linux v2: DelayOS-signed boot loaders + linux-delayos-eac (optional)
+# Needs the DelayOS Secure Boot keys (tools/make-delayos-sb-key.sh). Skipped without them.
+KEYS="${DELAYOS_KEYS:-/root/delayos-keys}"
 EAC_FILES=()
-if [[ -f $KEYS/temuos-sb-signing.key && -f $KEYS/temuos-sb-signing.crt && -f $KEYS/temuos-sb-ca.crt ]]; then
-  BKEYS="/home/$BUILDER/.temuos-keys"
-  EDIR="/home/$BUILDER/linux-temuos-eac"
-  SDIR="/home/$BUILDER/temuos-sb-signed"
+if [[ -f $KEYS/delayos-sb-signing.key && -f $KEYS/delayos-sb-signing.crt && -f $KEYS/delayos-sb-ca.crt ]]; then
+  BKEYS="/home/$BUILDER/.delayos-keys"
+  EDIR="/home/$BUILDER/linux-delayos-eac"
+  SDIR="/home/$BUILDER/delayos-sb-signed"
   # the builder user cannot read /root: give it a private copy, always removed again
-  cleanup_keys() { rm -rf "$BKEYS"; rm -f "$EDIR/src/temuos-module-signing.pem"; }
+  cleanup_keys() { rm -rf "$BKEYS"; rm -f "$EDIR/src/delayos-module-signing.pem"; }
   trap cleanup_keys EXIT
   install -d -m700 -o "$BUILDER" -g "$BUILDER" "$BKEYS"
-  install -m600 -o "$BUILDER" -g "$BUILDER" "$KEYS"/temuos-sb-signing.{key,crt} "$KEYS"/temuos-sb-ca.crt "$BKEYS/"
-  SBENV="TEMUOS_SB_KEY=$BKEYS/temuos-sb-signing.key TEMUOS_SB_CERT=$BKEYS/temuos-sb-signing.crt TEMUOS_SB_CA=$BKEYS/temuos-sb-ca.crt"
+  install -m600 -o "$BUILDER" -g "$BUILDER" "$KEYS"/delayos-sb-signing.{key,crt} "$KEYS"/delayos-sb-ca.crt "$BKEYS/"
+  SBENV="DELAYOS_SB_KEY=$BKEYS/delayos-sb-signing.key DELAYOS_SB_CERT=$BKEYS/delayos-sb-signing.crt DELAYOS_SB_CA=$BKEYS/delayos-sb-ca.crt"
   pacman -S --noconfirm --needed sbsigntools grub systemd openssl
 
-  log "Building temuos-sb-signed (TEMUOS-signed GRUB + systemd-boot)"
-  rm -rf "$SDIR"; cp -r "$HERE/packages/temuos-sb-signed" "$SDIR"
+  log "Building delayos-sb-signed (DelayOS-signed GRUB + systemd-boot)"
+  rm -rf "$SDIR"; cp -r "$HERE/packages/delayos-sb-signed" "$SDIR"
   sed -i 's/\r$//' "$SDIR/PKGBUILD"; chown -R "$BUILDER:$BUILDER" "$SDIR"
-  as_builder "cd ~/temuos-sb-signed && $SBENV makepkg -f --noconfirm" || die "temuos-sb-signed failed to build"
-  cp -u "$SDIR"/temuos-sb-signed-*.pkg.tar.zst "$LOCALREPO/"
+  as_builder "cd ~/delayos-sb-signed && $SBENV makepkg -f --noconfirm" || die "delayos-sb-signed failed to build"
+  cp -u "$SDIR"/delayos-sb-signed-*.pkg.tar.zst "$LOCALREPO/"
 
   NVV=$(pacman -Si nvidia-utils | sed -n 's/^Version *: *//p' | head -n1)
-  if ls "$EDIR"/linux-temuos-eac-[0-9]*.pkg.tar.zst >/dev/null 2>&1 && \
-     ! bsdtar -xOf "$(ls "$EDIR"/linux-temuos-eac-nvidia-open-*.pkg.tar.zst 2>/dev/null | head -1)" .PKGINFO 2>/dev/null | grep -q "nvidia-utils=${NVV%-*}"; then
-    log "nvidia-utils changed to $NVV: rebuilding linux-temuos-eac"
+  if ls "$EDIR"/linux-delayos-eac-[0-9]*.pkg.tar.zst >/dev/null 2>&1 && \
+     ! bsdtar -xOf "$(ls "$EDIR"/linux-delayos-eac-nvidia-open-*.pkg.tar.zst 2>/dev/null | head -1)" .PKGINFO 2>/dev/null | grep -q "nvidia-utils=${NVV%-*}"; then
+    log "nvidia-utils changed to $NVV: rebuilding linux-delayos-eac"
     rm -rf "$EDIR"
   fi
-  if ! ls "$EDIR"/linux-temuos-eac-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
-    log "Building linux-temuos-eac (anti-cheat kernel, NVIDIA $NVV) - this takes a while"
-    rm -rf "$EDIR"; mkdir -p "$EDIR"; cp "$HERE/kernel/linux-temuos-eac/"{PKGBUILD,config} "$EDIR/"
+  if ! ls "$EDIR"/linux-delayos-eac-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
+    log "Building linux-delayos-eac (anti-cheat kernel, NVIDIA $NVV) - this takes a while"
+    rm -rf "$EDIR"; mkdir -p "$EDIR"; cp "$HERE/kernel/linux-delayos-eac/"{PKGBUILD,config} "$EDIR/"
     sed -i 's/\r$//' "$EDIR/PKGBUILD"; chown -R "$BUILDER:$BUILDER" "$EDIR"
-    as_builder "cd ~/linux-temuos-eac && $SBENV MAKEFLAGS=-j$(nproc) makepkg -s --noconfirm --skippgpcheck" \
-      || die "linux-temuos-eac kernel failed to build"
+    as_builder "cd ~/linux-delayos-eac && $SBENV MAKEFLAGS=-j$(nproc) makepkg -s --noconfirm --skippgpcheck" \
+      || die "linux-delayos-eac kernel failed to build"
   fi
   cleanup_keys
-  for p in "$EDIR"/linux-temuos-eac-*.pkg.tar.zst; do
+  for p in "$EDIR"/linux-delayos-eac-*.pkg.tar.zst; do
     case "$p" in *-headers-*) continue ;; esac
     EAC_FILES+=("$p")
   done
 else
-  warn "No Secure Boot keys in $KEYS: skipping linux-temuos-eac / temuos-sb-signed (anti-cheat mode unavailable)"
+  warn "No Secure Boot keys in $KEYS: skipping linux-delayos-eac / delayos-sb-signed (anti-cheat mode unavailable)"
 fi
 
 log "Collecting built packages into $LOCALREPO"
 find "/home/$BUILDER/.cache/yay" "/home/$BUILDER/yay-bin" -name '*.pkg.tar.zst' ! -name '*-debug-*' -exec cp -u {} "$LOCALREPO/" \; 2>/dev/null || true
-rm -f "$LOCALREPO"/temuos-local.db* "$LOCALREPO"/temuos-local.files*
-repo-add -q "$LOCALREPO/temuos-local.db.tar.gz" "$LOCALREPO"/*.pkg.tar.zst
+rm -f "$LOCALREPO"/delayos-local.db* "$LOCALREPO"/delayos-local.files*
+repo-add -q "$LOCALREPO/delayos-local.db.tar.gz" "$LOCALREPO"/*.pkg.tar.zst
 
 # ------------------------------------------------------- assemble the profile
-log "Assembling profile (Arch releng + TEMUOS_LINUX overlay)"
+log "Assembling profile (Arch releng + DelayOS overlay)"
 rm -rf "$PROFILE"
 cp -a /usr/share/archiso/configs/releng "$PROFILE"
 rm -f "$PROFILE/packages.x86_64" "$PROFILE/airootfs/etc/mkinitcpio.d/linux.preset"
@@ -146,11 +146,11 @@ cp -a "$HERE/profile/." "$PROFILE/"
 
 sed -i "s|@LOCALREPO@|$LOCALREPO|" "$PROFILE/pacman.conf"
 
-# Anti-cheat kernel packages ride along on the ISO; `temu-eac setup` installs them on demand
+# Anti-cheat kernel packages ride along on the ISO; `delay-eac setup` installs them on demand
 if (( ${#EAC_FILES[@]} )); then
-  install -d "$PROFILE/airootfs/var/cache/temuos/eac-pkgs"
-  cp "${EAC_FILES[@]}" "$LOCALREPO"/temuos-sb-signed-*.pkg.tar.zst "$PROFILE/airootfs/var/cache/temuos/eac-pkgs/"
-  echo temuos-sb-signed >> "$PROFILE/packages.x86_64"
+  install -d "$PROFILE/airootfs/var/cache/delayos/eac-pkgs"
+  cp "${EAC_FILES[@]}" "$LOCALREPO"/delayos-sb-signed-*.pkg.tar.zst "$PROFILE/airootfs/var/cache/delayos/eac-pkgs/"
+  echo delayos-sb-signed >> "$PROFILE/packages.x86_64"
 fi
 
 # Boot splash: plymouth hook in the live initramfs, theme selected inside the image
@@ -167,12 +167,12 @@ cp -r "$WORK/ananicy-rules/." "$PROFILE/airootfs/etc/ananicy.d/"
 rm -rf "$PROFILE/airootfs/etc/ananicy.d/.git" "$PROFILE/airootfs/etc/ananicy.d/.github"
 printf '%s\n' "${BUILT[@]}" >> "$PROFILE/packages.x86_64"
 
-# Boot entries: releng boots "linux"; we boot linux-temuos (+ an LTS fallback entry)
-log "Patching boot loaders for linux-temuos"
+# Boot entries: releng boots "linux"; we boot linux-delayos (+ an LTS fallback entry)
+log "Patching boot loaders for linux-delayos"
 for f in $(grep -rl 'vmlinuz-linux\b\|initramfs-linux\.img' "$PROFILE/efiboot" "$PROFILE/syslinux" "$PROFILE/grub" 2>/dev/null); do
-  sed -i -e 's/vmlinuz-linux\b/vmlinuz-linux-temuos/g' \
-         -e 's/initramfs-linux\.img/initramfs-linux-temuos.img/g' \
-         -e 's/Arch Linux/TEMUOS_LINUX/g' "$f"
+  sed -i -e 's/vmlinuz-linux\b/vmlinuz-linux-delayos/g' \
+         -e 's/initramfs-linux\.img/initramfs-linux-delayos.img/g' \
+         -e 's/Arch Linux/DelayOS/g' "$f"
 done
 # Live kernel options: quiet, fast, no mitigations-induced FPS loss on the live USB
 for f in $(grep -rl 'archisobasedir' "$PROFILE/efiboot" "$PROFILE/syslinux" "$PROFILE/grub"); do
@@ -191,13 +191,13 @@ ln -sf /usr/lib/systemd/system/sddm.service            "$W/display-manager.servi
 for s in NetworkManager bluetooth power-profiles-daemon ananicy-cpp irqbalance; do
   ln -sf "/usr/lib/systemd/system/$s.service" "$W/multi-user.target.wants/$s.service"
 done
-ln -sf /etc/systemd/system/temu-firstboot.service "$W/multi-user.target.wants/temu-firstboot.service"
+ln -sf /etc/systemd/system/delay-firstboot.service "$W/multi-user.target.wants/delay-firstboot.service"
 ln -sf /usr/lib/systemd/system/fstrim.timer "$W/timers.target.wants/fstrim.timer"
 for s in NetworkManager-dispatcher rtkit-daemon scx_loader; do
   ln -sf "/usr/lib/systemd/system/$s.service" "$W/multi-user.target.wants/$s.service"
 done
 ln -sf /usr/lib/systemd/system/NetworkManager-dispatcher.service "$W/dbus-org.freedesktop.nm-dispatcher.service"
-ln -sf /etc/systemd/system/temu-eac-facts.service "$W/multi-user.target.wants/temu-eac-facts.service"
+ln -sf /etc/systemd/system/delay-eac-facts.service "$W/multi-user.target.wants/delay-eac-facts.service"
 # VM guest tools (each unit has its own ConditionVirtualization, so they idle on real hardware)
 for s in vmtoolsd vmware-vmblock-fuse qemu-guest-agent vboxservice spice-vdagentd; do
   ln -sf "/usr/lib/systemd/system/$s.service" "$W/multi-user.target.wants/$s.service"
@@ -230,7 +230,7 @@ mkdir -p "$PROFILE/airootfs/etc/skel/Desktop"
 log "Building ISO (this takes a while)"
 mkarchiso -v -r -w "$WORK/archiso-tmp" -o "$OUT" "$PROFILE"
 
-ISO=$(ls -t "$OUT"/temuos_linux-*.iso | head -1)
+ISO=$(ls -t "$OUT"/delayos-*.iso | head -1)
 ( cd "$OUT" && sha256sum "$(basename "$ISO")" > "$(basename "$ISO").sha256" )
 log "Done: $ISO"
 log "Write it to a USB stick with Rufus/Ventoy (Windows) or: dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync"

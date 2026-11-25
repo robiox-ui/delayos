@@ -1,0 +1,4 @@
+#!/bin/sh
+# 터미널 (DelayOS Terminal): Konsole with the DelayOS profile, no menu bar or toolbars (ui-spec 9.7).
+# Extra arguments go straight to Konsole (e.g. delay-terminal --workdir DIR, delay-terminal -e CMD).
+exec konsole --desktopfile org.delayos.Terminal --profile DelayOS --hide-menubar --hide-toolbars "$@"

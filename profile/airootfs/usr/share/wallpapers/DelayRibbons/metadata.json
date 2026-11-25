@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DelayOS"
+            }
+        ],
+        "Id": "DelayRibbons",
+        "License": "CC-BY-SA-4.0",
+        "Name": "DelayOS Ribbons",
+        "Name[ko]": "DelayOS 리본"
+    }
+}

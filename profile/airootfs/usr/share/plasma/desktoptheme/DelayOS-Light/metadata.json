@@ -1,0 +1,14 @@
+{
+    "KPlugin": {
+        "Authors": [{ "Name": "DelayOS" }],
+        "Category": "",
+        "Description": "DelayOS glass (light)",
+        "EnabledByDefault": true,
+        "Id": "DelayOS-Light",
+        "License": "GPL-2.0+",
+        "Name": "DelayOS Light",
+        "Version": "1.0",
+        "Website": ""
+    },
+    "X-Plasma-API": "5.0"
+}

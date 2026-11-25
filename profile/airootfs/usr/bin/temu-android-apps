@@ -1,8 +1,0 @@
-#!/usr/bin/python3
-# TEMUOS "Android 앱" launcher (org.temuos.AndroidApps): set up Waydroid + Google Play, install .apk, launch apps.
-import sys
-sys.path[:0] = ["/usr/share/temuos/apps/syskit", "/usr/share/temuos/apps/android"]
-from syskit import run_app, single_instance
-if single_instance("org.temuos.AndroidApps", sys.argv[1:]):
-    sys.exit(0)
-sys.exit(run_app("org.temuos.AndroidApps", "Android 앱", "/usr/share/temuos/apps/android/qml/main.qml", icon="temuos-android"))

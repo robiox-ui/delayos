@@ -1,0 +1,8 @@
+#!/usr/bin/python3
+# DelayOS 설정 (org.delayos.Settings). Usage: delay-settings [page[#rowkey]]  e.g. delay-settings personalisation
+import sys
+sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/settings"]
+from syskit import run_app, single_instance
+if single_instance("org.delayos.Settings", sys.argv[1:]):
+    sys.exit(0)
+sys.exit(run_app("org.delayos.Settings", "설정", "/usr/share/delayos/apps/settings/qml/main.qml", icon="delayos-settings"))

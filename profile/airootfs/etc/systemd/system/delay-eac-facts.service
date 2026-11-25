@@ -1,0 +1,13 @@
+[Unit]
+Description=DelayOS anti-cheat mode: cache root-only boot facts (TPM event log, ESP) for delay-eac status
+ConditionPathExists=/sys/firmware/efi
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/delay-eac facts
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

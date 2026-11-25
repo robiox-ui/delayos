@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Quick tools
+Name[ko]=빠른 도구
+Exec=/usr/local/bin/delay-winx
+Icon=preferences-system
+NoDisplay=true

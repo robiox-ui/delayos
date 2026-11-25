@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "DelayOS" }],
+        "Category": "Windows and Tasks",
+        "Description": "Top bar: DelayOS logo (Start) and the active app name",
+        "Description[ko]": "상단 바: DelayOS 로고(시작)와 현재 앱 이름",
+        "Icon": "delayos-logo",
+        "Id": "org.delayos.topbar",
+        "License": "GPL-2.0+",
+        "Name": "DelayOS top bar",
+        "Name[ko]": "DelayOS 상단 바",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

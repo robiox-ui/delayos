@@ -1,0 +1,16 @@
+#!/usr/bin/python3
+# DelayOS Store (org.delayos.Store). Usage: delay-store [--installed | --updates | --search TEXT | APP_ID | appstream://ID]
+import sys
+sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/store"]
+from syskit import run_app, single_instance
+if single_instance("org.delayos.Store", sys.argv[1:]):
+    sys.exit(0)
+
+
+def ctx():
+    from installer import Installer
+    return {"installer": Installer()}
+
+
+sys.exit(run_app("org.delayos.Store", "DelayOS Store", "/usr/share/delayos/apps/store/qml/main.qml",
+                 icon="delayos-store", extra_ctx=ctx))
