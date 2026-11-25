@@ -26,7 +26,7 @@ T.MenuItem {
             anchors.verticalCenter: parent.verticalCenter
             name: c.checkable ? (c.checked ? "check" : "") : c.iconName
             size: 16
-            color: c.danger ? Theme.dangerText : (c.checkable ? Theme.accent : Theme.text2)
+            color: c.danger ? Theme.dangerText : (c.checkable ? Theme.accentText : Theme.text2)
         }
         Text {
             id: label

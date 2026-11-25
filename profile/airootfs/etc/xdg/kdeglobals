@@ -1,6 +1,6 @@
 [General]
 ColorScheme=TemuDark
-AccentColor=244,125,103
+AccentColor=77,107,254
 font=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 fixed=JetBrains Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 smallestReadableFont=Inter,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
@@ -10,7 +10,7 @@ TerminalApplication=konsole
 BrowserApplication=firefox.desktop
 
 [Icons]
-Theme=breeze-dark
+Theme=TemuOS
 
 [KDE]
 LookAndFeelPackage=org.temuos.dock

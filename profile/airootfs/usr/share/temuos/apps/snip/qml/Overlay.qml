@@ -17,7 +17,9 @@ Window {
     signal cancelled()
 
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    color: "black"
+    // not fully opaque on purpose: keeps KWin from direct-scanning-out this fullscreen surface
+    // (vmwgfx and some old GPUs freeze the output when that fails)
+    color: Qt.rgba(0, 0, 0, 0.99)
     title: "캡처 도구 오버레이"
 
     function start(url, w, h) {

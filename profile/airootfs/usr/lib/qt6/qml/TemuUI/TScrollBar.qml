@@ -24,7 +24,7 @@ T.ScrollBar {
             x: c.orientation === Qt.Vertical ? parent.width - width : 0
             y: c.orientation === Qt.Vertical ? 0 : parent.height - height
             radius: t / 2
-            color: c.pressed ? Qt.rgba(1, 1, 1, Theme.dark ? 0.45 : 0) : Theme.dark ? Qt.rgba(1, 1, 1, c._wide ? 0.32 : 0.20) : Qt.rgba(0, 0, 0, c._wide ? 0.4 : 0.25)
+            color: c.pressed ? (Theme.dark ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(0, 0, 0, 0.5)) : Theme.dark ? Qt.rgba(1, 1, 1, c._wide ? 0.32 : 0.20) : Qt.rgba(0, 0, 0, c._wide ? 0.4 : 0.25)
             opacity: (c.active || c._wide) ? 1 : 0.55
             Behavior on opacity { NumberAnimation { duration: 200 } }
             Behavior on width { NumberAnimation { duration: 90 } }

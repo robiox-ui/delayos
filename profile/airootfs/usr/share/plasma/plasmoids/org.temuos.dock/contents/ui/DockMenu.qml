@@ -4,6 +4,7 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import org.kde.taskmanager as TaskManager
 import org.temuos.shell
+import TemuUI
 
 // Dock right-click menu (ui-spec 3.2, [W 3:45.5]): about 242 px wide, glass-dark, radius 10.
 //   [icon] App name (Semibold) / 작업 표시줄에서 고정 해제 | 작업 표시줄에 고정 / 제거 / 항상 위에 표시 [✓] / 창 닫기
@@ -67,7 +68,7 @@ PlasmaCore.Dialog {
                     x: 36; anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - 44; elide: Text.ElideRight
                     text: dlg.appName
-                    font.family: "Inter"; font.pixelSize: 13; font.weight: Font.DemiBold
+                    font.family: Theme.font; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
                     color: root.dark ? "#F2F3F5" : "#15171C"
                 }
             }
@@ -122,7 +123,7 @@ PlasmaCore.Dialog {
         Text {
             x: 36; anchors.verticalCenter: parent.verticalCenter
             text: mr.text
-            font.family: "Inter"; font.pixelSize: 13
+            font.family: Theme.font; font.pixelSize: Theme.fsBody
             color: root.dark ? "#F2F3F5" : "#15171C"
         }
         Glyph {

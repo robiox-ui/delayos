@@ -9,6 +9,8 @@ QtObject {
     property bool dark: true
     property color accent: "#4D6BFE"
     readonly property color accentSoft: Qt.rgba(accent.r, accent.g, accent.b, 0.22)
+    // accent used as text/glyph colour on dark surfaces (lightened so the blue stays readable)
+    readonly property color accentText: dark ? Qt.tint(accent, Qt.rgba(1, 1, 1, 0.32)) : accent
     readonly property color accentBorder: Qt.rgba(accent.r, accent.g, accent.b, 0.60)
     readonly property color brandCrimson: "#D4194F"
 
@@ -36,8 +38,10 @@ QtObject {
     readonly property color rim: dark ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
 
     // in-window surfaces used by the TemuUI controls (apps-core)
-    readonly property color textOnAccent: "#FFFFFF"            // text on accent buttons
-    readonly property color textOnAccentDark: "#14161C"        // text on accent selection (Notepad), Calculator "="
+    // text on accent fills adapts to the accent's brightness (white on the default blue, dark on pale accents)
+    readonly property real accentLuma: 0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b
+    readonly property color textOnAccent: accentLuma > 0.72 ? "#14161C" : "#FFFFFF"            // accent buttons
+    readonly property color textOnAccentDark: accentLuma > 0.55 ? "#14161C" : "#FFFFFF"        // text selection, checked tiles
     readonly property color titleBar: dark ? "#0D1019" : "#F7F7F9"
     readonly property color popupBg: dark ? "#1A1D25" : "#FBFBFC"      // menus, dropdown lists, find card (glass-dark look inside a window)
     readonly property color popupRim: dark ? Qt.rgba(1,1,1,0.09) : Qt.rgba(0,0,0,0.10)

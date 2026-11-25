@@ -1,0 +1,4 @@
+#!/bin/sh
+# 터미널 (TEMUOS Terminal): Konsole with the TemuOS profile, no menu bar or toolbars (ui-spec 9.7).
+# Extra arguments go straight to Konsole (e.g. temu-terminal --workdir DIR, temu-terminal -e CMD).
+exec konsole --desktopfile org.temuos.Terminal --profile TemuOS --hide-menubar --hide-toolbars "$@"

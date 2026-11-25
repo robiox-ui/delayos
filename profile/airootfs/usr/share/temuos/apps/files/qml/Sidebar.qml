@@ -60,7 +60,7 @@ Item {
                         c.beginPath(); c.roundedRect(0.5, 0.5, width - 1, height - 1, 6, 6); c.stroke()
                     }
                 }
-                Text { anchors.centerIn: parent; text: "폴더를 여기에 놓아 고정하세요"; font.family: Theme.font; font.pixelSize: 12; color: Theme.accent }
+                Text { anchors.centerIn: parent; text: "폴더를 여기에 놓아 고정하세요"; font.family: Theme.font; font.pixelSize: 12; color: Theme.accentText }
             }
 
             // ---- 즐겨찾기 ----

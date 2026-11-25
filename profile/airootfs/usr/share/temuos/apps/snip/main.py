@@ -154,7 +154,7 @@ class Backend(QObject):
                 pts = s.get("points", [])
                 if not pts:
                     continue
-                c = QColor(s.get("color", "#F47D67"))
+                c = QColor(s.get("color", "#4D6BFE"))
                 if s.get("tool") == "highlighter":
                     c.setAlphaF(0.4)
                     p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
@@ -205,7 +205,7 @@ class Backend(QObject):
         pd = pictures_dir()
         base = os.path.basename(pd)
         label = "사진" if base in ("Pictures", "사진", "그림") else base
-        sub = "스크린샷" if base in ("사진", "그림") else "Screenshots"
+        sub = "스크린샷"
         return label + " › " + sub
 
     @Slot(result=str)

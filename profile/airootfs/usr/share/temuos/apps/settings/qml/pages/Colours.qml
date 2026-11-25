@@ -72,7 +72,7 @@ SPage {
                             scale: sma.containsMouse && !cur ? 1.06 : 1
                             Behavior on scale { NumberAnimation { duration: 80 } }
                             Rectangle { visible: parent.cur; anchors.fill: parent; anchors.margins: 2; radius: 8; color: "transparent"; border.width: 2; border.color: Theme.windowBg }
-                            SIcon { visible: parent.cur; anchors.centerIn: parent; name: "g:check"; size: 16; tint: "#1A1A1A" }
+                            SIcon { visible: parent.cur; anchors.centerIn: parent; name: "g:check"; size: 16; tint: Qt.color(modelData.color).hslLightness > 0.62 ? "#1A1A1A" : "#FFFFFF" }
                             MouseArea {
                                 id: sma
                                 anchors.fill: parent

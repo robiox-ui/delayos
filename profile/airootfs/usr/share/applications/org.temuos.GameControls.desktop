@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Game controls
+Name[ko]=게임 컨트롤
+Comment=Keyboard and mouse controls for Android games
+Comment[ko]=Android 게임을 키보드와 마우스로 조작합니다
+Icon=input-gaming
+Exec=temu-gamecontrols --toggle
+Terminal=false
+NoDisplay=true
+StartupNotify=false
+Categories=System;Game;

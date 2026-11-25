@@ -7,3 +7,4 @@ Exec=/usr/local/bin/temu-gamemode toggle
 Icon=input-gaming
 Categories=Game;System;
 Keywords=game;performance;fps;boost;
+StartupNotify=false

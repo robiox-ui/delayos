@@ -16,7 +16,7 @@ Window {
 
     property string pkg: "com.dts.freefiremax"
     property bool editing: false
-    property var gc: ({ enabled: true, showKeys: true })
+    property var cfg: ({ enabled: true, showKeys: true })
     property var layout: ({ controls: [] })
     property var backup: null
     property string tool: ""            // tap | joystick | aim | repeat | swipe | remove
@@ -38,7 +38,8 @@ Window {
     property bool started: false
     Component.onCompleted: {
         var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = true
-        call("androidback.settings", [], function(r) { if (r) ov.gc = r })
+        call("androidback.settings", [], function(r) { if (r) ov.cfg = r })
+        call("androidback.overlay_setup", [])
         handle(appArgs)
         call("androidback.load_layout", [ov.pkg], function(r) { if (r && r.controls) { ov.layout = r; if (ov.editing) ov.backup = JSON.parse(JSON.stringify(r)) } })
         if (!editing) toast.show()
@@ -96,7 +97,7 @@ Window {
 
     // chips
     Repeater {
-        model: (ov.gc.showKeys !== false || ov.editing) ? ov.layout.controls : []
+        model: (ov.cfg.showKeys !== false || ov.editing) ? ov.layout.controls : []
         Item {
             id: chip
             readonly property var c: modelData
@@ -129,7 +130,8 @@ Window {
             // key chip (42 px circle, pill for long labels)
             Rectangle {
                 visible: !chip.ring
-                readonly property string label: chip.c.key === "" ? "?" : chip.c.key === "Right click" ? "오른쪽 클릭" : chip.c.key === "Click" ? "클릭" : chip.c.key
+                readonly property string key: chip.c.key || ""
+                readonly property string label: key === "" ? "?" : key === "Right click" ? "오른쪽 클릭" : key === "Click" ? "클릭" : key
                 readonly property bool pill: label.length > 2
                 x: -width / 2; y: -height / 2
                 width: pill ? lbl.implicitWidth + 22 : 42; height: pill ? 32 : 42; radius: height / 2

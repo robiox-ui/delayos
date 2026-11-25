@@ -2,7 +2,7 @@ import QtQuick
 import TemuUI
 import TemuSys
 
-// Hero banner 232 px (§9.8): maroon gradient, floating 3D crimson/dark app tiles on the right third.
+// Hero banner 232 px (§9.8): deep accent gradient, floating 3D accent/dark app tiles on the right third.
 Rectangle {
     id: hero
     height: 232
@@ -10,9 +10,9 @@ Rectangle {
     clip: true
     gradient: Gradient {
         orientation: Gradient.Horizontal
-        GradientStop { position: 0.0; color: "#1E0710" }
-        GradientStop { position: 0.55; color: "#3A0A1C" }
-        GradientStop { position: 1.0; color: "#7A1238" }
+        GradientStop { position: 0.0; color: Qt.darker(Theme.accent, 7.5) }
+        GradientStop { position: 0.55; color: Qt.darker(Theme.accent, 4.6) }
+        GradientStop { position: 1.0; color: Qt.darker(Theme.accent, 2.2) }
     }
     // floating tiles (static: no idle animation)
     Item {
@@ -30,8 +30,8 @@ Rectangle {
                 width: d[2]; height: d[2]; radius: d[2] * 0.24
                 rotation: (index % 3 - 1) * 4
                 gradient: Gradient {
-                    GradientStop { position: 0; color: d[3] > 0 ? "#E0306A" : "#3B1824" }
-                    GradientStop { position: 1; color: d[3] > 0 ? "#9C1340" : "#24101A" }
+                    GradientStop { position: 0; color: d[3] > 0 ? Qt.lighter(Theme.accent, 1.1) : Qt.darker(Theme.accent, 4.2) }
+                    GradientStop { position: 1; color: d[3] > 0 ? Qt.darker(Theme.accent, 1.6) : Qt.darker(Theme.accent, 6.5) }
                 }
                 border.width: 1; border.color: Qt.rgba(1,1,1, d[3] > 0 ? 0.25 : 0.06)
                 opacity: 0.95
@@ -48,7 +48,7 @@ Rectangle {
         spacing: 6
         SText { text: "앱"; color: Qt.lighter(Theme.accent, 1.3); font.pixelSize: 12; font.weight: Font.DemiBold }
         SText { text: "필요한 모든 일을 위한 앱"; color: "white"; font.pixelSize: 28; font.weight: Font.DemiBold }
-        SText { text: "Flathub와 제작자가 제공하는 앱을 한곳에서 업데이트하세요."; color: "#C9B3BC"; font.pixelSize: 13 }
+        SText { text: "Flathub와 제작자가 제공하는 앱을 한곳에서 업데이트하세요."; color: "#B9BFD2"; font.pixelSize: 13 }
         Item { width: 1; height: 10 }
         Grid {
             columns: 2; columnSpacing: 36; rowSpacing: 12
@@ -60,7 +60,7 @@ Rectangle {
                     SIcon { name: modelData[0]; size: 15; tint: Qt.lighter(Theme.accent, 1.3); anchors.verticalCenter: parent.verticalCenter }
                     Column {
                         SText { text: modelData[1]; color: "white"; font.pixelSize: 13; font.weight: Font.DemiBold }
-                        SText { text: modelData[2]; color: "#BFA9B2"; font.pixelSize: 12 }
+                        SText { text: modelData[2]; color: "#AEB5C9"; font.pixelSize: 12 }
                     }
                 }
             }

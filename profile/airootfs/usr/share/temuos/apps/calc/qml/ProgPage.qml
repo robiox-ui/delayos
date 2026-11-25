@@ -133,7 +133,7 @@ Item {
                     x: 48; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter
                     text: page.views[page.baseName(br.modelData)]
                     font.family: Theme.font; font.pixelSize: 12
-                    color: br.active ? Theme.accent : Theme.text1
+                    color: br.active ? Theme.accentText : Theme.text1
                     elide: Text.ElideLeft
                 }
                 MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; onClicked: page.setBase(br.modelData) }
@@ -204,7 +204,7 @@ Item {
                 { t: "C", a: "C" }, { t: "7", a: "7", k: "num" }, { t: "8", a: "8", k: "num" }, { t: "9", a: "9", k: "num" }, { t: "×", a: "×", s: 19 },
                 { t: "D", a: "D" }, { t: "4", a: "4", k: "num" }, { t: "5", a: "5", k: "num" }, { t: "6", a: "6", k: "num" }, { t: "−", a: "−", s: 19 },
                 { t: "E", a: "E" }, { t: "1", a: "1", k: "num" }, { t: "2", a: "2", k: "num" }, { t: "3", a: "3", k: "num" }, { t: "+", a: "+", s: 19 },
-                { t: "F", a: "F" }, { t: "<sup>+</sup>/<sub>−</sub>", a: "neg", k: "num" }, { t: "0", a: "0", k: "num" }, { t: ".", a: ".", k: "num" }, { t: "=", a: "=", k: "eq", s: 19 }
+                { t: "F", a: "F" }, { t: "+/−", a: "neg", k: "num" }, { t: "0", a: "0", k: "num" }, { t: ".", a: ".", k: "num" }, { t: "=", a: "=", k: "eq", s: 19 }
             ]
             delegate: Key {
                 required property var modelData

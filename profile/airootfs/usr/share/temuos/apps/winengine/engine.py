@@ -21,12 +21,12 @@ from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
 TOAST_CAPTION = "temu-mac-toast"
 SCRIPT = r"""
 function place(w) {
-    if (("" + w.caption) === "%(toast)s") {          // Mac toast: bottom-right, 16 px margin, above everything
+    if (("" + w.caption).indexOf("%(toast)s") === 0) {          // Mac toast: bottom-right, 16 px margin, above everything
         var a = workspace.clientArea(KWin.PlacementArea, w);
         w.frameGeometry = { x: a.x + a.width - w.frameGeometry.width - 16, y: a.y + a.height - w.frameGeometry.height - 16,
                             width: w.frameGeometry.width, height: w.frameGeometry.height };
         w.keepAbove = true; w.skipTaskbar = true; w.skipSwitcher = true;
-    } else if (("" + w.caption) === "Windows Engine" && w.pid === %(mypid)d) {
+    } else if (("" + w.caption).indexOf("Windows Engine") === 0 && w.pid === %(mypid)d) {
         var b = workspace.clientArea(KWin.PlacementArea, w);
         w.frameGeometry = { x: b.x + (b.width - w.frameGeometry.width) / 2, y: b.y + (b.height - w.frameGeometry.height) / 2,
                             width: w.frameGeometry.width, height: w.frameGeometry.height };
@@ -141,8 +141,11 @@ class Engine(QObject):
             print("windowAdded", pid, rclass, caption, self._state, file=sys.stderr)
         if self._state in ("done", "error") or not self._pid or pid == os.getpid():
             return
-        mine = pid and (pid == self._pid or pid in _children(self._pid))
         rc = rclass.lower()
+        # Wine's own "updating the configuration" box on a first run is not the app: keep our dialog up
+        if rc.startswith(("wineboot", "winetricks", "zenity")) or caption.strip() == "Wine":
+            return
+        mine = pid and (pid == self._pid or pid in _children(self._pid))
         wineish = rc.endswith(".exe") or "wine" in rc or "winboat" in rc or "freerdp" in rc or (self._mac and "darling" in rc)
         if mine or wineish:
             self._finish()

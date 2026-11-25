@@ -42,7 +42,7 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         name: seg.isObj && seg.modelData.iconName ? seg.modelData.iconName : ""
                         size: 14
-                        color: seg.sel ? Theme.accent : Theme.text2
+                        color: seg.sel ? Theme.accentText : Theme.text2
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter

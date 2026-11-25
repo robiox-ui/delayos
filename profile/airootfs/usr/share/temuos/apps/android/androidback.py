@@ -127,3 +127,39 @@ def save_layout(pkg, layout, name=""):
     with open(GC_FILE, "w", encoding="utf-8") as f:
         json.dump(s, f, ensure_ascii=False, indent=1)
     return {"ok": True}
+
+# ---- overlay window placement (Wayland: a client cannot position itself) ------------------------
+OVERLAY_JS = r"""
+function fit(w) {
+    if (!w || ("" + w.caption).indexOf("temu-gamecontrols") !== 0) return;
+    w.noBorder = true; w.keepAbove = true; w.skipTaskbar = true; w.skipSwitcher = true; w.skipPager = true;
+    w.onAllDesktops = true;
+    w.frameGeometry = workspace.clientArea(KWin.FullScreenArea, w);
+}
+workspace.windowList().forEach(fit);
+workspace.windowAdded.connect(fit);
+"""
+
+
+def overlay_setup():
+    """Load a tiny KWin script that keeps the game-controls overlay full screen, above and out of the task list."""
+    import re as _re
+    import tempfile
+    name = "temu-gamecontrols"
+    kwin = ["busctl", "--user", "call", "org.kde.KWin"]
+    sh(kwin + ["/Scripting", "org.kde.kwin.Scripting", "unloadScript", "s", name], 5)
+    fd, path = tempfile.mkstemp(prefix="temu-gamecontrols-", suffix=".js")
+    with os.fdopen(fd, "w") as f:
+        f.write(OVERLAY_JS)
+    try:
+        rc, o = sh(kwin + ["/Scripting", "org.kde.kwin.Scripting", "loadScript", "ss", path, name], 5)
+        m = _re.search(r"i\s+(-?\d+)", o)
+        if rc != 0 or not m or int(m.group(1)) < 0:
+            return {"ok": False}
+        rc, _ = sh(kwin + ["/Scripting/Script" + m.group(1), "org.kde.kwin.Script", "run"], 5)
+        return {"ok": rc == 0}
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass

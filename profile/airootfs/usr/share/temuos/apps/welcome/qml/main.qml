@@ -152,8 +152,8 @@ Window {
                         SCheck { radio: true; checked: parent.parent.sel; onToggled: win.browser = index }
                         SAppIcon { size: 36; source: modelData.icon; fallback: "internet-web-browser" }
                         ColumnLayout { spacing: 2; Layout.fillWidth: true
-                            SText { text: modelData.name; font.pixelSize: 14; font.weight: Font.DemiBold }
-                            SText { text: modelData.desc; role: "sub"; font.pixelSize: 12 } }
+                            SText { text: modelData.name; font.pixelSize: 14; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
+                            SText { text: modelData.desc; role: "sub"; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight } }
                         Rectangle { visible: win.has(modelData); height: 22; width: instT.implicitWidth + 16; radius: 11; color: Theme.accentSoft
                             SText { id: instT; anchors.centerIn: parent; text: "설치됨"; color: Theme.accent; font.pixelSize: 11 } }
                     }

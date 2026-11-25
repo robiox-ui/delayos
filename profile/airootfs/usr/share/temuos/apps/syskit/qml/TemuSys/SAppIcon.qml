@@ -9,7 +9,9 @@ Item {
     property string fallback: "application-x-executable"
     width: size; height: size
     implicitWidth: size; implicitHeight: size
-    readonly property bool isFile: source.indexOf("/") === 0 || source.indexOf("file:") === 0 || source.indexOf("http") === 0
+    readonly property bool isPath: source.indexOf("/") === 0 || source.indexOf("file:") === 0 || source.indexOf("http") === 0
+    // a missing local file falls back to the theme icon without a "Cannot open" warning
+    readonly property bool isFile: isPath && (source.indexOf("http") === 0 || sys.exists(source))
     Image {
         id: img
         anchors.fill: parent
@@ -23,7 +25,7 @@ Item {
     Kirigami.Icon {
         anchors.fill: parent
         visible: !img.visible
-        source: root.isFile || root.source === "" ? root.fallback : root.source
+        source: root.isPath || root.source === "" ? root.fallback : root.source
         fallback: root.fallback
     }
 }

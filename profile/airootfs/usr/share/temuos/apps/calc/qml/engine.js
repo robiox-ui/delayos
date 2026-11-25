@@ -26,7 +26,8 @@ function group(s) {             // "1234567.5" -> "1,234,567.5" (keeps a trailin
 }
 
 // ---------- precedence evaluation (scientific) ----------
-const PREC = { "+": 1, "−": 1, "×": 2, "÷": 2, "mod": 2, "^": 3, "yroot": 3, "log_y": 3 }
+// top-level data must be ar: QML does not export const/let from a JS import
+var PREC = { "+": 1, "−": 1, "×": 2, "÷": 2, "mod": 2, "^": 3, "yroot": 3, "log_y": 3 }
 function apply(op, a, b) {
     switch (op) {
     case "+": return a + b
@@ -84,7 +85,7 @@ function gamma(z) {                       // Lanczos approximation
 
 // ---------- unit converters ----------
 // factor = value of 1 unit in the base unit
-const UNITS = {
+var UNITS = {
     "부피": [["밀리리터", 1e-3], ["세제곱센티미터", 1e-3], ["리터", 1], ["세제곱미터", 1000], ["티스푼(미국)", 0.00492892], ["테이블스푼(미국)", 0.0147868],
              ["액량 온스(미국)", 0.0295735], ["컵(미국)", 0.24], ["파인트(미국)", 0.473176], ["쿼트(미국)", 0.946353], ["갤런(미국)", 3.78541], ["갤런(영국)", 4.54609]],
     "길이": [["나노미터", 1e-9], ["마이크로미터", 1e-6], ["밀리미터", 1e-3], ["센티미터", 1e-2], ["미터", 1], ["킬로미터", 1000],
@@ -139,5 +140,5 @@ function diffText(a, b) {
 function dateText(dt) {
     return dt.getFullYear() + "년 " + (dt.getMonth() + 1) + "월 " + dt.getDate() + "일"
 }
-const WEEKDAYS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"]
+var WEEKDAYS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"]
 function longDateText(dt) { return dateText(dt) + " " + WEEKDAYS[dt.getDay()] }

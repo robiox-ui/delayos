@@ -11,6 +11,7 @@ import org.kde.plasma.networkmanagement as PlasmaNM
 import org.kde.bluezqt as BluezQt
 import org.kde.notificationmanager as NotificationManager
 import org.temuos.shell
+import TemuUI
 
 // Right half of the TEMUOS top bar (ui-spec 3.1) or the taskbar tray + clock (3.4).
 //  top bar, left -> right: [Windows engine n] [power] [focus bell] [bluetooth] [(wifi vol battery%)] [date] [time]
@@ -24,10 +25,19 @@ PlasmoidItem {
 
     readonly property bool taskbar: Plasmoid.configuration.mode === "taskbar"
     readonly property bool dark: Kirigami.Theme.backgroundColor.hslLightness < 0.5
-    readonly property color fg: dark ? "#F2F3F5" : "#1B1D22"
+    readonly property color fg: dark ? Theme.text1 : "#1B1D22"
     readonly property color fg2: dark ? "#D5D9E0" : "#2A2D33"
     readonly property real glyphSize: taskbar ? 14 : 15
-    readonly property color accent: Kirigami.Theme.highlightColor
+    readonly property color accent: Theme.accent
+
+    // The TemuUI tokens of the whole shell follow the colour scheme (kdeglobals), and the glass
+    // desktop theme + window frame follow dark/light (temu-darkmode only switches the colour scheme).
+    SystemPalette { id: appPalette }
+    readonly property bool schemeDark: appPalette.window.hslLightness < 0.5
+    Binding { target: Theme; property: "dark"; value: root.schemeDark }
+    Binding { target: Theme; property: "accent"; value: appPalette.highlight }
+    onSchemeDarkChanged: lookTimer.restart()
+    Timer { id: lookTimer; interval: 300; onTriggered: act.run("/usr/local/bin/temu-shell-layout sync-look") }
 
     // ---------- data ----------
     P5Support.DataSource {
@@ -86,7 +96,7 @@ PlasmoidItem {
         winApps = n
     }
     Connections { target: tasks; function onCountChanged() { root.recountWin() } }
-    Component.onCompleted: recountWin()
+    Component.onCompleted: { recountWin(); lookTimer.start() }
 
     Activator { id: act; containment: Plasmoid.containment }
     readonly property var ccApplet: { if (!Plasmoid.containment) return null; Plasmoid.containment.applets; return act.find("org.temuos.controlcenter") }
@@ -96,8 +106,8 @@ PlasmoidItem {
 
     // ---------- pieces ----------
     component BarText: Text {
-        font.family: "Inter"
-        font.pixelSize: 13
+        font.family: Theme.font
+        font.pixelSize: Theme.fsBody
         font.weight: Font.Medium
         color: root.fg
         verticalAlignment: Text.AlignVCenter
@@ -189,8 +199,9 @@ PlasmoidItem {
                 Row {
                     spacing: 12
                     anchors.verticalCenter: parent.verticalCenter
-                    BarText { text: Apps.koDate(root.now) }
-                    BarText { text: Apps.hhmm(root.now) }
+                    BarText { id: dateText; text: Apps.koDate(root.now) }
+                    // Hangul comes from the fallback font with other metrics: share the baseline
+                    BarText { text: Apps.hhmm(root.now); anchors.baseline: dateText.baseline }
                 }
             }
         }
@@ -220,8 +231,8 @@ PlasmoidItem {
                 onClicked: act.toggle("calendar")
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
-                    BarText { anchors.right: parent.right; text: Apps.hhmm(root.now); font.pixelSize: 12; font.weight: Font.Normal }
-                    BarText { anchors.right: parent.right; text: Apps.isoDate(root.now); font.pixelSize: 12; font.weight: Font.Normal }
+                    BarText { anchors.right: parent.right; text: Apps.hhmm(root.now); font.pixelSize: Theme.fsSmall; font.weight: Font.Normal }
+                    BarText { anchors.right: parent.right; text: Apps.isoDate(root.now); font.pixelSize: Theme.fsSmall; font.weight: Font.Normal }
                 }
             }
             Btn {

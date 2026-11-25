@@ -1,0 +1,22 @@
+[Desktop Entry]
+DefaultProfile=TemuOS.profile
+
+[General]
+ConfigVersion=1
+
+[KonsoleWindow]
+RememberWindowSize=false
+ShowWindowTitleOnTitleBar=false
+
+[MainWindow]
+MenuBar=Disabled
+ToolBarsMovable=Disabled
+StatusBar=Disabled
+
+[TabBar]
+TabBarVisibility=ShowTabBarWhenNeeded
+NewTabButton=false
+CloseTabOnMiddleMouseButton=true
+
+[Notification Messages]
+CloseAllTabs=true

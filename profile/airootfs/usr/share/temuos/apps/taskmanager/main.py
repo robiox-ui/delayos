@@ -127,23 +127,52 @@ class Sampler:
         self.prev_disk = None
         self.prev_net = None
         self.efficiency = set()
+        self.static = {}          # pid -> (create_time, name, user, exe, cmd, is_mine, times_read): cached per process
 
     def sweep(self):
         now = time.monotonic()
         dt = (now - self.prev_t) if self.prev_t else None
         procs = []
         cur = {}
-        attrs = ["pid", "ppid", "name", "username", "status", "cpu_times", "memory_info", "num_threads", "nice", "exe", "cmdline", "uids"]
+        # only the changing fields are read every tick; name/user/exe/cmdline are cached per process
+        attrs = ["pid", "ppid", "status", "cpu_times", "memory_info", "num_threads", "nice", "create_time"]
+        static = {}
         for p in psutil.process_iter(attrs, ad_value=None):
             info = p.info
             pid = info["pid"]
             if pid in (0, 2) or info["ppid"] == 2:      # kernel threads
                 continue
+            st = self.static.get(pid)
+            if st is None or st[0] != info["create_time"] or st[6] < 2:     # re-read once: a fresh fork may exec()
+                try:
+                    with p.oneshot():
+                        name = p.name()
+                        try:
+                            user = p.username()
+                        except (psutil.Error, KeyError):
+                            user = ""
+                        try:
+                            exe = p.exe()
+                        except (psutil.Error, OSError):
+                            exe = ""
+                        try:
+                            cmdl = p.cmdline()
+                        except (psutil.Error, OSError):
+                            cmdl = []
+                        try:
+                            mine = p.uids().real == MYUID
+                        except psutil.Error:
+                            mine = False
+                except psutil.Error:
+                    continue
+                seen = st[6] + 1 if (st and st[0] == info["create_time"]) else 1
+                st = (info["create_time"], name or "?", user, exe or "", " ".join(cmdl)[:400], mine, seen)
+            static[pid] = st
+            info["name"], info["username"], info["exe"] = st[1], st[2], st[3]
             ct = info["cpu_times"]
             cpu_t = (ct.user + ct.system) if ct else 0.0
             io_b = 0
-            uids = info.get("uids")
-            if uids and uids.real == MYUID:
+            if st[5]:
                 try:
                     io = p.io_counters()
                     io_b = io.read_bytes + io.write_bytes
@@ -159,13 +188,13 @@ class Sampler:
             mem = 0
             if mi:
                 mem = max(0, mi.rss - getattr(mi, "shared", 0))
-            cmd = info["cmdline"] or []
             procs.append({"pid": pid, "ppid": info["ppid"], "name": info["name"] or "?", "user": info["username"] or "",
                           "status": info["status"], "cpu": cpu, "mem": mem, "disk": disk, "threads": info["num_threads"] or 0,
-                          "nice": info["nice"], "exe": info["exe"] or "", "cmd": " ".join(cmd)[:400],
+                          "nice": info["nice"], "exe": info["exe"] or "", "cmd": st[4],
                           "cputime": cpu_t})
         self.prev = cur
         self.prev_t = now
+        self.static = static
         # totals
         tot = {"cpu": psutil.cpu_percent(None), "mem": psutil.virtual_memory().percent, "disk": 0.0, "net": 0.0}
         try:

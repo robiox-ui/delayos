@@ -1,9 +1,12 @@
 [kdeglobals][General]
 ColorScheme=TemuDark
-AccentColor=244,125,103
+AccentColor=77,107,254
 
 [kdeglobals][KDE]
 widgetStyle=Breeze
+
+[kdeglobals][Icons]
+Theme=TemuOS
 
 [plasmarc][Theme]
 name=TemuOS

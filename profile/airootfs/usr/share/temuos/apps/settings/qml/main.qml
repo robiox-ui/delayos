@@ -26,11 +26,14 @@ Window {
 
     // ---- bridge helpers used by every page -------------------------------
     function call(name, args, cb) {
+        var from = page
         sys.call(name, args || [], function(s) {
             var r = null
             try { r = JSON.parse(s) } catch (e) { r = { error: "parse" } }
             if (r && r.error) console.warn("[settings]", name, r.error)
-            if (cb) cb(r)
+            if (!cb) return
+            // a slow backend call may answer after its page was unloaded: that is not an error
+            try { cb(r) } catch (e) { if (win.page === from) console.warn("[settings]", name, e) }
         })
     }
     function toast(t, icon) { toastItem.show(t, icon) }

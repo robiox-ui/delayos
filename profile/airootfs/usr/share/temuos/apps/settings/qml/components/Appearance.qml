@@ -1,4 +1,5 @@
 import QtQuick
+import TemuUI
 
 // Shared appearance state for Personalisation pages (loaded once per page).
 QtObject {

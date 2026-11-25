@@ -6,6 +6,7 @@
 #   temu-shell-layout autohide on|off auto-hide the dock (dock look only)
 #   temu-shell-layout reset-pins      put back the apps the dock started with
 #   temu-shell-layout look dark|light glass theme + window frame + colour scheme
+#   temu-shell-layout sync-look       make the glass theme + window frame match the current colour scheme
 #   temu-shell-layout status          prints "layout=dock|taskbar" and "autohide=true|false"
 #
 # Works live in the running Plasma session (plasmashell evaluateScript); the choice is stored in
@@ -30,6 +31,8 @@ panels().forEach(function (p) {
             c.writeEntry("launchers", String(pins));
         }
     });
+    // free the widget shortcuts (Meta+Space/A/V/X) so the widgets of the new panel can take them
+    p.widgetIds.forEach(function (id) { try { var w = p.widgetById(id); if (w && w.globalShortcut) w.globalShortcut = ""; } catch (e) {} });
 });'
 
 apply_layout() { # $1 = dock|taskbar
@@ -67,9 +70,20 @@ case "${1:-status}" in
     kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme "__aurorae__svg__$deco"
     "$Q" org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1
     set_ look "${2:-dark}" ;;
-  status)
-    echo "layout=$(get layout dock)"
+  sync-look)
+    # called by the status plasmoid when the colour scheme flips (temu-darkmode, Settings)
+    cs=$(kreadconfig6 --file kdeglobals --group General --key ColorScheme --default TemuDark)
+    case "$cs" in *Light*|*light*|BreezeClassic) dt=TemuOS-Light ;; *) dt=TemuOS ;; esac
+    cur=$(kreadconfig6 --file plasmarc --group Theme --key name --default TemuOS)
+    case "$cur" in TemuOS|TemuOS-Light) ;; *) exit 0 ;; esac          # the user picked another Plasma style: leave it
+    [[ $cur == "$dt" ]] || plasma-apply-desktoptheme "$dt" >/dev/null 2>&1
+    deco=$(kreadconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme --default __aurorae__svg__TemuOS)
+    if [[ $deco == __aurorae__svg__TemuOS* && $deco != "__aurorae__svg__$dt" ]]; then
+      kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme "__aurorae__svg__$dt"
+      "$Q" org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1
+    fi ;;
+  status)    echo "layout=$(get layout dock)"
     echo "autohide=$(get autohide false)" ;;
   *)
-    sed -n '3,11p' "$0"; exit 1 ;;
+    sed -n '3,12p' "$0"; exit 1 ;;
 esac

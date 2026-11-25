@@ -5,7 +5,7 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import org.temuos.shell
 
-// Coral "게이밍" pill in the top bar (ui-spec 3.1.1). Visible while Steam runs or Gaming mode
+// Accent-blue "게이밍" pill in the top bar (ui-spec 3.1.1). Visible while Steam runs or Gaming mode
 // is on; click toggles /usr/local/bin/temu-gamemode. All logic lives in org.temuos.shell/GamingPill.
 PlasmoidItem {
     id: root

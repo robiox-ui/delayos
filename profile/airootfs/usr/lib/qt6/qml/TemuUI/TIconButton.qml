@@ -9,7 +9,7 @@ T.Button {
     property string iconName: ""
     property int iconSize: 16
     property int box: 32
-    property color iconColor: checked ? Theme.accent : Theme.text2
+    property color iconColor: checked ? Theme.accentText : Theme.text2
     property string tip: ""
     property int radius: 6
     property bool danger: false          // red hover (window-close style)

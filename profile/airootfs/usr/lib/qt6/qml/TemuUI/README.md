@@ -6,7 +6,7 @@ Controls are built on `QtQuick.Templates`, so they look the same under any Qt Qu
 
 | Type | What | Key properties / signals |
 |---|---|---|
-| `Theme` (singleton) | colours, radii, fonts, motion (§0.3/0.4) | `dark`, `accent`, `accentSoft`, `windowBg`, `card`, `cardHover`, `card2`, `field`, `text1..3`, `popupBg`, `popupRim`, `hover`, `hoverStrong`, `pressed`, `divider`, `buttonBg`, `iconTile`, `key`, `keyHover`, `dangerText`, `textOnAccent`, `textOnAccentDark`, `scrim`, `rCard`… |
+| `Theme` (singleton) | colours, radii, fonts, motion (§0.3/0.4) | `dark`, `accent` (default blue #4D6BFE), `accentText` (readable accent for text/glyphs), `accentSoft`, `windowBg`, `card`, `cardHover`, `card2`, `field`, `text1..3`, `popupBg`, `popupRim`, `hover`, `hoverStrong`, `pressed`, `divider`, `buttonBg`, `iconTile`, `key`, `keyHover`, `dangerText`, `textOnAccent` / `textOnAccentDark` (pick white or dark from the accent's brightness), `scrim`, `rCard`… |
 | `TText` | Text with Inter 13 px text-1 defaults | `secondary`, `muted`, `semibold` |
 | `TIcon` | 1.5 px line glyph from `icons.js` (Lucide style, ~130 names) | `name`, `size`, `color`, `stroke`, `filled` |
 | `TButton` | push button | `variant`: default / accent / ghost / subtle / danger, `iconName`, `chevron`, `checkable`+`checked` (accent-soft), `semibold` |
@@ -34,6 +34,6 @@ Controls are built on `QtQuick.Templates`, so they look the same under any Qt Qu
 
 Icon names: see `icons.js` (`search x plus minus check check-circle info chevron-* arrow-* refresh undo redo home folder folder-open file file-text image music video download monitor trash scissors copy clipboard rename share grid table list more panel-right settings menu history clock star archive link pin zoom-in zoom-out pen highlighter eraser crop timer rect lasso window fullscreen save cpu memory activity users user package gauge leaf ban eye run calendar calculator function code drive sliders network gpu terminal backspace sun moon bell power lock globe wifi bluetooth volume mouse keyboard gamepad palette shield smartphone bag battery filter edit …`).
 
-Python apps: `sys.path.insert(0, "/usr/share/temuos/apps/common"); from temuapp import run` — sets the style, Wayland app_id,
+Python apps: `sys.path.insert(0, "/usr/share/temuos/apps/common"); from temuapp import run` — sets the style, Wayland app_id, quits cleanly on SIGTERM/SIGINT (so `onAboutToQuit` session saves run), accepts `context=` as a dict or a callable (built after the QApplication exists),
 Inter font, single-instance (optional) and keeps `Theme.dark/accent` in sync with `~/.config/kdeglobals`
 (`[General] ColorScheme` containing "Light" → light, `[General] AccentColor=r,g,b`, or `[TemuOS] Dark=`/`Accent=#rrggbb` overrides).

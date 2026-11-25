@@ -26,6 +26,9 @@ kwin_effects() { # $1 = load|unload
   done
 }
 
+# the top-bar pill (org.temuos.gamingtoggle) re-reads the state at once
+pill_refresh() { /usr/local/bin/temu-shell-activate gaming-changed >/dev/null 2>&1 & }
+
 on() {
   touch "$STATE"
   powerprofilesctl set performance 2>/dev/null
@@ -35,7 +38,8 @@ on() {
   pkill -STOP -x DiscoverNotifier 2>/dev/null
   # ask the privileged helper to pause system-wide background jobs
   sudo -n /usr/local/bin/temu-gamemode-root on 2>/dev/null
-  notify-send -a "Gaming" -i input-gaming "Gaming mode on" "Performance profile, effects off, background tasks paused." 2>/dev/null
+  pill_refresh
+  notify-send -a "게이밍" -i input-gaming "게이밍 모드 켜짐" "성능 전원 모드를 사용하고, 화면 효과와 백그라운드 작업을 잠시 멈췄어요." 2>/dev/null
 }
 
 off() {
@@ -45,7 +49,8 @@ off() {
   balooctl6 resume >/dev/null 2>&1 || balooctl resume >/dev/null 2>&1
   pkill -CONT -x DiscoverNotifier 2>/dev/null
   sudo -n /usr/local/bin/temu-gamemode-root off 2>/dev/null
-  notify-send -a "Gaming" -i input-gaming "Gaming mode off" 2>/dev/null
+  pill_refresh
+  notify-send -a "게이밍" -i input-gaming "게이밍 모드 꺼짐" 2>/dev/null
 }
 
 case "${1:-toggle}" in

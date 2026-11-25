@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="339" height="26" viewBox="0 0 339 26">
-<defs><style type="text/css" id="current-color-scheme">.ColorScheme-Text{color:#f2f3f5;}.ColorScheme-Background{color:#0e1018;}.ColorScheme-Highlight{color:#f47d67;}</style>
+<defs><style type="text/css" id="current-color-scheme">.ColorScheme-Text{color:#f2f3f5;}.ColorScheme-Background{color:#0e1018;}.ColorScheme-Highlight{color:#4d6bfe;}</style>
 </defs>
 <g id="topleft"><rect x="0" y="0" width="6" height="6" fill="#000000" fill-opacity="0"/><path d="M6 6 L0 6 A6 6 0 0 1 6 0 Z" fill="#f6f7fa" fill-opacity="0.94"/><path d="M0 6 A6 6 0 0 1 6 0 L6 1 A5 5 0 0 0 1 6 Z" fill="#000000" fill-opacity="0.06"/></g>
 <g id="topright"><rect x="10" y="0" width="6" height="6" fill="#000000" fill-opacity="0"/><path d="M10 6 L16 6 A6 6 0 0 0 10 0 Z" fill="#f6f7fa" fill-opacity="0.94"/><path d="M16 6 A6 6 0 0 0 10 0 L10 1 A5 5 0 0 1 15 6 Z" fill="#000000" fill-opacity="0.06"/></g>

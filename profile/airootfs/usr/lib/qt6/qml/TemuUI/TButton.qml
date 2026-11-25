@@ -21,7 +21,7 @@ T.Button {
 
     readonly property color _fg: variant === "accent" ? Theme.textOnAccent
                                : variant === "danger" ? Theme.dangerText
-                               : (checked ? Theme.accent : Theme.text1)
+                               : (checked ? Theme.accentText : Theme.text1)
 
     implicitWidth: Math.max(implicitBackgroundWidth, implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: 32
@@ -73,7 +73,7 @@ T.Button {
             if (c.checked)
                 return c.hovered ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.28) : Theme.accentSoft
             if (c.variant === "default")
-                return c.down ? Theme.pressed : c.hovered ? Qt.rgba(1, 1, 1, Theme.dark ? 0.12 : 0.10) : Theme.buttonBg
+                return c.down ? Theme.pressed : c.hovered ? (Theme.dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.10)) : Theme.buttonBg
             if (c.variant === "subtle")
                 return c.down ? Theme.keyHover : c.hovered ? Theme.cardHover : Theme.field
             return c.down ? Theme.pressed : c.hovered ? Theme.hoverStrong : "transparent"

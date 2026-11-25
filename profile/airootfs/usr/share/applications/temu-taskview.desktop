@@ -6,3 +6,4 @@ Comment=See all windows and desktops (Super+Tab)
 Exec=sh -c "qdbus6 org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut Overview"
 Icon=preferences-system-windows-effect-overview
 Categories=Utility;
+StartupNotify=false

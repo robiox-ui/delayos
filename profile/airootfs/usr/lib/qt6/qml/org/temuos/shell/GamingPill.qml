@@ -1,9 +1,10 @@
 import QtQuick
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.taskmanager as TaskManager
+import TemuUI
 import "apps.js" as Apps
 
-// "게이밍" pill (ui-spec 3.1.1): 77x23 coral capsule with a filled gamepad and dark text.
+// "게이밍" pill (ui-spec 3.1.1): 77x23 capsule in the accent colour (blue #4D6BFE) with a filled gamepad and white text.
 // Shown while Steam runs or Gaming mode is on. Click toggles /usr/local/bin/temu-gamemode.
 // The state is re-read on click, at start, when the power profile changes, when `refreshToken`
 // changes (temu-shell-activate gaming-changed, called by temu-gamemode) and, as a fallback,
@@ -81,7 +82,7 @@ Item {
         height: 23
         width: Math.max(77, row.implicitWidth + 18)
         radius: height / 2
-        color: pill.gaming ? (mouse.pressed ? "#E06E58" : (mouse.containsMouse ? "#F4876F" : "#F07A63"))
+        color: pill.gaming ? (mouse.pressed ? Qt.darker(Theme.accent, 1.12) : (mouse.containsMouse ? Qt.lighter(Theme.accent, 1.08) : Theme.accent))
                            : (pill.dark ? Qt.rgba(1, 1, 1, mouse.pressed ? 0.16 : (mouse.containsMouse ? 0.14 : 0.10))
                                         : Qt.rgba(0, 0, 0, mouse.containsMouse ? 0.10 : 0.07))
         Row {
@@ -92,15 +93,15 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 name: "gamepad"
                 size: 14
-                color: pill.gaming ? "#1A0E0C" : (pill.dark ? "#F2F3F5" : "#1B1D22")
+                color: pill.gaming ? Theme.textOnAccent : (pill.dark ? "#F2F3F5" : "#1B1D22")
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "게이밍"
-                font.family: "Inter"
-                font.pixelSize: 13
+                font.family: Theme.font
+                font.pixelSize: Theme.fsBody
                 font.weight: Font.DemiBold
-                color: pill.gaming ? "#1A0E0C" : (pill.dark ? "#F2F3F5" : "#1B1D22")
+                color: pill.gaming ? Theme.textOnAccent : (pill.dark ? "#F2F3F5" : "#1B1D22")
             }
         }
         MouseArea {

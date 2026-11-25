@@ -77,7 +77,7 @@ SPage {
             spacing: 10
             RowLayout {
                 spacing: 16
-                Rectangle { width: 48; height: 48; radius: 24; color: Theme.dark ? "#2A1E22" : "#FBEDEA"
+                Rectangle { width: 48; height: 48; radius: 24; color: Theme.dark ? Qt.tint(Theme.card, Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.14)) : Qt.tint("#FFFFFF", Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.10))
                     Image { anchors.centerIn: parent; width: 26; height: 26; sourceSize: Qt.size(52, 52); source: win.navIcon("update") } }
                 ColumnLayout { spacing: 2; Layout.fillWidth: true
                     SText {

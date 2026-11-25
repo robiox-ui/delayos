@@ -6,6 +6,5 @@ Comment=Open the TEMUOS emoji panel
 Comment[ko]=TEMUOS 이모지 패널 열기
 Icon=face-smile
 Exec=temu-shell toggle emoji
-NoDisplay=true
 StartupNotify=false
 X-KDE-Shortcuts=Meta+.

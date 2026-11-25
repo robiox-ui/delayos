@@ -1,7 +1,8 @@
 import QtQuick
+import TemuUI
 
 // TEMUOS logo mark (full colour) from the theme stream: /usr/share/temuos/logo/temuos.svg
-// Falls back to a coral disc while the artwork is missing.
+// Falls back to an accent-coloured disc while the artwork is missing.
 Item {
     id: root
     property real size: 16
@@ -24,6 +25,6 @@ Item {
         visible: img.status === Image.Error
         anchors.fill: parent
         radius: width / 2
-        color: "#F47D67"
+        color: Theme.accent
     }
 }

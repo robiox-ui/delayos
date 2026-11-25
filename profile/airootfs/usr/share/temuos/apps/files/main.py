@@ -634,7 +634,7 @@ class Backend(QObject):
         except OSError:
             return {}
         is_dir = os.path.isdir(path)
-        d = {"name": os.path.basename(path.rstrip("/")) or path, "path": path, "isDir": is_dir,
+        d = {"name": (display_name(path) if is_dir else os.path.basename(path)) or path, "path": path, "isDir": is_dir,
              "kind": kind_of(path, is_dir), "icon": icon_of(path, is_dir),
              "modified": human_time(st.st_mtime), "created": human_time(getattr(st, "st_birthtime", 0) or st.st_ctime),
              "opened": human_time(st.st_atime), "where": " › ".join(c["name"] for c in self.crumbs(os.path.dirname(path))),
@@ -727,7 +727,9 @@ class Backend(QObject):
 
     @Slot(str)
     def openTerminal(self, path):
-        subprocess.Popen(["konsole", "--workdir", path if os.path.isdir(path) else os.path.dirname(path)],
+        import shutil
+        term = "temu-terminal" if shutil.which("temu-terminal") else "konsole"
+        subprocess.Popen([term, "--workdir", path if os.path.isdir(path) else os.path.dirname(path)],
                          start_new_session=True)
 
     @Slot(str)
@@ -1054,14 +1056,17 @@ def _make_thumb_provider():
 
 
 def main():
-    backend = Backend()
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     start = args[0] if args else ""
+
+    def context():
+        # created after the QGuiApplication: QFileSystemWatcher needs the event dispatcher
+        return {"backend": Backend(), "startPath": start, "homePath": HOME, "trashUrl": TRASH_URL}
 
     def setup(engine, app):
         engine.addImageProvider("thumb", _make_thumb_provider())
     return run("org.temuos.Files", os.path.join(HERE, "qml", "Main.qml"),
-               context={"backend": backend, "startPath": start, "homePath": HOME, "trashUrl": TRASH_URL},
+               context=context,
                widgets=False, name="파일 탐색기", setup=setup)
 
 

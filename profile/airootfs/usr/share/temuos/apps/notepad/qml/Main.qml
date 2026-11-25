@@ -115,7 +115,9 @@ TWindow {
     }
 
     onClosing: saveSession()
-    Timer { interval: 15000; running: true; repeat: true; onTriggered: win.saveSession() }
+    // save a few seconds after the last edit (no periodic timer: idle CPU stays at 0) and when the app quits
+    Timer { id: sessionSoon; interval: 3000; onTriggered: win.saveSession() }
+    Connections { target: Qt.application; function onAboutToQuit() { win.saveSession() } }
 
     Component.onCompleted: {
         restoreSession()
@@ -189,7 +191,7 @@ TWindow {
                 property bool loading: false
                 function load(t) { loading = true; text = t; loading = false; area.cursorPosition = 0 }
                 Component.onCompleted: { load(model.initText); tabs.setProperty(index, "initText", "") }
-                onEdited: if (!loading && !model.dirty) tabs.setProperty(index, "dirty", true)
+                onEdited: if (!loading) { if (!model.dirty) tabs.setProperty(index, "dirty", true); sessionSoon.restart() }
                 onZoomBy: (d) => win.zoom = Math.max(0.5, Math.min(4, Math.round((win.zoom + d) * 10) / 10))
                 onZoomReset: win.zoom = 1.0
             }

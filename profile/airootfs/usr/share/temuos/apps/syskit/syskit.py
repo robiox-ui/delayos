@@ -248,6 +248,10 @@ class Bridge(QObject):
     def openUrl(self, url):
         QProcess.startDetached("xdg-open", [url])
 
+    @Slot(str, result=bool)
+    def exists(self, path):
+        return os.path.exists(os.path.expanduser(path[7:] if path.startswith("file://") else path))
+
     @Slot(str, result=str)
     def readFile(self, path):
         try:
@@ -362,5 +366,12 @@ def run_app(app_id, title, qml_file, modules=None, icon=None, extra_ctx=None, ar
     if not engine.rootObjects():
         return 1
     app._bridge = bridge  # keep alive
-    app._engine = engine
-    return app.exec()
+    rc = app.exec()
+    # tear the QML tree down before the context objects (bridge, extra_ctx) go away,
+    # otherwise bindings re-evaluate against null and print TypeErrors at exit
+    from PySide6.QtCore import QEvent
+    for o in engine.rootObjects():
+        o.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    del engine
+    return rc

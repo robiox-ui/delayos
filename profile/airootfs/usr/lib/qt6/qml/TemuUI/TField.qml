@@ -71,7 +71,7 @@ T.TextField {
         radius: c.underline ? 4 : c.radius
         color: Theme.field
         border.width: c.underline ? 0 : 1
-        border.color: c.activeFocus ? Theme.accent : (c.hovered ? Qt.rgba(1, 1, 1, Theme.dark ? 0.14 : 0.2) : Theme.fieldBorder)
+        border.color: c.activeFocus ? Theme.accent : (c.hovered ? (Theme.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.22)) : Theme.fieldBorder)
         Rectangle {
             visible: c.underline
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom }

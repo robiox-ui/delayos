@@ -264,8 +264,8 @@ TWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 72; height: 72; radius: 16
                 gradient: Gradient {
-                    GradientStop { position: 0; color: "#F27BA0" }
-                    GradientStop { position: 1; color: "#C9255C" }
+                    GradientStop { position: 0; color: Qt.lighter(Theme.accent, 1.25) }
+                    GradientStop { position: 1; color: Qt.darker(Theme.accent, 1.25) }
                 }
                 TIcon { anchors.centerIn: parent; name: "scissors"; size: 34; stroke: 2; color: "white" }
             }

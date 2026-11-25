@@ -278,8 +278,8 @@ Item {
         columns: page.sci ? 5 : 4
         spacing: 3
         readonly property real kw: (width - (columns - 1) * spacing) / columns
-        readonly property real kh: (height - (rows - 1) * spacing) / rows
-        rows: page.sci ? 7 : 6
+        readonly property int nrows: page.sci ? 7 : 6      // rows itself stays automatic: no warning while the model swaps
+        readonly property real kh: (height - (nrows - 1) * spacing) / nrows
 
         Repeater {
             model: page.sci ? (page.second ? sciKeys2 : sciKeys) : stdKeys
@@ -321,7 +321,7 @@ Item {
         { t: "7", a: "7", k: "num" }, { t: "8", a: "8", k: "num" }, { t: "9", a: "9", k: "num" }, { t: "×", a: "×", s: 19 },
         { t: "4", a: "4", k: "num" }, { t: "5", a: "5", k: "num" }, { t: "6", a: "6", k: "num" }, { t: "−", a: "−", s: 19 },
         { t: "1", a: "1", k: "num" }, { t: "2", a: "2", k: "num" }, { t: "3", a: "3", k: "num" }, { t: "+", a: "+", s: 19 },
-        { t: "<sup>+</sup>/<sub>−</sub>", a: "neg", k: "num" }, { t: "0", a: "0", k: "num" }, { t: ".", a: ".", k: "num" }, { t: "=", a: "=", k: "eq", s: 19 }
+        { t: "+/−", a: "neg", k: "num" }, { t: "0", a: "0", k: "num" }, { t: ".", a: ".", k: "num" }, { t: "=", a: "=", k: "eq", s: 19 }
     ]
     readonly property var sciKeys: [
         { t: "2<sup>nd</sup>", a: "2nd" }, { t: "π", a: "pi" }, { t: "e", a: "e" }, { t: "C", a: "C" }, { t: "", i: "backspace", a: "bs" },
@@ -330,7 +330,7 @@ Item {
         { t: "<i>x</i><sup>y</sup>", a: "^" }, { t: "7", a: "7", k: "num" }, { t: "8", a: "8", k: "num" }, { t: "9", a: "9", k: "num" }, { t: "×", a: "×", s: 19 },
         { t: "10<sup><i>x</i></sup>", a: "pow10" }, { t: "4", a: "4", k: "num" }, { t: "5", a: "5", k: "num" }, { t: "6", a: "6", k: "num" }, { t: "−", a: "−", s: 19 },
         { t: "log", a: "log" }, { t: "1", a: "1", k: "num" }, { t: "2", a: "2", k: "num" }, { t: "3", a: "3", k: "num" }, { t: "+", a: "+", s: 19 },
-        { t: "ln", a: "ln" }, { t: "<sup>+</sup>/<sub>−</sub>", a: "neg", k: "num" }, { t: "0", a: "0", k: "num" }, { t: ".", a: ".", k: "num" }, { t: "=", a: "=", k: "eq", s: 19 }
+        { t: "ln", a: "ln" }, { t: "+/−", a: "neg", k: "num" }, { t: "0", a: "0", k: "num" }, { t: ".", a: ".", k: "num" }, { t: "=", a: "=", k: "eq", s: 19 }
     ]
     readonly property var sciKeys2: [
         { t: "2<sup>nd</sup>", a: "2nd" }, { t: "sin", a: "sin" }, { t: "cos", a: "cos" }, { t: "tan", a: "tan" }, { t: "", i: "backspace", a: "bs" },
@@ -339,6 +339,6 @@ Item {
         { t: "<sup>y</sup>√<i>x</i>", a: "yroot" }, { t: "7", a: "7", k: "num" }, { t: "8", a: "8", k: "num" }, { t: "9", a: "9", k: "num" }, { t: "×", a: "×", s: 19 },
         { t: "2<sup><i>x</i></sup>", a: "pow2" }, { t: "4", a: "4", k: "num" }, { t: "5", a: "5", k: "num" }, { t: "6", a: "6", k: "num" }, { t: "−", a: "−", s: 19 },
         { t: "log<sub>y</sub>x", a: "log_y" }, { t: "1", a: "1", k: "num" }, { t: "2", a: "2", k: "num" }, { t: "3", a: "3", k: "num" }, { t: "+", a: "+", s: 19 },
-        { t: "e<sup><i>x</i></sup>", a: "exp" }, { t: "<sup>+</sup>/<sub>−</sub>", a: "neg", k: "num" }, { t: "0", a: "0", k: "num" }, { t: ".", a: ".", k: "num" }, { t: "=", a: "=", k: "eq", s: 19 }
+        { t: "e<sup><i>x</i></sup>", a: "exp" }, { t: "+/−", a: "neg", k: "num" }, { t: "0", a: "0", k: "num" }, { t: ".", a: ".", k: "num" }, { t: "=", a: "=", k: "eq", s: 19 }
     ]
 }

@@ -36,6 +36,18 @@ dock.writeConfig("mode", "taskbar");
 dock.writeConfig("launchers", savedPins() || pins());
 dock.writeConfig("defaultLaunchers", pins());
 
+// TEMUOS popups (shell-popups stream): headless plasmoids that draw their own glass windows.
+// Meta alone opens Start (it provides org.kde.plasma.launchermenu). The panel still gives each of
+// them a small slot, so they sit right after the filling left applet, in the empty middle of the bar.
+var popups = { "org.temuos.start": "", "org.temuos.commandbar": "Meta+Space", "org.temuos.controlcenter": "Meta+A",
+               "org.temuos.calendar": "", "org.temuos.clipboard": "Meta+V", "org.temuos.winx": "Meta+X",
+               "org.temuos.allapps": "" };
+for (var pid in popups) {
+    if (!has(pid)) continue;
+    var pw = bar.addWidget(pid);
+    if (popups[pid]) pw.globalShortcut = popups[pid];
+}
+
 var tray = bar.addWidget("org.kde.plasma.systemtray");
 // Plasma 6: the tray keeps its own item list in its [General] group
 tray.currentConfigGroup = ["General"];
@@ -46,14 +58,3 @@ tray.reloadConfig();
 var status = bar.addWidget("org.temuos.status");
 status.currentConfigGroup = ["General"];
 status.writeConfig("mode", "taskbar");
-
-// TEMUOS popups (shell-popups stream): headless 0 px plasmoids that draw their own glass windows.
-// Meta alone opens Start (it provides org.kde.plasma.launchermenu).
-var popups = { "org.temuos.start": "", "org.temuos.commandbar": "Meta+Space", "org.temuos.controlcenter": "Meta+A",
-               "org.temuos.calendar": "", "org.temuos.clipboard": "Meta+V", "org.temuos.winx": "Meta+X",
-               "org.temuos.allapps": "" };
-for (var pid in popups) {
-    if (!has(pid)) continue;
-    var pw = bar.addWidget(pid);
-    if (popups[pid]) pw.globalShortcut = popups[pid];
-}

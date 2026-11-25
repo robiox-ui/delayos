@@ -61,7 +61,8 @@ import TemuSys
     Window {
         id: toast
         transientParent: null
-        visible: engine.mac
+        // only after engine.start() loaded the KWin placement script (bottom-right, keep above, no task entry)
+        visible: engine.mac && engine.state !== "starting"
         width: 378; height: 84
         title: "temu-mac-toast"
         color: "transparent"

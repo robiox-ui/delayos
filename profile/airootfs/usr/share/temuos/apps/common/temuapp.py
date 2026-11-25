@@ -2,7 +2,7 @@
 
     from temuapp import run
     run("org.temuos.Notepad", "/usr/share/temuos/apps/notepad/qml/Main.qml",
-        context={"backend": backend_obj}, widgets=True)
+        context={"backend": backend_obj}, widgets=True)      # context may also be a callable returning the dict
 
 - forces the Basic Qt Quick Controls style (TemuUI controls are built on QtQuick.Templates)
 - sets the Wayland app_id / desktop file name so the dock and decoration find the right icon
@@ -172,6 +172,28 @@ def _single_instance(app_id, bridge):
     return False
 
 
+def _quit_on_signals(app):
+    """SIGTERM/SIGINT/SIGHUP (logout, kill) → normal quit, so apps can save their session."""
+    import signal
+    import socket
+    from PySide6.QtCore import QSocketNotifier
+    r, w = socket.socketpair()
+    r.setblocking(False)
+    w.setblocking(False)
+    signal.set_wakeup_fd(w.fileno())
+    notifier = QSocketNotifier(r.fileno(), QSocketNotifier.Type.Read, app)
+
+    def drain(*_):
+        try:
+            r.recv(64)
+        except OSError:
+            pass
+    notifier.activated.connect(drain)        # running Python here lets the handler below fire
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, lambda *_: app.quit())
+    app._temu_sig = (r, w, notifier)
+
+
 def run(app_id, qml_path, context=None, widgets=False, single_instance=False, name=None, setup=None):
     if widgets:
         from PySide6.QtWidgets import QApplication as App
@@ -200,6 +222,8 @@ def run(app_id, qml_path, context=None, widgets=False, single_instance=False, na
         pass
     ctx = engine.rootContext()
     ctx.setContextProperty("temuApp", bridge)
+    if callable(context):                 # build backends after the QApplication exists (watchers, notifiers)
+        context = context()
     for k, v in (context or {}).items():
         ctx.setContextProperty(k, v)
 
@@ -217,4 +241,15 @@ def run(app_id, qml_path, context=None, widgets=False, single_instance=False, na
     if not engine.rootObjects():
         return 1
     app._temu_engine = engine
-    return app.exec()
+    _quit_on_signals(app)
+    rc = app.exec()
+    app._temu_sig[2].setEnabled(False)
+    # destroy the QML tree first, while the context objects (backends) are still alive; otherwise every
+    # binding re-evaluates against null during interpreter shutdown and spams the journal
+    try:
+        import shiboken6
+        for obj in engine.rootObjects():
+            shiboken6.delete(obj)
+    except Exception:
+        pass
+    return rc

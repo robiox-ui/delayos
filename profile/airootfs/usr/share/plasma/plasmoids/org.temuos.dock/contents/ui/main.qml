@@ -6,6 +6,7 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import org.kde.taskmanager as TaskManager
 import org.temuos.shell
+import TemuUI
 
 // TEMUOS dock (ui-spec 3.2) and taskbar centre (3.4).
 // Items: Start, Search, Task View, then the pinned apps (launchers) and running apps from the
@@ -20,7 +21,9 @@ PlasmoidItem {
     readonly property bool taskbar: Plasmoid.configuration.mode === "taskbar"
     readonly property bool dark: Kirigami.Theme.backgroundColor.hslLightness < 0.5
     readonly property color glyphColor: dark ? "#FFFFFF" : "#1B1D22"
-    readonly property color accent: Kirigami.Theme.highlightColor
+    readonly property color tileHover: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.07)
+    readonly property color tilePressed: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.12)
+    readonly property color accent: Theme.accent
     readonly property int pitch: 50
     readonly property int barH: taskbar ? 43 : 47
     readonly property int unpinnedGap: 8
@@ -61,7 +64,7 @@ PlasmoidItem {
     }
     function isPinnedRow(i) {
         var url = tasksModel.data(tasksModel.makeModelIndex(i), TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon)
-        return url && tasksModel.launcherPosition(url) >= 0
+        return !!url && tasksModel.launcherPosition(url) >= 0
     }
     Connections {
         target: tasksModel
@@ -214,8 +217,8 @@ PlasmoidItem {
         Rectangle {
             anchors.centerIn: parent
             width: 40; height: 40; radius: 10
-            color: dbMouse.pressed ? (root.dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.12))
-                 : (dbMouse.containsMouse || db.active) ? (root.dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.07))
+            color: dbMouse.pressed ? root.tilePressed
+                 : (dbMouse.containsMouse || db.active) ? root.tileHover
                  : "transparent"
         }
         Item { id: holder; anchors.fill: parent }
@@ -233,9 +236,9 @@ PlasmoidItem {
     }
 
     component TipLabel: Text {
-        font.family: "Inter"
-        font.pixelSize: 12
-        color: "#F2F3F5"
+        font.family: Theme.font
+        font.pixelSize: Theme.fsSmall
+        color: root.dark ? "#F2F3F5" : "#15171C"
         leftPadding: 0; rightPadding: 0
     }
 
@@ -260,8 +263,8 @@ PlasmoidItem {
             x: task.lead + (root.pitch - width) / 2
             anchors.verticalCenter: parent.verticalCenter
             width: 40; height: 40; radius: 10
-            color: mouse.pressed ? (root.dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.12))
-                 : mouse.containsMouse ? (root.dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.07))
+            color: mouse.pressed ? root.tilePressed
+                 : mouse.containsMouse ? root.tileHover
                  : "transparent"
         }
         Kirigami.Icon {
@@ -302,33 +305,34 @@ PlasmoidItem {
             location: Plasmoid.location
             active: !menu.visible && root.dragRow < 0
             mainItem: TipLabel { text: task.model.AppName || task.model.display || "" }
-        }
-        MouseArea {
-            id: mouse
-            anchors.fill: tile
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-            property point pressPos
-            property bool moved: false
-            onPressed: (m) => { pressPos = Qt.point(m.x, m.y); moved = false }
-            onPositionChanged: (m) => {
-                if (!(m.buttons & Qt.LeftButton) || !task.pinned) return
-                if (!moved && Math.abs(m.x - pressPos.x) < 8) return
-                moved = true
-                root.dragRow = task.index
-                var p = mapToItem(task.parent, m.x, m.y)
-                var target = Math.floor((p.x - 3 * root.pitch) / root.pitch)
-                target = Math.max(0, Math.min(root.pinnedCount - 1, target))
-                if (target !== task.index) tasksModel.move(task.index, target)
-            }
-            onReleased: {
-                if (moved) { tasksModel.syncLaunchers(); root.dragRow = -1 }
-            }
-            onClicked: (m) => {
-                if (moved) return
-                if (m.button === Qt.RightButton) menu.openFor(task, task.index)
-                else if (m.button === Qt.MiddleButton) tasksModel.requestNewInstance(root.idx(task.index))
-                else root.activateRow(task.index)
+            // the MouseArea is a child of the tooltip area, so both see the hover
+            MouseArea {
+                id: mouse
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                property point pressPos
+                property bool moved: false
+                onPressed: (m) => { pressPos = Qt.point(m.x, m.y); moved = false }
+                onPositionChanged: (m) => {
+                    if (!(m.buttons & Qt.LeftButton) || !task.pinned) return
+                    if (!moved && Math.abs(m.x - pressPos.x) < 8) return
+                    moved = true
+                    root.dragRow = task.index
+                    var p = mapToItem(task.parent, m.x, m.y)
+                    var target = Math.floor((p.x - 3 * root.pitch) / root.pitch)
+                    target = Math.max(0, Math.min(root.pinnedCount - 1, target))
+                    if (target !== task.index) tasksModel.move(task.index, target)
+                }
+                onReleased: {
+                    if (moved) { tasksModel.syncLaunchers(); root.dragRow = -1 }
+                }
+                onClicked: (m) => {
+                    if (moved) return
+                    if (m.button === Qt.RightButton) menu.openFor(task, task.index)
+                    else if (m.button === Qt.MiddleButton) tasksModel.requestNewInstance(root.idx(task.index))
+                    else root.activateRow(task.index)
+                }
             }
         }
     }

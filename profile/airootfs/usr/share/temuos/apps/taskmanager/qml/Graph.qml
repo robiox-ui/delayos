@@ -17,7 +17,7 @@ Canvas {
         ctx.reset()
         const w = width, h = height
         if (grid) {
-            ctx.strokeStyle = Qt.rgba(1, 1, 1, Theme.dark ? 0.06 : 0.0)
+            ctx.strokeStyle = Theme.dark ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0, 0, 0, 0.06)
             ctx.lineWidth = 1
             for (let i = 1; i < 10; ++i) { const x = Math.round(w * i / 10) + 0.5; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke() }
             for (let j = 1; j < 10; ++j) { const y = Math.round(h * j / 10) + 0.5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() }

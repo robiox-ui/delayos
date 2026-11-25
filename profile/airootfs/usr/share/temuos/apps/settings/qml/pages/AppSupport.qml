@@ -51,7 +51,7 @@ SPage {
     SRow {
         visible: !!pg.st.windows.wine
         icon: "configure"; title: "Windows 호환성 설정"; subtitle: "Windows 버전, 그래픽, 라이브러리 (winecfg)"
-        chevron: true; onClicked: sys.detach(["env", "WINEPREFIX=" + win.me.home + "/.local/share/temu/windows", "winecfg"])
+        chevron: true; onClicked: sys.detach(["sh", "-c", "mkdir -p \"$1\" && WINEPREFIX=\"$1\" WINEDEBUG=-all exec winecfg 2>/dev/null", "winecfg", win.me.home + "/.local/share/temu/windows"])
     }
     SRow {
         visible: !!pg.st.windows.winboatInstalled

@@ -5,6 +5,7 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import org.kde.taskmanager as TaskManager
 import org.temuos.shell
+import TemuUI
 
 // Left half of the TEMUOS top bar (ui-spec 3.1): logo button (opens Start) + active app name.
 // Fills the remaining width of the top panel, so no panel spacer is needed.
@@ -61,7 +62,7 @@ PlasmoidItem {
             x: 27 - width / 2 - parent.sceneX
             anchors.verticalCenter: parent.verticalCenter
             radius: 6
-            color: logoMouse.pressed ? Qt.rgba(1, 1, 1, 0.16) : (logoMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent")
+            color: logoMouse.pressed ? (root.dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.12)) : (logoMouse.containsMouse ? (root.dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.07)) : "transparent")
             Logo { anchors.centerIn: parent; size: 16 }
             MouseArea {
                 id: logoMouse
@@ -76,8 +77,8 @@ PlasmoidItem {
             width: parent.width - x - 8
             elide: Text.ElideRight
             text: root.appName
-            font.family: "Inter"
-            font.pixelSize: 13
+            font.family: Theme.font
+            font.pixelSize: Theme.fsBody
             font.weight: Font.Medium
             color: root.dark ? "#B8BEC8" : "#1B1D22"
         }
