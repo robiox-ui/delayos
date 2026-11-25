@@ -6,6 +6,7 @@ import TemuUI
 Rectangle {
     id: root
     property string icon: ""
+    property string appIcon: ""      // full-colour app icon instead of the tile
     property color iconColor: Theme.text2
     property string title: ""
     property string subtitle: ""
@@ -46,7 +47,8 @@ Rectangle {
         anchors.leftMargin: 10
         anchors.rightMargin: 16
         spacing: 12
-        STile { visible: root.icon !== ""; icon: root.icon; glyph: root.iconColor; size: 30 }
+        STile { visible: root.icon !== "" && root.appIcon === ""; icon: root.icon; glyph: root.iconColor; size: 30 }
+        SAppIcon { visible: root.appIcon !== ""; source: root.appIcon; size: 30 }
         ColumnLayout {
             id: txt
             Layout.fillWidth: true

@@ -148,7 +148,7 @@ class Bridge(QObject):
     @Slot(str, "QVariantList", QJSValue)
     def call(self, name, args, cb):
         fid = next(self._ids)
-        self._cbs[fid] = cb
+        self._cbs[fid] = (cb, name)
         try:
             fn = self._resolve(name)
         except Exception as e:  # noqa
@@ -165,11 +165,11 @@ class Bridge(QObject):
         self._pool.submit(work)
 
     def _deliver(self, fid, payload):
-        cb = self._cbs.pop(fid, None)
+        cb, name = self._cbs.pop(fid, (None, ""))
         if cb is not None and cb.isCallable():
             r = cb.call([QJSValue(payload)])
             if r.isError():
-                print("qml callback error:", r.toString(), file=sys.stderr)
+                print("qml callback error (%s):" % name, r.toString(), file=sys.stderr)
 
     @Slot(str, "QVariantList", result=str)
     def callSync(self, name, args):
@@ -336,6 +336,9 @@ def run_app(app_id, title, qml_file, modules=None, icon=None, extra_ctx=None, ar
     ctx = engine.rootContext()
     ctx.setContextProperty("sys", bridge)
     ctx.setContextProperty("appArgs", list((argv or sys.argv)[1:]))
+    if callable(extra_ctx):
+        extra_ctx = extra_ctx()
+    app._ctxobjs = extra_ctx
     for k, v in (extra_ctx or {}).items():
         ctx.setContextProperty(k, v)
     engine.load(QUrl.fromLocalFile(qml_file))

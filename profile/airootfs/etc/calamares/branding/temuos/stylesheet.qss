@@ -1,0 +1,98 @@
+/* TEMUOS installer: widget pages (Drive, You, Region) in the same dark card language as the
+   QML pages. Tokens: bg #0E0F13, card #151821, field #1E2129, text #F2F3F5 / #9AA0AA / #7C828C,
+   accent (installer crimson) #4D6BFE. */
+
+QWidget {
+    background-color: #0E0F13;
+    color: #F2F3F5;
+    font-family: "Inter", "Noto Sans CJK KR";
+    font-size: 13px;
+    selection-background-color: #4A1A2B;
+    selection-color: #FFFFFF;
+}
+
+#mainApp { background-color: #0E0F13; }
+
+QLabel { background: transparent; }
+
+QLineEdit, QSpinBox, QPlainTextEdit, QTextEdit, QComboBox {
+    background-color: #1E2129;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-height: 26px;
+    color: #F2F3F5;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 1px solid #4D6BFE; }
+QLineEdit:disabled, QComboBox:disabled { color: #7C828C; }
+QComboBox::drop-down { border: none; width: 26px; }
+QComboBox QAbstractItemView {
+    background-color: #1E2129;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    selection-background-color: #4A1A2B;
+    outline: 0;
+}
+
+QPushButton, QToolButton {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    min-height: 24px;
+    color: #F2F3F5;
+    font-weight: 600;
+}
+QPushButton:hover, QToolButton:hover { background-color: rgba(255, 255, 255, 0.10); }
+QPushButton:pressed, QToolButton:pressed { background-color: rgba(255, 255, 255, 0.14); }
+QPushButton:default, QPushButton:checked { background-color: #4D6BFE; color: #FFFFFF; }
+QPushButton:disabled { color: #7C828C; }
+
+QRadioButton, QCheckBox { background: transparent; spacing: 10px; color: #F2F3F5; }
+QRadioButton::indicator { width: 14px; height: 14px; border-radius: 8px; border: 1.5px solid #6A6D76; background: transparent; }
+QRadioButton::indicator:checked { border: 1.5px solid #4D6BFE; background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4D6BFE, stop:0.45 #4D6BFE, stop:0.55 transparent); }
+QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid #6A6D76; background: transparent; }
+QCheckBox::indicator:checked { border: 1.5px solid #4D6BFE; background: #4D6BFE; }
+
+/* option cards of the partition page ("Use this empty drive", "Install next to Windows" …) */
+QGroupBox, QFrame#choiceFrame {
+    background-color: #151821;
+    border: 1px solid transparent;
+    border-radius: 10px;
+}
+
+QListView, QTreeView, QTableView, QListWidget {
+    background-color: #151821;
+    alternate-background-color: #171A23;
+    border: none;
+    border-radius: 10px;
+    padding: 4px;
+    outline: 0;
+}
+QListView::item, QTreeView::item { padding: 6px 8px; border-radius: 6px; }
+QListView::item:hover, QTreeView::item:hover { background-color: #1B1F28; }
+QListView::item:selected, QTreeView::item:selected { background-color: #4A1A2B; color: #FFFFFF; }
+QHeaderView::section { background-color: #151821; color: #9AA0AA; border: none; padding: 6px 8px; }
+
+QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }
+QScrollBar:vertical { background: transparent; width: 8px; margin: 2px; }
+QScrollBar::handle:vertical { background: rgba(255, 255, 255, 0.16); border-radius: 3px; min-height: 24px; }
+QScrollBar:horizontal { background: transparent; height: 8px; margin: 2px; }
+QScrollBar::handle:horizontal { background: rgba(255, 255, 255, 0.16); border-radius: 3px; min-width: 24px; }
+QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page { background: none; border: none; width: 0; height: 0; }
+
+QSplitter::handle { background-color: #4D6BFE; width: 4px; border-radius: 2px; }
+
+/* execution page: Calamares' own progress bar + job label under the slideshow */
+QProgressBar {
+    background-color: #2A2D35;
+    border: none;
+    border-radius: 2px;
+    max-height: 4px;
+    min-height: 4px;
+    text-align: center;
+    color: transparent;
+}
+QProgressBar::chunk { background-color: #4D6BFE; border-radius: 2px; }
+
+QToolTip { background-color: #1E2129; color: #F2F3F5; border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 6px; padding: 4px 8px; }

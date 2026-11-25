@@ -5,15 +5,17 @@ import "apps.js" as Apps
 
 // "게이밍" pill (ui-spec 3.1.1): 77x23 coral capsule with a filled gamepad and dark text.
 // Shown while Steam runs or Gaming mode is on. Click toggles /usr/local/bin/temu-gamemode.
-// No polling of the state itself: it is re-read on click, at start and whenever the power
-// profile changes (temu-gamemode switches it). Steam without a window is detected with a
-// cheap pgrep every 15 s.
+// The state is re-read on click, at start, when the power profile changes, when `refreshToken`
+// changes (temu-shell-activate gaming-changed, called by temu-gamemode) and, as a fallback,
+// together with a cheap Steam check every 10 s (one small shell command; no faster polling).
 Item {
     id: pill
     property bool dark: true
     property bool alwaysShow: false
     property bool gaming: false
     property bool steamProcess: false
+    property string refreshToken: ""
+    onRefreshTokenChanged: refresh()
     readonly property bool steamWindow: steamWindows > 0
     readonly property bool shown: alwaysShow || gaming || steamWindow || steamProcess
 
@@ -47,15 +49,16 @@ Item {
     Exec {
         id: sh
         onFinished: (cmd, out, code) => {
-            if (cmd.indexOf("temu-gamemode status") >= 0)
-                pill.gaming = out.trim() === "on"
-            else if (cmd.indexOf("pgrep") >= 0)
-                pill.steamProcess = out.trim().length > 0
+            if (cmd.indexOf("temu-gamemode status") >= 0) {
+                var l = out.trim().split("\n")
+                pill.gaming = l[0] === "on"
+                pill.steamProcess = l.length > 1 && l[1] === "steam"
+            }
             else if (cmd.indexOf("temu-gamemode toggle") >= 0)
                 pill.refresh()
         }
     }
-    function refresh() { sh.run("/usr/local/bin/temu-gamemode status") }
+    function refresh() { sh.run("/usr/local/bin/temu-gamemode status; pgrep -x -u $(id -u) steam >/dev/null && echo steam") }
 
     P5Support.DataSource {
         id: pm
@@ -65,11 +68,10 @@ Item {
         onProfileChanged: pill.refresh()
     }
     Timer {
-        interval: 15000
+        interval: 10000
         repeat: true
-        running: !pill.steamWindow
-        triggeredOnStart: true
-        onTriggered: sh.run("pgrep -x -u $(id -u) steam >/dev/null && echo 1")
+        running: true
+        onTriggered: pill.refresh()
     }
     Component.onCompleted: { refresh(); recountSteam() }
 

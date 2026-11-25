@@ -18,7 +18,7 @@ Item {
         color: root.checked && !root.radio ? Theme.accent : "transparent"
         border.width: root.checked ? (root.radio ? 5 : 0) : 1.5
         border.color: root.checked ? Theme.accent : Theme.toggleOffKnob
-        SIcon { visible: root.checked && !root.radio; anchors.centerIn: parent; name: "checkmark"; size: 12; tint: "#FFFFFF" }
+        SIcon { visible: root.checked && !root.radio; anchors.centerIn: parent; name: "g:check"; size: 12; tint: "#FFFFFF" }
     }
     SText { id: lbl; text: root.text; x: box.width + 10; anchors.verticalCenter: parent.verticalCenter; visible: text !== "" }
     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor

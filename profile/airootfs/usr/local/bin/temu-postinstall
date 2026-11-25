@@ -32,12 +32,17 @@ pacman -Rns --noconfirm calamares mkinitcpio-archiso 2>/dev/null || true
 sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=3/' /etc/default/grub
 sed -i 's/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
 grep -q '^GRUB_DISABLE_OS_PROBER' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
-sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 splash nowatchdog nvme_core.default_ps_max_latency_us=0 split_lock_detect=off zswap.enabled=0 mitigations=auto"/' /etc/default/grub
+sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0 splash nowatchdog nvme_core.default_ps_max_latency_us=0 split_lock_detect=off zswap.enabled=0 mitigations=auto"/' /etc/default/grub
 sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="TEMUOS_LINUX"/' /etc/default/grub
 
 # Services
 systemctl enable sddm NetworkManager bluetooth fstrim.timer irqbalance \
-  ananicy-cpp power-profiles-daemon systemd-oomd temu-firstboot 2>/dev/null || true
+  ananicy-cpp power-profiles-daemon systemd-oomd temu-firstboot temu-eac-facts scx_loader rtkit-daemon 2>/dev/null || true
 systemctl enable thermald 2>/dev/null || true
 systemctl disable earlyoom 2>/dev/null || true   # systemd-oomd is used instead
 rm -f /var/lib/temu/firstboot.done
+
+# Installer "Minimal" choice: drop the big optional app set
+if [[ ${TEMUOS_SOFTWARE:-} == minimal ]]; then
+  pacman -Rns --noconfirm libreoffice-fresh libreoffice-fresh-ko gimp vlc lutris bottles 2>/dev/null || true
+fi

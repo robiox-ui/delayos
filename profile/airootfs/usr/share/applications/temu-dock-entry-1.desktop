@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Dock app 1
+Name[ko]=독 앱 1
+Comment=Opens or switches to app 1 in the dock (Meta+1)
+Exec=/usr/local/bin/temu-shell-activate dock-entry 1
+Icon=user-desktop
+NoDisplay=true
+StartupNotify=false
+X-KDE-Shortcuts=Meta+1

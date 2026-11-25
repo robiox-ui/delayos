@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Dock app 8
+Name[ko]=독 앱 8
+Comment=Opens or switches to app 8 in the dock (Meta+8)
+Exec=/usr/local/bin/temu-shell-activate dock-entry 8
+Icon=user-desktop
+NoDisplay=true
+StartupNotify=false
+X-KDE-Shortcuts=Meta+8

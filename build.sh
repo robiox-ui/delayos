@@ -88,6 +88,50 @@ if ! ls "$KDIR"/linux-temuos-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
 fi
 cp -u "$KDIR"/linux-temuos-*.pkg.tar.zst "$LOCALREPO/"
 
+# ------------------- EAC Linux v2: TEMUOS-signed boot loaders + linux-temuos-eac (optional)
+# Needs the TEMUOS Secure Boot keys (tools/make-temuos-sb-key.sh). Skipped without them.
+KEYS="${TEMUOS_KEYS:-/root/temuos-keys}"
+EAC_FILES=()
+if [[ -f $KEYS/temuos-sb-signing.key && -f $KEYS/temuos-sb-signing.crt && -f $KEYS/temuos-sb-ca.crt ]]; then
+  BKEYS="/home/$BUILDER/.temuos-keys"
+  EDIR="/home/$BUILDER/linux-temuos-eac"
+  SDIR="/home/$BUILDER/temuos-sb-signed"
+  # the builder user cannot read /root: give it a private copy, always removed again
+  cleanup_keys() { rm -rf "$BKEYS"; rm -f "$EDIR/src/temuos-module-signing.pem"; }
+  trap cleanup_keys EXIT
+  install -d -m700 -o "$BUILDER" -g "$BUILDER" "$BKEYS"
+  install -m600 -o "$BUILDER" -g "$BUILDER" "$KEYS"/temuos-sb-signing.{key,crt} "$KEYS"/temuos-sb-ca.crt "$BKEYS/"
+  SBENV="TEMUOS_SB_KEY=$BKEYS/temuos-sb-signing.key TEMUOS_SB_CERT=$BKEYS/temuos-sb-signing.crt TEMUOS_SB_CA=$BKEYS/temuos-sb-ca.crt"
+  pacman -S --noconfirm --needed sbsigntools grub systemd openssl
+
+  log "Building temuos-sb-signed (TEMUOS-signed GRUB + systemd-boot)"
+  rm -rf "$SDIR"; cp -r "$HERE/packages/temuos-sb-signed" "$SDIR"
+  sed -i 's/\r$//' "$SDIR/PKGBUILD"; chown -R "$BUILDER:$BUILDER" "$SDIR"
+  as_builder "cd ~/temuos-sb-signed && $SBENV makepkg -f --noconfirm" || die "temuos-sb-signed failed to build"
+  cp -u "$SDIR"/temuos-sb-signed-*.pkg.tar.zst "$LOCALREPO/"
+
+  NVV=$(pacman -Si nvidia-utils | sed -n 's/^Version *: *//p' | head -n1)
+  if ls "$EDIR"/linux-temuos-eac-[0-9]*.pkg.tar.zst >/dev/null 2>&1 && \
+     ! bsdtar -xOf "$(ls "$EDIR"/linux-temuos-eac-nvidia-open-*.pkg.tar.zst 2>/dev/null | head -1)" .PKGINFO 2>/dev/null | grep -q "nvidia-utils=${NVV%-*}"; then
+    log "nvidia-utils changed to $NVV: rebuilding linux-temuos-eac"
+    rm -rf "$EDIR"
+  fi
+  if ! ls "$EDIR"/linux-temuos-eac-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
+    log "Building linux-temuos-eac (anti-cheat kernel, NVIDIA $NVV) - this takes a while"
+    rm -rf "$EDIR"; mkdir -p "$EDIR"; cp "$HERE/kernel/linux-temuos-eac/"{PKGBUILD,config} "$EDIR/"
+    sed -i 's/\r$//' "$EDIR/PKGBUILD"; chown -R "$BUILDER:$BUILDER" "$EDIR"
+    as_builder "cd ~/linux-temuos-eac && $SBENV MAKEFLAGS=-j$(nproc) makepkg -s --noconfirm --skippgpcheck" \
+      || die "linux-temuos-eac kernel failed to build"
+  fi
+  cleanup_keys
+  for p in "$EDIR"/linux-temuos-eac-*.pkg.tar.zst; do
+    case "$p" in *-headers-*) continue ;; esac
+    EAC_FILES+=("$p")
+  done
+else
+  warn "No Secure Boot keys in $KEYS: skipping linux-temuos-eac / temuos-sb-signed (anti-cheat mode unavailable)"
+fi
+
 log "Collecting built packages into $LOCALREPO"
 find "/home/$BUILDER/.cache/yay" "/home/$BUILDER/yay-bin" -name '*.pkg.tar.zst' ! -name '*-debug-*' -exec cp -u {} "$LOCALREPO/" \; 2>/dev/null || true
 rm -f "$LOCALREPO"/temuos-local.db* "$LOCALREPO"/temuos-local.files*
@@ -101,6 +145,18 @@ rm -f "$PROFILE/packages.x86_64" "$PROFILE/airootfs/etc/mkinitcpio.d/linux.prese
 cp -a "$HERE/profile/." "$PROFILE/"
 
 sed -i "s|@LOCALREPO@|$LOCALREPO|" "$PROFILE/pacman.conf"
+
+# Anti-cheat kernel packages ride along on the ISO; `temu-eac setup` installs them on demand
+if (( ${#EAC_FILES[@]} )); then
+  install -d "$PROFILE/airootfs/var/cache/temuos/eac-pkgs"
+  cp "${EAC_FILES[@]}" "$LOCALREPO"/temuos-sb-signed-*.pkg.tar.zst "$PROFILE/airootfs/var/cache/temuos/eac-pkgs/"
+  echo temuos-sb-signed >> "$PROFILE/packages.x86_64"
+fi
+
+# Boot splash: plymouth hook in the live initramfs, theme selected inside the image
+sed -i 's/\(HOOKS=([^)]*\bkms\b\)/\1 plymouth/' "$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
+grep -q plymouth "$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf" || \
+  sed -i 's/\(HOOKS=(base udev\)/\1 plymouth/' "$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
 
 # ananicy-cpp needs a rule set: use CachyOS's (same as CachyOS ships)
 log "Adding CachyOS ananicy-cpp rules"
@@ -120,7 +176,7 @@ for f in $(grep -rl 'vmlinuz-linux\b\|initramfs-linux\.img' "$PROFILE/efiboot" "
 done
 # Live kernel options: quiet, fast, no mitigations-induced FPS loss on the live USB
 for f in $(grep -rl 'archisobasedir' "$PROFILE/efiboot" "$PROFILE/syslinux" "$PROFILE/grub"); do
-  sed -i 's/\(archisosearchuuid=%ARCHISO_UUID%\)/\1 quiet splash loglevel=3 nowatchdog split_lock_detect=off module_blacklist=pcspkr i915.modeset=1 amdgpu.modeset=1 nvme_load=yes copytoram=auto cow_spacesize=10G/' "$f"
+  sed -i 's/\(archisosearchuuid=%ARCHISO_UUID%\)/\1 quiet splash loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0 nowatchdog split_lock_detect=off module_blacklist=pcspkr i915.modeset=1 amdgpu.modeset=1 nvme_load=yes copytoram=auto cow_spacesize=10G/' "$f"
 done
 
 # Services (releng uses systemd-networkd/iwd; we use NetworkManager + SDDM)
@@ -141,6 +197,7 @@ for s in NetworkManager-dispatcher rtkit-daemon scx_loader; do
   ln -sf "/usr/lib/systemd/system/$s.service" "$W/multi-user.target.wants/$s.service"
 done
 ln -sf /usr/lib/systemd/system/NetworkManager-dispatcher.service "$W/dbus-org.freedesktop.nm-dispatcher.service"
+ln -sf /etc/systemd/system/temu-eac-facts.service "$W/multi-user.target.wants/temu-eac-facts.service"
 # VM guest tools (each unit has its own ConditionVirtualization, so they idle on real hardware)
 for s in vmtoolsd vmware-vmblock-fuse qemu-guest-agent vboxservice spice-vdagentd; do
   ln -sf "/usr/lib/systemd/system/$s.service" "$W/multi-user.target.wants/$s.service"

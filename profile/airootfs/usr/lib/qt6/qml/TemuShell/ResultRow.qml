@@ -91,6 +91,14 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         onClicked: row.clicked()
-        onPositionChanged: row.hovered()
+        // only a real pointer move selects the row (not results scrolling under a resting cursor)
+        property point last: Qt.point(-1, -1)
+        onExited: last = Qt.point(-1, -1)
+        onPositionChanged: mouse => {
+            const p = mapToGlobal(mouse.x, mouse.y)
+            if (last.x >= 0 && (p.x !== last.x || p.y !== last.y))
+                row.hovered()
+            last = p
+        }
     }
 }

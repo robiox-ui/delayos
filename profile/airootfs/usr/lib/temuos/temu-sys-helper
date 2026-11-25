@@ -5,6 +5,7 @@
 #   remove PKG...       pacman -Rns
 #   upgrade             pacman -Syu
 #   clean-cache         paccache -rk1 (or pacman -Sc)
+#   android-init        waydroid init -s GAPPS -f + enable waydroid-container
 #   enable-service UNIT systemctl enable --now (whitelisted units only)
 set -u
 export LC_ALL=C
@@ -38,6 +39,12 @@ case "$cmd" in
     ;;
   clean-cache)
     if command -v paccache >/dev/null; then exec paccache -rk1; else exec "${PACMAN[@]}" -Sc; fi
+    ;;
+  android-init)
+    # download Android (LineageOS + Google Play) for Waydroid and start its container
+    command -v waydroid >/dev/null || { echo "waydroid is not installed" >&2; exit 3; }
+    waydroid init -s GAPPS -f || exit $?
+    exec systemctl enable --now waydroid-container.service
     ;;
   enable-service)
     case "${1:-}" in

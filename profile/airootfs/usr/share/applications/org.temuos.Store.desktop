@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Name=TEMUOS Store
+Name[ko]=TEMUOS Store
+GenericName=App Store
+GenericName[ko]=앱 스토어
+Comment=Find, install and update apps from Flathub and the official repositories
+Comment[ko]=Flathub와 공식 저장소의 앱을 찾아 설치하고 업데이트합니다
+Icon=temuos-store
+Exec=temu-store %U
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.temuos.Store
+Categories=System;PackageManager;Qt;
+Keywords=store;apps;install;flathub;software;스토어;앱;설치;
+MimeType=x-scheme-handler/appstream;
+Actions=Installed;
+
+[Desktop Action Installed]
+Name=Installed apps
+Name[ko]=설치된 앱
+Exec=temu-store --installed

@@ -41,6 +41,14 @@ def gpus():
     return res
 
 
+def _qt():
+    try:
+        from PySide6.QtCore import qVersion
+        return qVersion()
+    except Exception:
+        return ""
+
+
 def summary():
     host = out(["hostname"]) or _read("/etc/hostname", "temuos")
     vendor = _read("/sys/class/dmi/id/sys_vendor")
@@ -66,7 +74,7 @@ def summary():
         "hostname": host, "model": model or "PC", "cpu": cpu, "cores": os.cpu_count(),
         "ram": _human(mem), "ramBytes": mem, "gpus": gpus(),
         "os": o.get("PRETTY_NAME", "TEMUOS"), "osVersion": o.get("VERSION_ID", o.get("BUILD_ID", "")),
-        "kernel": kernel, "plasma": plasma, "qt": out(["qtpaths6", "--qt-version"]),
+        "kernel": kernel, "plasma": plasma, "qt": _qt(),
         "disk": _human(st.total), "diskUsed": _human(st.used), "diskFrac": st.used / st.total if st.total else 0,
         "uptime": "%d시간 %d분" % (up // 3600, (up % 3600) // 60),
         "arch": os.uname().machine,

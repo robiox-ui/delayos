@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Opens TEMUOS shell surfaces from scripts, the dock and the top bar.
+#
+#   temu-shell-activate start          Start menu (applet providing org.kde.plasma.launchermenu)
+#   temu-shell-activate search         command bar (org.temuos.commandbar applet, temu-commandbar, or KRunner)
+#   temu-shell-activate taskview       KWin Overview (Task View)
+#   temu-shell-activate controlcenter  org.temuos.controlcenter
+#   temu-shell-activate calendar       org.temuos.calendar (also clipboard, emoji, winx, allapps)
+#   temu-shell-activate <plugin id>    any plasmoid in any panel
+#   temu-shell-activate dock-entry N   N-th app of the dock (Meta+N)
+#   temu-shell-activate gaming-changed  re-read the Gaming mode state (call from temu-gamemode)
+#   temu-shell-activate uninstall <desktop id>
+set -u
+Q=$(command -v qdbus6 || command -v qdbus)
+
+# toggles a plasmoid by invoking its "activate widget <id>" global action
+plasmoid() {
+  local id
+  id=$("$Q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+      "var r=''; panels().concat(desktops()).forEach(function(c){ c.widgets('$1').forEach(function(w){ if (!r) r = String(w.id); }); }); print(r);" 2>/dev/null)
+  [[ -n $id ]] || return 1
+  "$Q" org.kde.kglobalaccel /component/plasmashell org.kde.kglobalaccel.Component.invokeShortcut "activate widget $id" >/dev/null 2>&1
+}
+
+case "${1:-}" in
+  start)
+    "$Q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.activateLauncherMenu ;;
+  search)
+    # TEMUOS command bar (shell-popups: /usr/bin/temu-shell), KRunner as a fallback
+    if command -v temu-shell >/dev/null; then exec temu-shell toggle commandbar; fi
+    plasmoid org.temuos.commandbar && exit 0
+    "$Q" org.kde.krunner /App org.kde.krunner.App.toggleDisplay >/dev/null 2>&1 || exec krunner ;;
+  taskview)
+    "$Q" org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut Overview ;;
+  controlcenter|calendar|clipboard|emoji|winx|allapps)
+    if command -v temu-shell >/dev/null; then exec temu-shell toggle "$1"; fi
+    plasmoid "org.temuos.$1" ;;
+  dock-entry)
+    n=${2:?number}
+    "$Q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+      "panels().forEach(function(p){ p.widgets('org.temuos.dock').forEach(function(w){ w.currentConfigGroup=['General']; w.writeConfig('activateRequest', '$n:$(date +%s%N)'); }); });" >/dev/null ;;
+  gaming-changed)
+    "$Q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+      "panels().forEach(function(p){ p.widgets('org.temuos.gamingtoggle').forEach(function(w){ w.currentConfigGroup=['General']; w.writeConfig('refreshToken', '$(date +%s%N)'); }); });" >/dev/null ;;
+  uninstall)
+    id=${2:?desktop id}
+    if command -v temu-store >/dev/null; then exec temu-store --uninstall "$id"; fi
+    exec plasma-discover --application "appstream://$id" ;;
+  "")
+    sed -n '3,13p' "$0"; exit 1 ;;
+  *)
+    plasmoid "$1" ;;
+esac

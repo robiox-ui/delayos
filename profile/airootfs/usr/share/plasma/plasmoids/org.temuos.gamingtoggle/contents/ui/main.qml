@@ -24,6 +24,7 @@ PlasmoidItem {
             x: 8
             anchors.verticalCenter: parent.verticalCenter
             dark: Kirigami.Theme.backgroundColor.hslLightness < 0.5
+            refreshToken: Plasmoid.configuration.refreshToken
         }
     }
 }

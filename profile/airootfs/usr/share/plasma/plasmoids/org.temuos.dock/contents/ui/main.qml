@@ -40,7 +40,7 @@ PlasmoidItem {
         filterHidden: true
         groupMode: TaskManager.TasksModel.GroupApplications
         groupInline: false
-        separateLaunchers: false
+        separateLaunchers: true      // + launchInPlace: running pinned apps stay in their pin slot
         launchInPlace: true
         hideActivatedLaunchers: true
         sortMode: TaskManager.TasksModel.SortManual
@@ -71,13 +71,14 @@ PlasmoidItem {
     }
     Component.onCompleted: recount()
 
+    // outer width of the dock = 506 px for 9 items (ui-spec 3.2): 1 + 50 per item + 55 (empty slot)
     readonly property int dockWidth: 1 + 3 * pitch + tasksModel.count * pitch
                                      + (unpinnedCount > 0 ? unpinnedGap + 5 : 55)
 
     Activator { id: act; containment: Plasmoid.containment }
-    readonly property var startApplet: { Plasmoid.containment.applets; return act.find("org.temuos.start") }
-    property bool startOpenFallback: false
-    readonly property bool startOpen: startApplet ? act.isOpen(startApplet) : startOpenFallback
+    readonly property var startApplet: { if (!Plasmoid.containment) return null; Plasmoid.containment.applets; return act.find("org.temuos.start") }
+    // the TEMUOS Start popup draws its own window, so its open state is only known when it lives in this panel and reports it via Plasmoid.status
+    readonly property bool startOpen: startApplet ? act.isOpen(startApplet) : false
 
     // ---------- actions ----------
     function idx(row) { return tasksModel.makeModelIndex(row) }
@@ -98,7 +99,15 @@ PlasmoidItem {
             tasksModel.requestActivate(i)
         }
     }
-    // Win+1..9 (ShellCorona "activate task manager entry N" -> applets providing org.kde.plasma.multitasking)
+    // Win+1..9: Plasma 6.8 only routes "activate task manager entry N" to the stock task manager,
+    // so Meta+N runs "temu-shell-activate dock-entry N", which writes General/activateRequest = "N:<time>".
+    Connections {
+        target: Plasmoid.configuration
+        function onActivateRequestChanged() {
+            var n = parseInt((Plasmoid.configuration.activateRequest || "").split(":")[0])
+            if (n > 0) root.activateTaskAtIndex(n - 1)
+        }
+    }
     function activateTaskAtIndex(index) {
         if (typeof index !== "number") index = parseInt(index)
         if (index >= 0 && index < tasksModel.count) activateRow(index)
@@ -116,15 +125,24 @@ PlasmoidItem {
 
     fullRepresentation: Item {
         id: full
-        Layout.preferredWidth: root.taskbar ? -1 : root.dockWidth
-        Layout.minimumWidth: root.taskbar ? root.dockWidth : root.dockWidth
-        Layout.maximumWidth: root.taskbar ? -1 : root.dockWidth
+        // The panel containment adds its own margins around applets; measure them so that the
+        // panel window itself ends up exactly root.dockWidth wide (dock) and the items sit at
+        // fixed positions from the window edge.
+        readonly property real sceneX: { width; Window.width; return mapToItem(null, 0, 0).x }
+        // margins = window width - applet width, sampled only when the window has been resized
+        // (the panel resizes asynchronously; sampling on our own width changes would run away)
+        property real extra: 0
+        readonly property real winW: Window.width
+        onWinWChanged: if (!root.taskbar && winW > 0 && width > 0) extra = Math.max(0, Math.min(64, winW - width))
+        readonly property int appletWidth: Math.max(10, root.dockWidth - extra)
+        Layout.preferredWidth: root.taskbar ? -1 : appletWidth
+        Layout.minimumWidth: root.taskbar ? root.dockWidth : appletWidth
+        Layout.maximumWidth: root.taskbar ? -1 : appletWidth
         Layout.fillWidth: root.taskbar
         Layout.fillHeight: true
 
-        // In taskbar mode the row is centred on the screen, not on the applet.
-        readonly property real sceneX: { width; Window.width; return mapToItem(null, 0, 0).x }
-        readonly property real rowX: root.taskbar ? Math.round((Window.width - root.dockWidth) / 2 - sceneX) : 0
+        // x of the item row inside this applet: dock = 0 from the window edge, taskbar = centred on screen
+        readonly property real rowX: root.taskbar ? Math.round((Window.width - root.dockWidth) / 2 - sceneX) : -sceneX
 
         DropArea {
             anchors.fill: parent
@@ -146,18 +164,18 @@ PlasmoidItem {
             DockButton {
                 tip: "시작"
                 active: root.startOpen
-                onClicked: { root.startOpenFallback = !root.startOpenFallback; act.toggle("start") }
+                onClicked: act.toggle("start")
                 Logo { anchors.centerIn: parent; size: 26 }
             }
             DockButton {
                 tip: "검색"
                 onClicked: act.toggle("search")
-                Glyph { anchors.centerIn: parent; name: "search"; size: 18; color: root.glyphColor; stroke: 1.6 }
+                Glyph { anchors.centerIn: parent; name: "search"; size: 18; color: root.glyphColor; stroke: 2 }
             }
             DockButton {
                 tip: "작업 보기"
                 onClicked: act.toggle("taskview")
-                Glyph { anchors.centerIn: parent; name: "taskview"; size: 18; color: root.glyphColor; stroke: 1.6 }
+                Glyph { anchors.centerIn: parent; name: "taskview"; size: 18; color: root.glyphColor; stroke: 1.9 }
             }
 
             Repeater {

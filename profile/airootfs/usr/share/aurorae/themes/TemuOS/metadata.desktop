@@ -1,0 +1,14 @@
+[Desktop Entry]
+Name=TEMUOS
+Name[ko]=TEMUOS
+Comment=TEMUOS window frame: 28 px title bar in the window colour, grouped minimise/maximise/close pill
+Comment[ko]=TEMUOS 창 테두리
+X-KDE-PluginInfo-Author=TEMUOS_LINUX
+X-KDE-PluginInfo-Name=TemuOS
+X-KDE-PluginInfo-Version=1.0
+X-KDE-PluginInfo-Category=
+X-KDE-PluginInfo-Depends=
+X-KDE-PluginInfo-License=GPL
+X-KDE-PluginInfo-EnabledByDefault=true
+X-Plasma-API=declarativeappletscript
+X-Plasma-MainScript=aurorae/main.qml

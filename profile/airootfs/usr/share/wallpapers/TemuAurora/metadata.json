@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "TEMUOS"
+            }
+        ],
+        "Id": "TemuAurora",
+        "License": "CC-BY-SA-4.0",
+        "Name": "TEMUOS Aurora",
+        "Name[ko]": "TEMUOS 오로라"
+    }
+}

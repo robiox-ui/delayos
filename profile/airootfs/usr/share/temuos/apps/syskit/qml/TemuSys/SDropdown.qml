@@ -22,7 +22,7 @@ Rectangle {
         anchors.right: chev.left; anchors.rightMargin: 6
         anchors.verticalCenter: parent.verticalCenter
         text: root.displayText
-        font.pixelSize: 12.5
+        font.pixelSize: 13
     }
     SIcon { id: chev; name: "arrow-down"; size: 12; anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter }
     MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: pop.opened ? pop.close() : pop.open() }
@@ -44,7 +44,7 @@ Rectangle {
                 width: list.width; height: 32; radius: 6
                 color: dma.containsMouse ? Qt.rgba(1,1,1, Theme.dark ? 0.07 : 0) : (index === root.currentIndex ? Theme.accentSoft : "transparent")
                 Rectangle { visible: index === root.currentIndex; width: 3; height: 14; radius: 1.5; color: Theme.accent; anchors.verticalCenter: parent.verticalCenter; x: 2 }
-                SText { anchors.verticalCenter: parent.verticalCenter; x: 12; width: parent.width - 20; text: modelData; font.pixelSize: 12.5 }
+                SText { anchors.verticalCenter: parent.verticalCenter; x: 12; width: parent.width - 20; text: modelData; font.pixelSize: 13 }
                 MouseArea { id: dma; anchors.fill: parent; hoverEnabled: true
                     onClicked: { root.currentIndex = index; pop.close(); root.activated(index) } }
             }

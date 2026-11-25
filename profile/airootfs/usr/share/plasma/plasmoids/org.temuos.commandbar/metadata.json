@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [ { "Name": "TEMUOS" } ],
+        "Category": "Application Launchers",
+        "Description": "TEMUOS command bar (Super+Space)",
+        "Description[ko]": "TEMUOS 명령 표시줄 (Super+Space)",
+        "Icon": "system-search",
+        "Id": "org.temuos.commandbar",
+        "License": "GPL-2.0-or-later",
+        "Name": "Command bar",
+        "Name[ko]": "명령 표시줄",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

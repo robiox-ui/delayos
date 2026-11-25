@@ -47,15 +47,18 @@ PlasmoidItem {
     Activator { id: act; containment: Plasmoid.containment }
 
     fullRepresentation: Item {
+        id: full
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.minimumWidth: 120
 
-        // logo: 16 px, centre x = 27 (from the screen edge; the applet starts at x = 0)
+        // positions are measured from the panel's left edge (the containment adds its own margin)
+        readonly property real sceneX: { width; return mapToItem(null, 0, 0).x }
+        // logo: 16 px, centre x = 27
         Rectangle {
             id: logoBtn
             width: 28; height: 22
-            x: 27 - width / 2
+            x: 27 - width / 2 - parent.sceneX
             anchors.verticalCenter: parent.verticalCenter
             radius: 6
             color: logoMouse.pressed ? Qt.rgba(1, 1, 1, 0.16) : (logoMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent")
@@ -68,7 +71,7 @@ PlasmoidItem {
             }
         }
         Text {
-            x: 48
+            x: 48 - parent.sceneX
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width - x - 8
             elide: Text.ElideRight

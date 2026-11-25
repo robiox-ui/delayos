@@ -32,7 +32,8 @@ PlasmaCore.Dialog {
     signal aboutToShow()
     signal closed()
 
-    type: takeFocus ? PlasmaCore.Dialog.Normal : PlasmaCore.Dialog.Notification
+    property int windowType: takeFocus ? PlasmaCore.Dialog.Normal : PlasmaCore.Dialog.Notification
+    type: windowType
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | (takeFocus ? 0 : Qt.WindowDoesNotAcceptFocus)
     location: PlasmaCore.Types.Floating
     hideOnWindowDeactivate: autoClose
@@ -89,6 +90,11 @@ PlasmaCore.Dialog {
         width: Math.max(1, win.panelWidth - win.margins.left - win.margins.right)
         height: Math.max(1, win.panelHeight - win.margins.top - win.margins.bottom)
 
+        // TEMUOS tokens follow the active colour scheme (CC dark-mode tile / temu-darkmode)
+        // (application palette = kdeglobals colour scheme, independent of the Plasma desktop theme)
+        SystemPalette { id: appPalette }
+        Binding { target: Theme; property: "dark"; value: appPalette.window.hslLightness < 0.5 }
+
         Item {
             id: frame
             x: -win.margins.left
@@ -114,35 +120,35 @@ PlasmaCore.Dialog {
                 anchors.fill: parent
             }
         }
-    }
 
-    ParallelAnimation {
-        id: openAnim
-        // pop: opacity 0->1, scale 0.96->1, translateY 8->0, 120 ms cubic-bezier(0.2,0.8,0.2,1)
-        NumberAnimation { target: frame; property: "opacity"; from: 0; to: 1
-            duration: win.animation === "island" ? 220 : win.animation === "slide" ? 180 : win.animation === "fade" ? 150 : Theme.popMs
-            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.easeOut }
-        NumberAnimation { target: hscale; property: "xScale"
-            from: win.animation === "pop" ? 0.96 : win.animation === "island" ? 0.6 : 1; to: 1
-            duration: win.animation === "island" ? Theme.islandMs : Theme.popMs
-            easing.type: win.animation === "island" ? Easing.OutBack : Easing.BezierSpline
-            easing.overshoot: 0.9      // ~4 % width overshoot
-            easing.bezierCurve: Theme.easeOut }
-        NumberAnimation { target: hscale; property: "yScale"
-            from: win.animation === "pop" ? 0.96 : 1; to: 1
-            duration: Theme.popMs
-            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.easeOut }
-        NumberAnimation { target: shift; property: "y"
-            from: win.animation === "pop" ? 8 : win.animation === "slide" ? 40 : 0; to: 0
-            duration: win.animation === "slide" ? 180 : Theme.popMs
-            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.easeOut }
-    }
-    SequentialAnimation {
-        id: closeAnim
         ParallelAnimation {
-            NumberAnimation { target: frame; property: "opacity"; to: 0; duration: win.animation === "island" ? 200 : Theme.closeMs }
-            NumberAnimation { target: hscale; property: "xScale"; to: win.animation === "island" ? 0.6 : 1; duration: win.animation === "island" ? 200 : Theme.closeMs }
+            id: openAnim
+            // pop: opacity 0->1, scale 0.96->1, translateY 8->0, 120 ms cubic-bezier(0.2,0.8,0.2,1)
+            NumberAnimation { target: frame; property: "opacity"; from: 0; to: 1
+                duration: win.animation === "island" ? 220 : win.animation === "slide" ? 180 : win.animation === "fade" ? 150 : Theme.popMs
+                easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.easeOut }
+            NumberAnimation { target: hscale; property: "xScale"
+                from: win.animation === "pop" ? 0.96 : win.animation === "island" ? 0.6 : 1; to: 1
+                duration: win.animation === "island" ? Theme.islandMs : Theme.popMs
+                easing.type: win.animation === "island" ? Easing.OutBack : Easing.BezierSpline
+                easing.overshoot: 0.9      // ~4 % width overshoot
+                easing.bezierCurve: Theme.easeOut }
+            NumberAnimation { target: hscale; property: "yScale"
+                from: win.animation === "pop" ? 0.96 : 1; to: 1
+                duration: Theme.popMs
+                easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.easeOut }
+            NumberAnimation { target: shift; property: "y"
+                from: win.animation === "pop" ? 8 : win.animation === "slide" ? 40 : 0; to: 0
+                duration: win.animation === "slide" ? 180 : Theme.popMs
+                easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.easeOut }
         }
-        ScriptAction { script: win.visible = false }
+        SequentialAnimation {
+            id: closeAnim
+            ParallelAnimation {
+                NumberAnimation { target: frame; property: "opacity"; to: 0; duration: win.animation === "island" ? 200 : Theme.closeMs }
+                NumberAnimation { target: hscale; property: "xScale"; to: win.animation === "island" ? 0.6 : 1; duration: win.animation === "island" ? 200 : Theme.closeMs }
+            }
+            ScriptAction { script: win.visible = false }
+        }
     }
 }

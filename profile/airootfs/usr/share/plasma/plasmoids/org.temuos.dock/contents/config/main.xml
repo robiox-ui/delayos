@@ -14,5 +14,7 @@
     <entry name="defaultLaunchers" type="StringList">
       <default>applications:org.temuos.Files.desktop,applications:org.temuos.Notepad.desktop,applications:org.temuos.Calculator.desktop,applications:org.temuos.TaskManager.desktop,applications:org.temuos.Settings.desktop,applications:google-chrome.desktop</default>
     </entry>
+    <!-- written by temu-shell-activate dock-entry N (Meta+N): "N:<timestamp>" -->
+    <entry name="activateRequest" type="String"><default></default></entry>
   </group>
 </kcfg>

@@ -145,12 +145,21 @@ class Canvas:
         w = max(width * s.k, 1.0)
         return np.clip(1 - np.abs(d) / w, 0, 1).astype(F)
 
-    def finish(s):
-        # 0.6 LSB triangular dither against banding
-        rng = np.random.default_rng(7)
-        n = (rng.random(s.img.shape[:2], dtype=F) - rng.random(s.img.shape[:2], dtype=F))[..., None] * F(0.6 / 255)
-        out = np.clip(s.img + n, 0, 1)
-        return Image.fromarray((out * 255 + 0.5).astype(np.uint8), 'RGB')
+    def finish(s, size=None):
+        return quantize(s.img if size is None else resize_float(s.img, size))
+
+
+def resize_float(img, size):
+    chans = [np.asarray(Image.fromarray(np.ascontiguousarray(img[..., i])).resize(size, Image.LANCZOS)) for i in range(3)]
+    return np.stack(chans, -1).astype(F)
+
+
+def quantize(img):
+    # 0.6 LSB triangular dither against banding
+    rng = np.random.default_rng(7)
+    n = (rng.random(img.shape[:2], dtype=F) - rng.random(img.shape[:2], dtype=F))[..., None] * F(0.6 / 255)
+    out = np.clip(img + n, 0, 1)
+    return Image.fromarray((out * 255 + 0.5).astype(np.uint8), 'RGB')
 
 
 def _box(a, r, axis):
@@ -466,7 +475,7 @@ def wp_petals(c, variant):
         across = (-dx * sa + dy * ca) / L
         ln = 0.82 + 0.18 * math.sin(i * 1.7)
         t = along / ln
-        half = 0.075 * np.sin(np.clip(t, 0, 1) * math.pi) ** 0.8 * (1 - 0.35 * np.clip(t, 0, 1))
+        half = 0.075 * np.maximum(np.sin(np.clip(t, 0, 1) * math.pi), 0) ** 0.8 * (1 - 0.35 * np.clip(t, 0, 1))
         sd = (np.abs(across) - half) * L
         sd = np.where((t < 0) | (t > 1), 1e3, sd)
         cv = c.cov(sd, 1.2 * c.k)
@@ -649,14 +658,15 @@ def save_pkg(root, name, png=False):
         sub = 'images_dark' if (variant == 'dark' and len(variants) > 1) else 'images'
         d = os.path.join(pkg, 'contents', sub)
         os.makedirs(d, exist_ok=True)
-        big = render(fn, variant, 3840, 2160)
+        cv = Canvas(3840, 2160)
+        fn(cv, variant)
         for W, H in sizes:
-            im = big if W == 3840 else big.resize((W, H), Image.LANCZOS)
+            im = cv.finish(None if W == 3840 else (W, H))
             if png:
                 im.save(os.path.join(d, '%dx%d.png' % (W, H)), optimize=True)
             else:
                 im.save(os.path.join(d, '%dx%d.jpg' % (W, H)), quality=93, subsampling=0, optimize=True)
-        del big
+        del cv, im
         # 720p screenshot for the wallpaper chooser
         if variant == 'dark':
             render(fn, variant, 1920, 1080).resize((400, 225), Image.LANCZOS).save(os.path.join(pkg, 'contents', 'screenshot.png'))

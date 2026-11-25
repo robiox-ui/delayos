@@ -57,6 +57,38 @@ def read_kde_theme():
     return dark, accent
 
 
+def _make_icon_provider():
+    """image://icon/<theme-name-or-path>  → icon from the current icon theme (TemuOS)."""
+    # QImage provider + pure-Python theme lookup: safe in Qt Quick's pixmap-reader thread
+    # (QIcon::fromTheme is not thread-safe).
+    from PySide6.QtQuick import QQuickImageProvider
+    from PySide6.QtGui import QImage, QImageReader
+    from PySide6.QtCore import QSize
+    from iconpath import find_icon
+
+    class IconProvider(QQuickImageProvider):
+        def __init__(self):
+            super().__init__(QQuickImageProvider.ImageType.Image)
+
+        def requestImage(self, name, size, requested):
+            w = requested.width() if requested.width() > 0 else 32
+            h = requested.height() if requested.height() > 0 else w
+            path = find_icon(name.split("?")[0]) or find_icon("application-x-executable")
+            img = QImage()
+            if path:
+                r = QImageReader(path)
+                if path.endswith((".svg", ".svgz")) or r.size().width() > w:
+                    r.setScaledSize(QSize(w, h))
+                img = r.read()
+            if img.isNull():
+                img = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+                img.fill(Qt.GlobalColor.transparent)
+            size.setWidth(img.width())
+            size.setHeight(img.height())
+            return img
+    return IconProvider()
+
+
 class AppBridge(QObject):
     """Exposed to QML as `temuApp`."""
     activated = Signal(list)          # argv of a second launch (single-instance apps)
@@ -162,6 +194,10 @@ def run(app_id, qml_path, context=None, widgets=False, single_instance=False, na
         return 0
 
     engine = QQmlApplicationEngine()
+    try:
+        engine.addImageProvider("icon", _make_icon_provider())
+    except Exception:
+        pass
     ctx = engine.rootContext()
     ctx.setContextProperty("temuApp", bridge)
     for k, v in (context or {}).items():

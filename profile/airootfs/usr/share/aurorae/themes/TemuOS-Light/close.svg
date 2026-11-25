@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="252" height="22" viewBox="0 0 252 22">
+<defs></defs>
+<g id="active-center" transform="translate(0 0)"><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#e6e7eb"/><path d="M11.8 6.8 L20.2 15.2 M20.2 6.8 L11.8 15.2" stroke="#5a606b" stroke-width="1.2" stroke-linecap="round" fill="none"/></g>
+<g id="inactive-center" transform="translate(36 0)"><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#e6e7eb"/><path d="M11.8 6.8 L20.2 15.2 M20.2 6.8 L11.8 15.2" stroke="#80868f" stroke-width="1.2" stroke-linecap="round" fill="none"/></g>
+<g id="deactivated-center" transform="translate(72 0)"><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#e6e7eb"/><path d="M11.8 6.8 L20.2 15.2 M20.2 6.8 L11.8 15.2" stroke="#b8bcc4" stroke-width="1.2" stroke-linecap="round" fill="none"/></g>
+<g id="hover-center" transform="translate(108 0)"><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#e6e7eb"/><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#c42b1c"/><path d="M11.8 6.8 L20.2 15.2 M20.2 6.8 L11.8 15.2" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" fill="none"/></g>
+<g id="pressed-center" transform="translate(144 0)"><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#e6e7eb"/><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#a32317"/><path d="M11.8 6.8 L20.2 15.2 M20.2 6.8 L11.8 15.2" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" fill="none"/></g>
+<g id="hover-inactive-center" transform="translate(180 0)"><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#e6e7eb"/><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#c42b1c"/><path d="M11.8 6.8 L20.2 15.2 M20.2 6.8 L11.8 15.2" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" fill="none"/></g>
+<g id="pressed-inactive-center" transform="translate(216 0)"><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#e6e7eb"/><path d="M0 0 H26 A6 6 0 0 1 32 6 V16 A6 6 0 0 1 26 22 H0 V0 Z" fill="#a32317"/><path d="M11.8 6.8 L20.2 15.2 M20.2 6.8 L11.8 15.2" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" fill="none"/></g>
+</svg>

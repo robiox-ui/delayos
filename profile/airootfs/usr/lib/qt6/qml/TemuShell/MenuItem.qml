@@ -8,10 +8,13 @@ Item {
     property string glyph
     property bool submenu: false
     property bool separator: false
-    property bool highlighted: mouse.containsMouse
+    property bool forceHighlight: false
+    readonly property bool highlighted: mouse.containsMouse || forceHighlight
     signal triggered()
 
-    implicitHeight: separator ? 9 : 32
+    property int rowHeight: 32
+    implicitHeight: separator ? 9 : rowHeight
+    height: implicitHeight
     width: parent ? parent.width : 200
 
     Rectangle {

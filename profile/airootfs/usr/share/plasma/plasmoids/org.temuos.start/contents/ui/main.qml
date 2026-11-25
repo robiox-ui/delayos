@@ -42,6 +42,7 @@ PlasmoidItem {
         onToggleRequested: root.toggle()
         onShowRequested: { root.place(); panel.open() }
         onHideRequested: panel.close()
+        onQueryRequested: text => { root.place(); panel.open(); panel.setQuery(text) }
     }
 
     StartPanel { id: panel }

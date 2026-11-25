@@ -7,7 +7,8 @@ Kirigami.Icon {
     property string name: ""
     property int size: 16
     property color tint: Theme.text2
-    source: name
+    // "g:<name>" = TEMUOS line glyph shipped with TemuSys (glyphs/<name>.svg)
+    source: name.indexOf("g:") === 0 ? Qt.resolvedUrl("glyphs/" + name.substr(2) + ".svg") : name
     implicitWidth: size
     implicitHeight: size
     width: size

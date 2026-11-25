@@ -17,6 +17,8 @@ squashEnabled=false
 # Smooth desktop switching + Task View
 slideEnabled=true
 overviewEnabled=true
+# snapping / maximising / dock<->taskbar switch are instant (ui-spec 0.4)
+maximizeEnabled=false
 # Rounded window corners (from kwin-effect-rounded-corners, optional AUR)
 kwin4_effect_shapecornersEnabled=true
 wobblywindowsEnabled=false
@@ -24,16 +26,47 @@ wobblywindowsEnabled=false
 nightlightEnabled=false
 
 [Effect-blur]
-BlurStrength=12
-NoiseStrength=3
+# glass: ~30-40 px blur behind the top bar, dock and popups, no grain
+BlurStrength=10
+NoiseStrength=0
+
+[Effect-magiclamp]
+# genie minimise into the dock icon, 400-450 ms
+AnimationDuration=420
+
+[Effect-slide]
+# desktop switch: horizontal slide, 300 ms; top bar and dock stay put
+Duration=300
+HorizontalGap=0
+VerticalGap=0
+SlideBackground=false
 
 [Effect-overview]
 BorderActivate=9
 TouchBorderActivate=9
 
+[Round-Corners]
+# 12 px window corners (kwin-effect-rounded-corners); shadows come from the TemuOS decoration
+Size=12
+InactiveCornerRadius=12
+UseNativeDecorationShadows=true
+ActiveOutlineAlpha=0
+InactiveOutlineAlpha=0
+OutlineThickness=0
+InactiveOutlineThickness=0
+DisableRoundMaximize=true
+DisableRoundFullScreen=true
+DisableRoundTile=false
+UseSquircleShape=false
+
 [Desktops]
-Number=1
+# 4 desktops (Control Center 데스크톱 tiles 1-4, Task View)
+Number=4
 Rows=1
+Name_1=데스크톱 1
+Name_2=데스크톱 2
+Name_3=데스크톱 3
+Name_4=데스크톱 4
 
 [Windows]
 # Windows-style behaviour
@@ -44,10 +77,11 @@ BorderlessMaximizedWindows=false
 Placement=Centered
 
 [org.kde.kdecoration2]
-library=org.kde.breeze
-theme=Breeze
+# TemuOS Aurorae frame (ui-spec 9.1): 28 px title bar in the body colour, grouped - [] x pill
+library=org.kde.kwin.aurorae
+theme=__aurorae__svg__TemuOS
 # Windows-style buttons on the right
-ButtonsOnLeft=
+ButtonsOnLeft=M
 ButtonsOnRight=IAX
 BorderSize=None
 BorderSizeAuto=false

@@ -1,34 +1,47 @@
 ---
+# TEMUOS installer branding (ui-spec §11). Card 1035×714, stepper on top, buttons bottom-right.
 componentName: temuos
-welcomeStyleCalamares: true
-welcomeExpandingLogo: true
-windowExpanding: normal
-windowSize: 900px,620px
+
+welcomeStyleCalamares: false
+welcomeExpandingLogo: false
+
+windowExpanding: noexpand
+windowSize: 1035px,714px
 windowPlacement: center
-sidebar: widget
-navigation: widget
+
+# Stepper on top (calamares-sidebar.qml), button row at the bottom (calamares-navigation.qml)
+sidebar: qml,top
+navigation: qml,bottom
 
 strings:
-  productName: TEMUOS_LINUX
-  shortProductName: TEMUOS_LINUX
-  version: rolling
-  shortVersion: rolling
-  versionedName: TEMUOS_LINUX
-  shortVersionedName: TEMUOS_LINUX
-  bootloaderEntryName: TEMUOS_LINUX
-  productUrl: https://archlinux.org
-  supportUrl: https://wiki.archlinux.org
+    productName:         TEMUOS
+    shortProductName:    TEMUOS
+    version:             rolling
+    shortVersion:        rolling
+    versionedName:       TEMUOS
+    shortVersionedName:  TEMUOS
+    bootloaderEntryName: TEMUOS
+    productUrl:          ""
+    supportUrl:          ""
+    knownIssuesUrl:      ""
+    releaseNotesUrl:     ""
+    donateUrl:           ""
 
 images:
-  productLogo: "/usr/share/icons/hicolor/scalable/apps/temuos-logo.svg"
-  productIcon: "/usr/share/icons/hicolor/scalable/apps/temuos-logo.svg"
-  productWelcome: "/usr/share/icons/hicolor/scalable/apps/temuos-logo.svg"
+    productLogo:         "/usr/share/temuos/logo/temuos.svg"
+    productIcon:         "/usr/share/temuos/logo/temuos.svg"
+    productWelcome:      "/usr/share/temuos/logo/temuos.svg"
+
+style:
+    SidebarBackground:        "#0E0F13"
+    SidebarText:              "#9AA0AA"
+    SidebarTextCurrent:       "#FFFFFF"
+    SidebarBackgroundCurrent: "#D4194F"
 
 slideshow: "show.qml"
 slideshowAPI: 2
 
-style:
-  SidebarBackground: "#161b22"
-  SidebarText: "#e6e8eb"
-  SidebarTextCurrent: "#ffffff"
-  SidebarBackgroundCurrent: "#f2735f"
+uploadServer:
+    type: "none"
+    url: ""
+    sizeLimit: -1

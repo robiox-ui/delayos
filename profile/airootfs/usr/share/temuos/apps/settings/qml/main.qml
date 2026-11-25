@@ -15,7 +15,10 @@ Window {
     title: "설정"
     color: Theme.windowBg
 
-    property string page: "system"
+    property string page: {
+        var a = appArgs.length && appArgs[0].indexOf("-") !== 0 ? appArgs[0].replace(/^temu-settings:\/*/, "").split("#")[0] : ""
+        return Reg.pages[a] ? a : (Reg.alias[a] || "system")
+    }
     property string pendingKey: ""
     property var me: ({ name: "", kind: "", avatar: "" })
     readonly property var navItems: Reg.nav
@@ -44,7 +47,10 @@ Window {
         pendingKey = key
         page = id
     }
-    function handleArgs(a) { if (a && a.length > 0 && a[0].indexOf("-") !== 0) go(a[0]) }
+    function handleArgs(a) {
+        if (!a || a.length === 0 || a[0].indexOf("-") === 0) return
+        go(a[0].replace(/^temu-settings:\/*/, "").replace(/\/$/, ""))
+    }
 
     Component.onCompleted: {
         Theme.accent = sys.accent()
@@ -167,7 +173,7 @@ Window {
         color: Theme.dark ? "#191C24" : "#FFFFFF"
         border.width: 1
         border.color: Theme.rim
-        SText { visible: results.count === 0; anchors.centerIn: parent; text: "결과 없음"; role: "sub"; font.pixelSize: 12.5 }
+        SText { visible: results.count === 0; anchors.centerIn: parent; text: "결과 없음"; role: "sub"; font.pixelSize: 13 }
         Item { visible: results.count === 0; height: 44; width: 1 }
         ListView {
             id: results
@@ -191,7 +197,7 @@ Window {
                 Column {
                     x: 42; anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - 50
-                    SText { width: parent.width; textFormat: Text.StyledText; text: Reg.mark(modelData.title, search.text, Theme.accent); font.pixelSize: 12.5 }
+                    SText { width: parent.width; textFormat: Text.StyledText; text: Reg.mark(modelData.title, search.text, Theme.accent); font.pixelSize: 13 }
                     SText { width: parent.width; role: "sub"; font.pixelSize: 11; text: modelData.crumb }
                 }
                 MouseArea { id: rma; anchors.fill: parent; hoverEnabled: true; onClicked: results.pick(index) }

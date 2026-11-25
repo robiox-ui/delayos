@@ -24,15 +24,15 @@ PopupWindow {
     onShownChanged: if (shown) search.focusInput()
 
     Runner { id: runner }
-    Clipper { id: clipper }
     KCoreAddons.KUser { id: kuser }
 
+    function setQuery(t) { search.text = t; search.input.cursorPosition = t.length }
     function launchCmd(cmd) { runner.exec(cmd); panel.close() }
 
     // ---------------------------------------------------------------- pinned apps
     readonly property var pinnedKeys: ["files", "store", "notepad", "calculator", "settings", "taskmanager",
                                        "android", "terminal", "snip", "drivers", "welcome"]
-    property var pinnedLabels: ({})
+    property var pinnedLabels: []
     Kicker.SimpleFavoritesModel {
         id: probe
         // every candidate desktop id; the model keeps only those that exist
@@ -46,14 +46,14 @@ PopupWindow {
     }
     function resolvePinned() {
         const valid = probe.favorites.map(f => String(f).replace(/^applications:/, ""))
-        let ids = [], labels = {}
+        let ids = [], labels = []
         for (const k of pinnedKeys) {
             const cands = Metrics.apps[k]
             for (let i = 0; i < cands.length; i++) {
                 if (valid.indexOf(cands[i]) >= 0) {
                     ids.push(cands[i])
                     // TEMUOS apps carry their own Korean Name; KDE fallbacks get the TEMUOS label
-                    if (i > 0) labels[cands[i]] = Metrics.appLabels[k]
+                    labels.push(i > 0 ? Metrics.appLabels[k] : "")
                     break
                 }
             }
@@ -71,53 +71,13 @@ PopupWindow {
     }
 
     // ---------------------------------------------------------------- search model
-    Milou.ResultsModel {
-        id: milou
-        queryString: panel.searching ? search.text : ""
-        limit: 8
+    SearchModel {
+        id: sm
+        query: panel.searching ? search.text : ""
+        maxRows: 7
+        onRowsChanged: results.currentIndex = 0
+        onDone: panel.close()
     }
-    property int rev: 0
-    Connections {
-        target: milou
-        function onRowsInserted() { panel.rev++ }
-        function onRowsRemoved() { panel.rev++ }
-        function onModelReset() { panel.rev++ }
-        function onDataChanged() { panel.rev++ }
-    }
-    function mrole(i, role) { return rev >= 0 && i < milou.count ? milou.data(milou.index(i, 0), role) : "" }
-    function mid(i) { return String(mrole(i, Milou.ResultsModel.IdRole) || "") }
-    function mcat(i) { return String(mrole(i, Milou.ResultsModel.CategoryRole) || "") }
-    function mtext(i) { return String(mrole(i, Qt.DisplayRole) || "") }
-    // rows shown: KRunner results (answers only when the top hit is an answer) + web search row
-    readonly property bool topIsAnswer: milou.count > 0 && ResultLogic.isAnswer(ResultLogic.kindOf(panel.mid(0), panel.mcat(0)))
-    readonly property int visibleRunnerRows: {
-        if (!searching) return 0
-        let n = Math.min(milou.count, 7)
-        if (topIsAnswer) {
-            let a = 0
-            while (a < n && ResultLogic.isAnswer(ResultLogic.kindOf(panel.mid(a), panel.mcat(a)))) a++
-            return a
-        }
-        return n
-    }
-    readonly property bool showWebRow: searching && !topIsAnswer
-
-    function activate(i) {
-        if (i < visibleRunnerRows) {
-            const kind = ResultLogic.kindOf(panel.mid(i), panel.mcat(i))
-            if (ResultLogic.isAnswer(kind)) {
-                clipper.copyText(ResultLogic.answerValue(panel.mtext(i)))
-                panel.close()
-                return
-            }
-            milou.run(milou.index(i, 0))
-            panel.close()
-        } else if (showWebRow) {
-            Qt.openUrlExternally(ResultLogic.webSearchUrl(search.text.trim()))
-            panel.close()
-        }
-    }
-
     // ---------------------------------------------------------------- UI
     FocusScope {
         id: scope
@@ -134,7 +94,7 @@ PopupWindow {
             placeholder: "앱, 파일, 웹 검색"
             focus: true
             onTextChanged: results.currentIndex = 0
-            onAccepted: if (panel.searching) panel.activate(results.currentIndex)
+            onAccepted: if (panel.searching) sm.activate(results.currentIndex)
             input.Keys.onDownPressed: results.move(1)
             input.Keys.onUpPressed: results.move(-1)
             input.Keys.onTabPressed: results.move(1)
@@ -220,7 +180,7 @@ PopupWindow {
                             width: 92
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
-                            text: panel.pinnedLabels[model.favoriteId] || model.display
+                            text: panel.pinnedLabels[index] || model.display || ""
                             font.family: Theme.font
                             font.pixelSize: 12
                             color: Theme.text1
@@ -334,49 +294,29 @@ PopupWindow {
                 width: 594
                 spacing: 4
                 property int currentIndex: 0
-                readonly property int rowCount: panel.visibleRunnerRows + (panel.showWebRow ? 1 : 0)
                 function move(d) {
-                    if (rowCount > 0)
-                        currentIndex = (currentIndex + d + rowCount) % rowCount
+                    const n = sm.rows.length
+                    if (n > 0)
+                        currentIndex = (currentIndex + d + n) % n
                 }
-                function itemId(i) { return rep.itemAt(i) ? rep.itemAt(i).mid : "" }
-                function itemCategory(i) { return rep.itemAt(i) ? rep.itemAt(i).mcat : "" }
-                function itemText(i) { return rep.itemAt(i) ? rep.itemAt(i).title : "" }
-
                 Repeater {
-                    id: rep
-                    model: milou
+                    model: sm.rows
                     delegate: ResultRow {
-                        readonly property string mid: model.id || ""
-                        readonly property string mcat: model.category || ""
-                        readonly property string kind: ResultLogic.kindOf(mid, mcat)
+                        required property var modelData
+                        required property int index
                         width: 594
                         height: 56
-                        visible: index < panel.visibleRunnerRows
-                        title: model.display || ""
-                        subtitle: ResultLogic.isAnswer(kind) ? ResultLogic.answerSubtitle(kind, search.text, model.subtext)
-                                                             : (model.subtext || "")
-                        glyph: ResultLogic.isAnswer(kind) ? ResultLogic.glyphFor(kind) : ""
-                        icon: model.decoration
+                        title: modelData.title
+                        subtitle: modelData.subtitle
+                        glyph: modelData.glyph
+                        icon: modelData.icon
                         selected: index === results.currentIndex
-                        onClicked: panel.activate(index)
+                        onClicked: sm.activate(index)
                         onHovered: results.currentIndex = index
                     }
                 }
-                ResultRow {
-                    visible: panel.showWebRow
-                    width: 594
-                    height: 56
-                    title: "“" + search.text.trim() + "” 웹에서 검색"
-                    subtitle: "웹 검색"
-                    glyph: "globe"
-                    selected: results.currentIndex === panel.visibleRunnerRows
-                    onClicked: panel.activate(panel.visibleRunnerRows)
-                    onHovered: results.currentIndex = panel.visibleRunnerRows
-                }
             }
         }
-
         // ----------------------------------------------- footer: user + power
         Rectangle {
             id: footer

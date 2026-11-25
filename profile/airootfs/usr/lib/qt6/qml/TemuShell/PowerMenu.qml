@@ -7,7 +7,8 @@ import TemuUI
 PopupWindow {
     id: menu
     panelWidth: 200
-    panelHeight: col.implicitHeight + 12
+    // fixed: a Column in a hidden window is not laid out yet
+    panelHeight: 12 + 9 + 32 * ((sm.canLock ? 1 : 0) + (sm.canLogout ? 1 : 0) + (sm.canSuspend ? 1 : 0) + (sm.canReboot ? 1 : 0) + (sm.canShutdown ? 1 : 0))
     radius: 10
     signal actionTaken()
 

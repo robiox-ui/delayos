@@ -1,0 +1,1121 @@
+#!/usr/bin/env python3
+# TEMUOS_LINUX: Easy Anti-Cheat Linux v2 (EAC) helper.
+#
+#   temu-eac status [--json]   check the 8 EAC requirements (Korean text, or JSON for the Settings app)
+#   temu-eac setup [--yes] [--loader auto|grub|systemd-boot] [--mok-password-stdin]
+#                              install linux-temuos-eac, shim + the TEMUOS-signed boot loader, the boot
+#                              entry "TEMUOS (안티치트 모드)" and the MOK import of the TEMUOS CA (root,
+#                              asks for the password through pkexec)
+#   temu-eac boot              reboot once into "TEMUOS (안티치트 모드)" (root, pkexec)
+#   temu-eac facts             root only, run at boot by temu-eac-facts.service: caches the facts that
+#                              need root (TPM event log) in /run/temu-eac/facts.json for "status"
+#
+# Requirements checked (Epic, 2026-10-14): 1 kernel + every module signed with a well-known key,
+# 2 TPM 2.0, 3 Secure Boot with only well-known keys, 4 measured boot, 5 IOMMU without passthrough
+# (not on handhelds), 6 lockdown=integrity, 7 kexec disabled, 8 BPF LSM active.
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+EAC_PKG = "linux-temuos-eac"
+NORMAL_PKG = "linux-temuos"
+EAC_OPTS = ["lockdown=integrity", "lsm=landlock,lockdown,yama,integrity,bpf", "iommu.passthrough=0",
+            "intel_iommu=on", "module.sig_enforce=1", "sysctl.kernel.kexec_load_disabled=1"]
+EAC_CMDLINE = " ".join(EAC_OPTS)
+# Removed from the copied base command line before EAC_OPTS are appended
+DROP_KEYS = ("BOOT_IMAGE", "initrd", "lockdown", "lsm", "security", "iommu", "iommu.passthrough", "intel_iommu",
+             "amd_iommu", "module.sig_enforce", "sysctl.kernel.kexec_load_disabled", "resume", "resume_offset",
+             "hibernate", "kexec_load_disabled")
+ENTRY_TITLE = "TEMUOS (안티치트 모드)"
+ENTRY_ID = "temuos-eac"
+
+SB_SHARE = "/usr/share/temuos/secureboot"
+CA_CER = SB_SHARE + "/temuos-sb-ca.cer"
+CA_CRT = SB_SHARE + "/temuos-sb-ca.crt"
+SIGNED_GRUB = SB_SHARE + "/grubx64.efi"
+SIGNED_SDBOOT = "/usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed"
+SHIM_DIRS = ["/usr/share/shim-signed", "/usr/share/shim"]
+KEY_STATUS_FILES = ["/etc/temuos/eac-epic-key-status", "/usr/share/temuos/eac/epic-key-status"]
+LOCAL_PKG_DIR = "/var/cache/temuos/eac-pkgs"
+ESP_SUBDIR = "TEMUOS_SB"           # must match _esp_prefix in packages/temuos-sb-signed/PKGBUILD
+NVRAM_LABEL = "TEMUOS Secure Boot"
+GRUB_SCRIPT = "/etc/grub.d/42_temuos-eac"
+GRUB_DEFAULT_FILE = "/etc/default/grub"
+GRUB_CFG = "/boot/grub/grub.cfg"
+SDBOOT_ENTRY = "temuos-eac.conf"
+FACTS_FILE = "/run/temu-eac/facts.json"
+EVENT_LOG = "/sys/kernel/security/tpm0/binary_bios_measurements"
+EFIVARS = "/sys/firmware/efi/efivars"
+EFI_GLOBAL = "8be4df61-93ca-11d2-aa0d-00e098032b8c"
+SHIM_GUID = "605dab50-e046-4300-abb6-3dd810dd8b23"
+TAINT_UNSIGNED_MODULE = 1 << 13
+
+# Keys Epic accepts today (subject/issuer substrings, lower case). TEMUOS is handled separately.
+WELL_KNOWN = [("canonical", "Canonical"), ("fedora", "Fedora"), ("universal blue", "Universal Blue"),
+              ("ublue", "Universal Blue"), ("debian", "Debian"), ("opensuse", "openSUSE"), ("suse", "SUSE"),
+              ("rocky", "Rocky Linux"), ("microsoft", "Microsoft"), ("almalinux", "AlmaLinux")]
+
+SELF = os.path.realpath(sys.argv[0])
+
+
+# ------------------------------------------------------------------ helpers
+def run(cmd, inp=None, timeout=60):
+    """Run a command, never raise. Returns (rc, stdout text)."""
+    if isinstance(inp, str):
+        inp = inp.encode()
+    try:
+        p = subprocess.run(cmd, input=inp, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                           timeout=timeout, env=dict(os.environ, LC_ALL="C"))
+        out = p.stdout
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "replace")
+        return p.returncode, out
+    except (OSError, subprocess.SubprocessError):
+        return 127, ""
+
+
+def read(path, binary=False):
+    try:
+        with open(path, "rb" if binary else "r") as f:
+            return f.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def efivar_byte(name, guid=EFI_GLOBAL):
+    """First data byte of an EFI variable (after the 4 attribute bytes), or None."""
+    data = read(f"{EFIVARS}/{name}-{guid}", binary=True)
+    if data is None or len(data) < 5:
+        return None
+    return data[4]
+
+
+def cmdline_tokens():
+    return (read("/proc/cmdline") or "").split()
+
+
+def on_cmdline(opt, tokens):
+    """The last occurrence of a key counts."""
+    key = opt.split("=", 1)[0]
+    vals = [t for t in tokens if t.split("=", 1)[0] == key]
+    return bool(vals) and vals[-1] == opt
+
+
+def cpu_vendor():
+    for line in (read("/proc/cpuinfo") or "").splitlines():
+        if line.startswith("vendor_id"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def pkg_version(name):
+    rc, out = run(["pacman", "-Q", name])
+    if rc == 0 and out.strip():
+        return out.split()[1]
+    return None
+
+
+def is_handheld():
+    """Steam Deck, ROG Ally, Legion Go, MSI Claw, ... (Epic does not require the IOMMU there)."""
+    product = " ".join((read(f"/sys/class/dmi/id/{f}") or "").strip() for f in
+                       ("sys_vendor", "product_name", "product_family", "board_name")).lower()
+    names = ("jupiter", "galileo", "rog ally", "rc71l", "rc72l", "legion go", "83e1", "83l3", "83n6",
+             "claw a1m", "msi claw", "zotac zone", "ayaneo", "onexplayer", "gpd win")
+    return any(n in product for n in names)
+
+
+def cert_cn(der):
+    rc, out = run(["openssl", "x509", "-inform", "DER", "-noout", "-subject", "-nameopt", "multiline"], inp=der)
+    if rc != 0:
+        return ""
+    m = re.search(r"commonName\s*=\s*(.+)", out)
+    return m.group(1).strip() if m else ""
+
+
+def classify(text):
+    t = text.lower()
+    if "temuos" in t:
+        return "TEMUOS"
+    for pat, name in WELL_KNOWN:
+        if pat in t:
+            return name
+    return None
+
+
+def epic_key_status():
+    for f in KEY_STATUS_FILES:
+        v = (read(f) or "").strip().lower()
+        if v in ("pending", "accepted"):
+            return v
+    return "pending"
+
+
+def boot_id():
+    return (read("/proc/sys/kernel/random/boot_id") or "").strip()
+
+
+# ------------------------------------------------------------- boot loader
+def find_esp():
+    rc, out = run(["bootctl", "--print-esp-path"])
+    if rc == 0 and out.strip() and os.path.isdir(out.strip()):
+        return out.strip()
+    for p in ("/efi", "/boot/efi", "/boot"):
+        rc, fs = run(["findmnt", "-no", "FSTYPE", "--mountpoint", p])
+        if rc == 0 and fs.strip() == "vfat":
+            return p
+    return None
+
+
+def detect_loader():
+    if os.path.exists(GRUB_DEFAULT_FILE) and os.path.exists(GRUB_CFG):
+        return "grub"
+    rc, _ = run(["bootctl", "is-installed"])
+    if rc == 0:
+        return "systemd-boot"
+    # as a user bootctl cannot read the ESP: ask the running boot loader (Boot Loader Interface)
+    info = read(f"{EFIVARS}/LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f", binary=True)
+    if info and "systemd-boot" in info[4:].decode("utf-16-le", "ignore"):
+        return "systemd-boot"
+    return None
+
+
+def find_shim():
+    for d in SHIM_DIRS:
+        if os.path.isfile(os.path.join(d, "shimx64.efi")):
+            return d
+    return None
+
+
+def efi_entries():
+    """[(num, label)] from efibootmgr."""
+    rc, out = run(["efibootmgr"])
+    res = []
+    for line in out.splitlines():
+        m = re.match(r"^Boot([0-9A-Fa-f]{4})\*?\s+(.*)$", line)
+        if m:
+            res.append((m.group(1), m.group(2).split("\t")[0].strip()))
+    return res
+
+
+def eac_nvram_num():
+    for num, label in efi_entries():
+        if label == NVRAM_LABEL:
+            return num
+    return None
+
+
+def grub_entry_present():
+    if not os.path.exists(GRUB_SCRIPT):
+        return False
+    cfg = read(GRUB_CFG)
+    if cfg is None:                 # grub.cfg is 0600: as a user, trust the generator script
+        return True
+    return ENTRY_TITLE in cfg
+
+
+def sdboot_entry_present(esp):
+    if not esp:
+        return None
+    try:
+        return os.path.exists(os.path.join(esp, "loader", "entries", SDBOOT_ENTRY)) if os.access(esp, os.X_OK) else None
+    except OSError:
+        return None
+
+
+def shim_present(esp):
+    """True/False, or None when the ESP is not readable (it is mounted umask=0077 for users)."""
+    if not esp or not os.access(esp, os.X_OK):
+        return None
+    return os.path.isfile(os.path.join(esp, "EFI", ESP_SUBDIR, "shimx64.efi"))
+
+
+# ------------------------------------------------------------------- MOK
+def mok_info():
+    """Enrolled MOKs, pending imports and whether the TEMUOS CA is enrolled."""
+    info = {"available": shutil.which("mokutil") is not None, "temuos": "unknown", "enrolled": [],
+            "unknown": [], "pending_import": False}
+    if not info["available"]:
+        return info
+    if os.path.exists(CA_CER):
+        rc, out = run(["mokutil", "--test-key", CA_CER])
+        if "already enrolled" in out:
+            info["temuos"] = "enrolled"
+        elif "enrollment request" in out:
+            info["temuos"] = "pending"
+        elif "not enrolled" in out:
+            info["temuos"] = "absent"
+    rc, out = run(["mokutil", "--list-new"])
+    if "Subject" in out or "SHA1 Fingerprint" in out:
+        info["pending_import"] = True
+    rc, out = run(["mokutil", "--list-enrolled"])
+    for block in re.split(r"\[key \d+\]", out)[1:]:
+        m = re.search(r"Subject:\s*(.+)", block)
+        subject = m.group(1).strip() if m else "(hash)"
+        m = re.search(r"Issuer:\s*(.+)", block)
+        issuer = m.group(1).strip() if m else ""
+        who = classify(subject + " " + issuer)
+        info["enrolled"].append({"subject": subject, "vendor": who})
+        if who is None:
+            info["unknown"].append(subject)
+    return info
+
+
+# ------------------------------------------------------- root-only facts
+def collect_root_facts():
+    """Facts that need root: which certificates verified the boot (PCR 7 authorities in the TPM log)."""
+    esp = find_esp() if os.path.isdir("/sys/firmware/efi") else None
+    facts = {"boot_id": boot_id(), "event_log_readable": False, "authorities": [], "verified_by_temuos": None,
+             # the ESP is not readable for users (umask=0077)
+             "esp": esp, "shim_installed": shim_present(esp), "sdboot_entry": sdboot_entry_present(esp)}
+    if not os.access(EVENT_LOG, os.R_OK) or not shutil.which("tpm2_eventlog"):
+        return facts
+    rc, out = run(["tpm2_eventlog", EVENT_LOG], timeout=30)
+    if not out.strip():
+        return facts
+    facts["event_log_readable"] = True
+    datas, flag = [], False
+    for line in out.splitlines():
+        if "EventNum:" in line:
+            flag = False
+        if "EV_EFI_VARIABLE_AUTHORITY" in line:
+            flag = True
+        elif flag and "VariableData:" in line:
+            datas.append(line.split("VariableData:", 1)[1].strip().strip('"').lower())
+            flag = False
+    ca_hex = (read(CA_CER, binary=True) or b"").hex()
+    facts["verified_by_temuos"] = bool(ca_hex) and any(ca_hex in d for d in datas)
+    for d in datas:
+        name = ""
+        for h in (d[32:], d):     # EFI_SIGNATURE_DATA: 16 byte owner GUID, then the certificate
+            try:
+                name = cert_cn(bytes.fromhex(h))
+            except ValueError:
+                name = ""
+            if name:
+                break
+        facts["authorities"].append(name or "(hash)")
+    return facts
+
+
+def load_facts():
+    if os.geteuid() == 0:
+        return collect_root_facts()
+    try:
+        with open(FACTS_FILE) as f:
+            facts = json.load(f)
+        if facts.get("boot_id") == boot_id():
+            return facts
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def cmd_facts():
+    if os.geteuid() != 0:
+        print("temu-eac facts: root 권한이 필요합니다.", file=sys.stderr)
+        return 1
+    write_facts(collect_root_facts())
+    return 0
+
+
+def write_facts(facts):
+    os.makedirs(os.path.dirname(FACTS_FILE), mode=0o755, exist_ok=True)
+    tmp = FACTS_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(facts, f, ensure_ascii=False)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, FACTS_FILE)
+
+
+# ------------------------------------------------------------------ checks
+def check(cid, req, title, status, detail, fix=""):
+    return {"id": cid, "requirement": req, "title": title, "status": status, "detail": detail, "fix": fix}
+
+
+def gather():
+    rel = os.uname().release
+    running_pkgbase = (read(f"/usr/lib/modules/{rel}/pkgbase") or "").strip()
+    eac_running = running_pkgbase == EAC_PKG
+    eac_version = pkg_version(EAC_PKG)
+    tokens = cmdline_tokens()
+    intel = cpu_vendor() == "GenuineIntel"
+    needed_opts = [o for o in EAC_OPTS if intel or not o.startswith("intel_iommu=")]
+    missing_opts = [o for o in needed_opts if not on_cmdline(o, tokens)]
+    uefi = os.path.isdir("/sys/firmware/efi")
+    esp = find_esp() if uefi else None
+    loader = detect_loader()
+    mok = mok_info()
+    facts = load_facts()
+    # ESP contents: directly when readable (root), else from the boot-time facts, else the NVRAM entry
+    shim_on_esp = shim_present(esp)
+    if shim_on_esp is None:
+        shim_on_esp = facts.get("shim_installed") if facts and facts.get("shim_installed") is not None \
+            else eac_nvram_num() is not None
+    if loader == "grub":
+        entry = grub_entry_present()
+    elif loader == "systemd-boot":
+        entry = sdboot_entry_present(esp)
+        if entry is None:
+            entry = bool(facts and facts.get("sdboot_entry"))
+    else:
+        entry = False
+    handheld = is_handheld()
+    epic = epic_key_status()
+    sb = efivar_byte("SecureBoot")
+    setup_mode = efivar_byte("SetupMode")
+    shim_validation_off = efivar_byte("MokSBStateRT", SHIM_GUID) == 1
+    booted_via_shim = os.path.exists(f"{EFIVARS}/MokListRT-{SHIM_GUID}")
+    installed = bool(eac_version) and shim_on_esp and entry
+    # "pending": provided by the anti-cheat boot entry, which is installed but not running
+    later = "pending" if installed and not eac_running else "fail"
+    later_detail = "안티치트 모드로 부팅하면 켜집니다." if installed else "안티치트 모드가 아직 설정되지 않았습니다."
+    checks = []
+
+    # 1. kernel and modules
+    sig_enforce = (read("/sys/module/module/parameters/sig_enforce") or "").strip() == "Y"
+    try:
+        tainted = int((read("/proc/sys/kernel/tainted") or "0").strip())
+    except ValueError:
+        tainted = 0
+    image_ok = None
+    vmlinuz = f"/usr/lib/modules/{rel}/vmlinuz"
+    if eac_running and shutil.which("sbverify") and os.path.exists(CA_CRT) and os.access(vmlinuz, os.R_OK):
+        image_ok = run(["sbverify", "--cert", CA_CRT, vmlinuz])[0] == 0
+    acpi_upgrade = False
+    cfg = read("/proc/config.gz", binary=True)
+    if cfg:
+        import gzip
+        try:
+            acpi_upgrade = b"\nCONFIG_ACPI_TABLE_UPGRADE=y\n" in gzip.decompress(cfg)
+        except OSError:
+            pass
+    if not eac_running:
+        if eac_version:
+            st, det = later, f"지금은 일반 커널({rel})로 부팅되어 있습니다. {later_detail}"
+        else:
+            st, det = "fail", f"안티치트 커널({EAC_PKG})이 설치되어 있지 않습니다."
+        fix = "부팅 메뉴에서 '%s'를 선택하세요." % ENTRY_TITLE if eac_version else "temu-eac setup 을 실행하세요."
+        checks.append(check("kernel", 1, "서명된 커널과 모듈", st, det, fix))
+    elif missing_opts:
+        checks.append(check("kernel", 1, "서명된 커널과 모듈", "fail",
+                            "안티치트 커널이 필요한 부팅 옵션 없이 시작되었습니다: " + " ".join(missing_opts),
+                            "고급 메뉴의 커널 항목이 아니라 '%s' 항목으로 부팅하세요." % ENTRY_TITLE))
+    elif not sig_enforce or tainted & TAINT_UNSIGNED_MODULE:
+        checks.append(check("kernel", 1, "서명된 커널과 모듈", "fail",
+                            "서명되지 않은 커널 모듈이 로드되었거나 모듈 서명 강제가 꺼져 있습니다.",
+                            "DKMS 모듈 대신 linux-temuos-eac-* 모듈 패키지를 쓰세요."))
+    elif image_ok is False:
+        checks.append(check("kernel", 1, "서명된 커널과 모듈", "fail",
+                            "커널 이미지가 TEMUOS 키로 서명되어 있지 않습니다.", "sudo pacman -S %s" % EAC_PKG))
+    elif acpi_upgrade:
+        checks.append(check("kernel", 1, "서명된 커널과 모듈", "fail",
+                            "이 커널은 initramfs의 ACPI 테이블을 불러옵니다(오래된 빌드).", "sudo pacman -Syu"))
+    else:
+        checks.append(check("kernel", 1, "서명된 커널과 모듈", "ok",
+                            f"{EAC_PKG} {eac_version or rel}, TEMUOS 서명, 모듈 서명 강제"))
+
+    # 2. TPM 2.0
+    tpm_major = (read("/sys/class/tpm/tpm0/tpm_version_major") or "").strip()
+    if tpm_major == "2":
+        if os.path.isdir("/sys/class/tpm/tpm0/pcr-sha256"):
+            checks.append(check("tpm", 2, "TPM 2.0", "ok", "TPM 2.0 사용 중"))
+        else:
+            checks.append(check("tpm", 2, "TPM 2.0", "fail", "TPM의 SHA-256 PCR 뱅크가 꺼져 있습니다.",
+                                "BIOS의 TPM 설정에서 SHA-256 PCR 뱅크를 켜세요."))
+    elif tpm_major:
+        checks.append(check("tpm", 2, "TPM 2.0", "fail", f"TPM {tpm_major}.x 입니다. TPM 2.0이 필요합니다.",
+                            "BIOS에서 TPM 2.0 모드(Intel PTT / AMD fTPM)를 켜세요."))
+    else:
+        checks.append(check("tpm", 2, "TPM 2.0", "fail", "TPM을 찾을 수 없습니다.",
+                            "BIOS에서 TPM 2.0(Intel PTT / AMD fTPM)을 켜세요."))
+
+    # 3. Secure Boot with well-known keys only
+    if not uefi:
+        checks.append(check("secure_boot", 3, "Secure Boot", "fail", "레거시(CSM) 모드로 부팅되었습니다.",
+                            "BIOS에서 CSM을 끄고 UEFI 모드로 다시 설치해야 합니다."))
+    elif sb != 1:
+        checks.append(check("secure_boot", 3, "Secure Boot", "fail", "Secure Boot가 꺼져 있습니다.",
+                            "temu-eac setup 후 BIOS에서 Secure Boot를 켜세요."))
+    elif setup_mode == 1:
+        checks.append(check("secure_boot", 3, "Secure Boot", "fail", "펌웨어가 설정 모드(Setup Mode)입니다.",
+                            "BIOS에서 Secure Boot 키를 기본값(공장 키)으로 복원하세요."))
+    elif shim_validation_off:
+        checks.append(check("secure_boot", 3, "Secure Boot", "fail", "shim의 서명 검증이 꺼져 있습니다.",
+                            "sudo mokutil --enable-validation 후 재부팅하세요."))
+    elif mok["unknown"]:
+        checks.append(check("secure_boot", 3, "Secure Boot", "fail",
+                            "알 수 없는 MOK 키가 등록되어 있습니다: " + ", ".join(mok["unknown"]),
+                            "sudo mokutil --delete <인증서> 로 지우세요(다른 배포판/DKMS용 키)."))
+    elif facts and facts.get("event_log_readable") and facts.get("verified_by_temuos") is False \
+            and EAC_PKG == running_pkgbase:
+        checks.append(check("secure_boot", 3, "Secure Boot", "fail",
+                            "TPM 기록상 이번 부팅은 TEMUOS 키로 검증되지 않았습니다.",
+                            "TEMUOS Secure Boot 항목(shim)으로 부팅했는지 확인하세요. MSI 보드는 "
+                            "'Secure Boot Preset'을 'Maximum Security'로 설정하세요."))
+    else:
+        det = "Secure Boot 사용 중" + (", shim으로 부팅" if booted_via_shim else "")
+        checks.append(check("secure_boot", 3, "Secure Boot", "ok", det))
+
+    # 4. Measured boot (firmware TCG2 event log; systemd-stub / systemd-pcrlock as fallback)
+    sd_measured = os.path.exists(f"{EFIVARS}/StubPcrKernelImage-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f") or \
+        os.path.exists("/run/log/systemd/tpm2-measure.log")
+    if os.path.exists(EVENT_LOG):
+        checks.append(check("measured_boot", 4, "측정 부팅(Measured Boot)", "ok",
+                            "TPM 이벤트 로그가 있습니다(부트로더가 측정함)."))
+    elif tpm_major == "2" and sd_measured:
+        checks.append(check("measured_boot", 4, "측정 부팅(Measured Boot)", "ok",
+                            "systemd가 부팅 단계를 TPM에 측정했습니다."))
+    elif tpm_major == "2":
+        checks.append(check("measured_boot", 4, "측정 부팅(Measured Boot)", "fail",
+                            "펌웨어가 TPM 이벤트 로그를 제공하지 않습니다.", "BIOS를 최신 버전으로 업데이트하세요."))
+    else:
+        checks.append(check("measured_boot", 4, "측정 부팅(Measured Boot)", "fail", "TPM 2.0이 없습니다.",
+                            "BIOS에서 TPM 2.0을 켜세요."))
+
+    # 5. IOMMU
+    hw_iommu = os.path.exists("/sys/firmware/acpi/tables/DMAR") or os.path.exists("/sys/firmware/acpi/tables/IVRS")
+    groups = []
+    try:
+        groups = os.listdir("/sys/kernel/iommu_groups")
+    except OSError:
+        pass
+    types = {g: (read(f"/sys/kernel/iommu_groups/{g}/type") or "").strip() for g in groups}
+    bypass, amd_gpu_bypass = [], []
+    for g, t in types.items():
+        if t != "identity":
+            continue
+        devs = []
+        try:
+            devs = os.listdir(f"/sys/kernel/iommu_groups/{g}/devices")
+        except OSError:
+            pass
+        gpu = [d for d in devs if (read(f"/sys/bus/pci/devices/{d}/vendor") or "").strip() == "0x1002"
+               and (read(f"/sys/bus/pci/devices/{d}/class") or "").startswith("0x03")]
+        (amd_gpu_bypass if gpu else bypass).extend(devs)
+    iommu_title = "IOMMU (DMA 보호)"
+    iommu_fix = "BIOS에서 IOMMU를 켜세요 (Intel: VT-d, AMD: AMD-Vi / IOMMU)."
+    if handheld and not types:
+        checks.append(check("iommu", 5, iommu_title, "not_required", "휴대용 게임기에서는 필요하지 않습니다."))
+    elif not types:
+        if hw_iommu and not eac_running:
+            checks.append(check("iommu", 5, iommu_title, later, "하드웨어 IOMMU가 있습니다. " + later_detail))
+        else:
+            checks.append(check("iommu", 5, iommu_title, "fail", "IOMMU가 꺼져 있습니다.", iommu_fix))
+    elif all(t == "identity" for t in types.values()) or bypass:
+        if eac_running:
+            checks.append(check("iommu", 5, iommu_title, "fail",
+                                "IOMMU가 통과(passthrough) 모드입니다" + (": " + " ".join(bypass) if bypass else "."),
+                                "부팅 옵션에서 iommu=pt / iommu.passthrough=1 을 지우세요."))
+        else:
+            checks.append(check("iommu", 5, iommu_title, later, "IOMMU가 켜져 있습니다. " + later_detail))
+    elif amd_gpu_bypass:
+        checks.append(check("iommu", 5, iommu_title, "warn",
+                            "IOMMU 사용 중, 단 AMD GPU는 커널 기본값으로 통과 모드입니다: " + " ".join(amd_gpu_bypass)))
+    elif eac_running and missing_opts and any(o.startswith(("iommu", "intel_iommu")) for o in missing_opts):
+        checks.append(check("iommu", 5, iommu_title, "fail", "IOMMU 부팅 옵션이 빠져 있습니다.",
+                            "'%s' 항목으로 부팅하세요." % ENTRY_TITLE))
+    else:
+        checks.append(check("iommu", 5, iommu_title, "ok", "IOMMU 사용 중(DMA 변환)"))
+
+    # 6. Lockdown
+    lock = read("/sys/kernel/security/lockdown") or ""
+    m = re.search(r"\[(\w+)\]", lock)
+    mode = m.group(1) if m else "none"
+    if mode == "integrity":
+        checks.append(check("lockdown", 6, "커널 잠금(무결성 모드)", "ok", "lockdown=integrity"))
+    elif mode == "confidentiality":
+        checks.append(check("lockdown", 6, "커널 잠금(무결성 모드)", "warn",
+                            "기밀성(confidentiality) 모드입니다. EAC는 무결성(integrity) 모드를 요구합니다."))
+    else:
+        checks.append(check("lockdown", 6, "커널 잠금(무결성 모드)", "fail" if eac_running else later,
+                            "커널 잠금이 꺼져 있습니다." if eac_running else later_detail,
+                            "'%s' 항목으로 부팅하세요." % ENTRY_TITLE))
+
+    # 7. kexec disabled
+    kexec = (read("/proc/sys/kernel/kexec_load_disabled") or "").strip()
+    if kexec == "1":
+        checks.append(check("kexec", 7, "kexec 차단", "ok", "kexec_load_disabled=1"))
+    else:
+        checks.append(check("kexec", 7, "kexec 차단", "fail" if eac_running else later,
+                            "kexec가 허용되어 있습니다." if eac_running else later_detail,
+                            "'%s' 항목으로 부팅하세요." % ENTRY_TITLE))
+
+    # 8. BPF LSM
+    lsms = (read("/sys/kernel/security/lsm") or "").strip().split(",")
+    btf = os.path.exists("/sys/kernel/btf/vmlinux")
+    if "bpf" in lsms and btf:
+        checks.append(check("bpf_lsm", 8, "BPF LSM", "ok", "활성 LSM: " + ",".join(lsms)))
+    elif "bpf" in lsms:
+        checks.append(check("bpf_lsm", 8, "BPF LSM", "fail", "BTF(/sys/kernel/btf/vmlinux)가 없습니다.",
+                            "sudo pacman -S %s" % EAC_PKG))
+    else:
+        checks.append(check("bpf_lsm", 8, "BPF LSM", "fail" if eac_running else later,
+                            ("BPF LSM이 꺼져 있습니다. 활성 LSM: " + ",".join(lsms)) if eac_running else later_detail,
+                            "'%s' 항목으로 부팅하세요." % ENTRY_TITLE))
+
+    # overall state
+    st = {c["id"]: c["status"] for c in checks}
+    good = all(s in ("ok", "warn", "not_required") for s in st.values())
+    firmware_fail = any(st[i] == "fail" for i in ("tpm", "secure_boot", "measured_boot")) or st["iommu"] == "fail"
+    if not uefi:
+        state = "unsupported"
+    elif not installed:
+        state = "not_installed"
+    elif mok["temuos"] == "pending" or (mok["pending_import"] and mok["temuos"] != "enrolled"):
+        state = "mok_pending"
+    elif not eac_running:
+        state = "firmware_required" if firmware_fail else "reboot_required"
+    elif not good and firmware_fail:
+        state = "firmware_required"
+    elif not good:
+        state = "check_failed"
+    elif epic != "accepted":
+        state = "ready_waiting_epic"
+    else:
+        state = "ready"
+
+    summaries = {
+        "unsupported": ("이 PC는 UEFI로 부팅되지 않아 안티치트 모드를 쓸 수 없습니다.",
+                        "BIOS에서 UEFI 부팅으로 바꾸고 TEMUOS를 다시 설치하세요."),
+        "not_installed": ("안티치트 모드가 설정되지 않았습니다.", "'안티치트 모드 설정'(temu-eac setup)을 실행하세요."),
+        "mok_pending": ("TEMUOS 인증서 등록이 대기 중입니다.",
+                        "재부팅 후 파란 화면(MokManager)에서 'Enroll MOK'를 선택하고 설정한 비밀번호를 입력하세요."),
+        "firmware_required": ("BIOS 설정이 필요합니다.", "BIOS에서 Secure Boot, TPM 2.0, IOMMU를 켜세요."),
+        "reboot_required": ("안티치트 모드가 준비되었습니다.", "'%s'로 다시 시작하세요." % ENTRY_TITLE),
+        "check_failed": ("안티치트 모드로 부팅했지만 일부 조건이 맞지 않습니다.", "아래 항목을 확인하세요."),
+        "ready_waiting_epic": ("모든 조건을 갖췄습니다. Epic의 TEMUOS 키 승인을 기다리는 중입니다.",
+                               "승인 전까지 EAC 게임은 실행을 거부합니다. 일반 게임은 일반 모드에서 하세요."),
+        "ready": ("안티치트(EAC Linux v2) 게임을 실행할 수 있습니다.", ""),
+    }
+    summary, next_step = summaries[state]
+
+    return {
+        "schema": 1,
+        "state": state,
+        "ready": state in ("ready", "ready_waiting_epic"),
+        "playable": state == "ready",
+        "summary": summary,
+        "next_step": next_step,
+        "epic_key": {"status": epic,
+                     "detail": "Epic이 TEMUOS 키를 승인했습니다." if epic == "accepted"
+                     else "Epic의 승인 목록에 TEMUOS 키가 아직 없습니다(배포판 차원의 대기 사항)."},
+        "kernel": {"running": rel, "running_package": running_pkgbase or None, "eac_running": eac_running,
+                   "eac_installed": bool(eac_version), "eac_version": eac_version,
+                   "cmdline_ok": eac_running and not missing_opts, "missing_cmdline": missing_opts},
+        "boot": {"uefi": uefi, "esp": esp, "loader": loader, "shim_installed": shim_on_esp,
+                 "eac_entry": entry, "entry_title": ENTRY_TITLE, "booted_via_shim": booted_via_shim,
+                 "secure_boot": sb == 1, "setup_mode": setup_mode == 1},
+        "mok": {"temuos": mok["temuos"], "pending_import": mok["pending_import"],
+                "enrolled": mok["enrolled"], "unknown": mok["unknown"]},
+        "tpm_log": None if facts is None else {"readable": facts.get("event_log_readable", False),
+                                               "verified_by_temuos": facts.get("verified_by_temuos"),
+                                               "authorities": facts.get("authorities", [])},
+        "handheld": handheld,
+        "checks": checks,
+    }
+
+
+MARKS = {"ok": ("✓", "32"), "warn": ("!", "33"), "fail": ("✗", "31"), "pending": ("…", "36"),
+         "not_required": ("-", "90"), "unknown": ("?", "90")}
+LABELS = {"ok": "충족", "warn": "주의", "fail": "미충족", "pending": "부팅 후", "not_required": "불필요", "unknown": "확인 불가"}
+
+
+def cmd_status(as_json):
+    data = gather()
+    if as_json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+        return 0
+    color = sys.stdout.isatty()
+
+    def paint(txt, code):
+        return f"\033[{code}m{txt}\033[0m" if color else txt
+
+    print(paint("TEMUOS 안티치트 모드 (Easy Anti-Cheat Linux v2)", "1"))
+    print("─" * 52)
+    for c in data["checks"]:
+        mark, code = MARKS.get(c["status"], ("?", "90"))
+        print(f" {paint(mark, code)} {c['requirement']}. {c['title']} [{LABELS.get(c['status'], c['status'])}]")
+        print(f"      {c['detail']}")
+        if c["fix"] and c["status"] in ("fail", "warn", "pending"):
+            print(f"      → {c['fix']}")
+    print("─" * 52)
+    k = data["kernel"]
+    print(f" 실행 중인 커널: {k['running']}" + (" (안티치트 모드)" if k["eac_running"] else ""))
+    b = data["boot"]
+    print(f" 부트로더: {b['loader'] or '알 수 없음'}, 부팅 항목: {'있음' if b['eac_entry'] else '없음'}, "
+          f"shim: {'설치됨' if b['shim_installed'] else '없음'}, TEMUOS 인증서(MOK): "
+          + {"enrolled": "등록됨", "pending": "등록 대기", "absent": "미등록"}.get(data["mok"]["temuos"], "확인 불가"))
+    print(f" Epic 키 승인: {'승인됨' if data['epic_key']['status'] == 'accepted' else '대기 중'}"
+          f" — {data['epic_key']['detail']}")
+    print()
+    print(paint(data["summary"], "1"))
+    if data["next_step"]:
+        print(" " + data["next_step"])
+    return 0
+
+
+# ------------------------------------------------------------------- setup
+def say(msg):
+    print(msg, flush=True)
+
+
+def step(msg):
+    say("\n==> " + msg)
+
+
+def die(msg):
+    print("오류: " + msg, file=sys.stderr, flush=True)
+    sys.exit(1)
+
+
+def need_root():
+    if os.geteuid() != 0:
+        if shutil.which("pkexec"):
+            os.execvp("pkexec", ["pkexec", SELF] + sys.argv[1:])
+        die("root 권한이 필요합니다: sudo temu-eac " + " ".join(sys.argv[1:]))
+
+
+def sh(cmd, what):
+    say("    $ " + " ".join(cmd))
+    rc = subprocess.call(cmd)
+    if rc != 0:
+        die(f"{what} 실패 (종료 코드 {rc})")
+
+
+def local_pkg_file(name):
+    try:
+        files = sorted(os.listdir(LOCAL_PKG_DIR))
+    except OSError:
+        return None
+    found = None
+    for f in files:
+        m = re.match(r"^(.+)-([^-]+)-([^-]+)-(x86_64|any)\.pkg\.tar\.(zst|xz)$", f)
+        if m and m.group(1) == name:
+            found = os.path.join(LOCAL_PKG_DIR, f)
+    return found
+
+
+def pkg_depends(path):
+    rc, out = run(["pacman", "-Qip", path])
+    m = re.search(r"^Depends On\s*:\s*(.+)$", out, re.M)
+    return m.group(1).split() if m else []
+
+
+def has_nvidia_gpu():
+    base = "/sys/bus/pci/devices"
+    try:
+        for d in os.listdir(base):
+            if (read(f"{base}/{d}/vendor") or "").strip() == "0x10de" and \
+                    (read(f"{base}/{d}/class") or "").startswith("0x03"):
+                return True
+    except OSError:
+        pass
+    return False
+
+
+def plan_packages():
+    want = ["mokutil", "sbsigntools", "efibootmgr", "tpm2-tools", "shim-signed", "temuos-sb-signed", EAC_PKG]
+    if has_nvidia_gpu() and pkg_version("nvidia-utils"):
+        want.append(EAC_PKG + "-nvidia-open")
+    if pkg_version("r8125-dkms") or os.path.isdir("/sys/module/r8125"):
+        want.append(EAC_PKG + "-r8125")
+    files, repo, missing = [], [], []
+    for name in want:
+        installed = pkg_version(name) is not None
+        is_kernel = name.startswith(EAC_PKG)
+        if installed and not is_kernel:
+            continue                    # tool already there
+        f = local_pkg_file(name)        # copy shipped on the ISO (/var/cache/temuos/eac-pkgs)
+        if f:
+            files.append(f)
+        elif run(["pacman", "-Si", name])[0] == 0:
+            repo.append(name)
+        elif not installed:
+            missing.append(name)
+    return files, repo, missing
+
+
+def check_nvidia_match(files):
+    nv = pkg_version("nvidia-utils")
+    for f in files:
+        if os.path.basename(f).startswith(EAC_PKG + "-nvidia-open-"):
+            for dep in pkg_depends(f):
+                if dep.startswith("nvidia-utils="):
+                    want = dep.split("=", 1)[1]
+                    have = (nv or "").split("-")[0].split(":")[-1]
+                    if have and want != have:
+                        die(f"설치된 nvidia-utils({have})와 안티치트 커널용 NVIDIA 모듈({want})의 버전이 다릅니다.\n"
+                            "      TEMUOS 업데이트(새 linux-temuos-eac-nvidia-open)를 기다리거나 nvidia-utils를 "
+                            f"{want} 버전으로 맞추세요. 아무것도 변경하지 않았습니다.")
+
+
+def base_options_sdboot(esp):
+    edir = os.path.join(esp, "loader", "entries")
+    try:
+        for f in sorted(os.listdir(edir)):
+            if f == SDBOOT_ENTRY or not f.endswith(".conf"):
+                continue
+            txt = read(os.path.join(edir, f)) or ""
+            if re.search(r"^linux\s+\S*vmlinuz-%s\s*$" % re.escape(NORMAL_PKG), txt, re.M):
+                m = re.search(r"^options\s+(.+)$", txt, re.M)
+                if m:
+                    return m.group(1).split()
+    except OSError:
+        pass
+    return cmdline_tokens()
+
+
+def eac_options(base):
+    keep = [t for t in base if t.split("=", 1)[0] not in DROP_KEYS]
+    return keep + EAC_OPTS
+
+
+GRUB_SCRIPT_TEXT = r"""#!/bin/sh
+# TEMUOS_LINUX: boot entry "TEMUOS (안티치트 모드)" for linux-temuos-eac (Easy Anti-Cheat Linux v2).
+# Written by "temu-eac setup". Remove it with: sudo rm %(script)s && sudo grub-mkconfig -o /boot/grub/grub.cfg
+set -e
+prefix="/usr"
+exec_prefix="/usr"
+datarootdir="/usr/share"
+. "${pkgdatadir:-/usr/share/grub}/grub-mkconfig_lib"
+
+KERNEL=/boot/vmlinuz-%(pkg)s
+INITRD=/boot/initramfs-%(pkg)s.img
+[ -f "$KERNEL" ] && [ -f "$INITRD" ] || exit 0
+
+EAC_OPTS="%(opts)s"
+
+if [ "x${GRUB_DEVICE_UUID}" = "x" ] || [ "x${GRUB_DISABLE_LINUX_UUID}" = "xtrue" ] \
+    || ! test -e "/dev/disk/by-uuid/${GRUB_DEVICE_UUID}"; then
+  ROOT_DEV="${GRUB_DEVICE}"
+else
+  ROOT_DEV="UUID=${GRUB_DEVICE_UUID}"
+fi
+
+BASE="${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
+case "x${GRUB_FS}" in
+  xbtrfs)
+    rootsubvol="$(make_system_path_relative_to_its_root /)"
+    rootsubvol="${rootsubvol#/}"
+    [ "x${rootsubvol}" != x ] && BASE="rootflags=subvol=${rootsubvol} ${BASE}"
+    ;;
+esac
+
+ARGS=""
+for o in ${BASE}; do
+  case "$o" in
+    %(drop)s) ;;
+    *) ARGS="${ARGS} ${o}" ;;
+  esac
+done
+
+rel_dirname="$(make_system_path_relative_to_its_root /boot)"
+INITRDS=""
+for u in intel-ucode.img amd-ucode.img; do
+  [ -f "/boot/$u" ] && INITRDS="${INITRDS} ${rel_dirname}/${u}"
+done
+INITRDS="${INITRDS} ${rel_dirname}/initramfs-%(pkg)s.img"
+
+echo "Found TEMUOS anti-cheat entry: $KERNEL" >&2
+cat <<EOF
+menuentry '%(title)s' --class temuos --class gnu-linux --class os --id %(id)s {
+	load_video
+	set gfxpayload=keep
+	insmod gzio
+EOF
+prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | sed -e 's/^/\t/'
+cat <<EOF
+	echo	'Loading linux-temuos-eac (anti-cheat) ...'
+	linux	${rel_dirname}/vmlinuz-%(pkg)s root=${ROOT_DEV} rw${ARGS} ${EAC_OPTS}
+	echo	'Loading initial ramdisk ...'
+	initrd	${INITRDS}
+}
+EOF
+# Under Secure Boot (GRUB started by shim sets lockdown=y) only TEMUOS-signed kernels start,
+# so make the anti-cheat entry the default there; without Secure Boot the normal default stays.
+cat <<EOF
+if [ "x\${lockdown}" = "xy" ]; then
+	set default="%(id)s"
+fi
+EOF
+"""
+
+ESP_GRUB_CFG = """# TEMUOS_LINUX Secure Boot: the TEMUOS-signed GRUB (started by shim) reads this file and
+# shows the normal GRUB menu. Written by "temu-eac setup".
+%(crypt)ssearch --no-floppy --fs-uuid --set=root %(uuid)s
+set prefix=($root)%(rel)s
+configfile ($root)%(rel)s/grub.cfg
+"""
+
+
+def setup_grub(esp, sbdir):
+    step("GRUB: 서명된 GRUB과 부팅 항목 '%s' 설치" % ENTRY_TITLE)
+    if not os.path.isfile(SIGNED_GRUB):
+        die(f"{SIGNED_GRUB} 가 없습니다 (temuos-sb-signed 패키지).")
+    shutil.copyfile(SIGNED_GRUB, os.path.join(sbdir, "grubx64.efi"))
+    rc, uuid = run(["grub-probe", "--target=fs_uuid", "/boot/grub"])
+    rc2, rel = run(["grub-mkrelpath", "/boot/grub"])
+    if rc != 0 or rc2 != 0 or not uuid.strip():
+        die("/boot/grub 의 파일 시스템을 찾지 못했습니다 (grub-probe).")
+    rc, crypt = run(["grub-probe", "--target=cryptodisk_uuid", "/boot/grub"])
+    crypt = crypt.strip() if rc == 0 else ""
+    with open(os.path.join(sbdir, "grub.cfg"), "w", newline="\n") as f:
+        f.write(ESP_GRUB_CFG % {"uuid": uuid.strip(), "rel": rel.strip(),
+                                "crypt": f"cryptomount -u {crypt}\n" if crypt else ""})
+    drop = "|".join(f"{k}|{k}=*" for k in DROP_KEYS)
+    with open(GRUB_SCRIPT, "w", newline="\n") as f:
+        f.write(GRUB_SCRIPT_TEXT % {"script": GRUB_SCRIPT, "pkg": EAC_PKG, "opts": EAC_CMDLINE, "drop": drop,
+                                    "title": ENTRY_TITLE, "id": ENTRY_ID})
+    os.chmod(GRUB_SCRIPT, 0o755)
+    # GRUB sorts kernels by name and could make linux-temuos-eac (without the EAC options) its default
+    conf = read(GRUB_DEFAULT_FILE) or ""
+    normal = f"/boot/vmlinuz-{NORMAL_PKG}"
+    if not re.search(r"^GRUB_TOP_LEVEL=", conf, re.M) and os.path.exists(normal):
+        with open(GRUB_DEFAULT_FILE, "a", newline="\n") as f:
+            f.write(f"\n# Added by temu-eac: keep the normal kernel as GRUB's default entry\nGRUB_TOP_LEVEL=\"{normal}\"\n")
+        say(f"    GRUB_TOP_LEVEL=\"{normal}\" 추가")
+    sh(["grub-mkconfig", "-o", GRUB_CFG], "grub-mkconfig")
+    if ENTRY_TITLE not in (read(GRUB_CFG) or ""):
+        die("grub.cfg 에 안티치트 항목이 만들어지지 않았습니다.")
+    if re.search(r"^GRUB_SAVEDEFAULT=\"?true", conf, re.M):
+        say("    참고: GRUB_SAVEDEFAULT=true 라서 안티치트 항목을 한 번 고르면 다음에도 그 항목으로 부팅됩니다.")
+
+
+def setup_sdboot(esp, sbdir):
+    step("systemd-boot: 서명된 systemd-boot와 부팅 항목 '%s' 설치" % ENTRY_TITLE)
+    if not os.path.isfile(SIGNED_SDBOOT):
+        die(f"{SIGNED_SDBOOT} 가 없습니다 (temuos-sb-signed 패키지).")
+    # shim starts \EFI\TEMUOS_SB\grubx64.efi: here that is the signed systemd-boot
+    shutil.copyfile(SIGNED_SDBOOT, os.path.join(sbdir, "grubx64.efi"))
+    run(["bootctl", "update", "--graceful"])          # installs *.efi.signed as the normal systemd-boot
+    rc, bootp = run(["bootctl", "--print-boot-path"])
+    bootp = bootp.strip() if rc == 0 and bootp.strip() else esp
+    if not os.path.isfile(os.path.join(bootp, f"vmlinuz-{EAC_PKG}")):
+        die(f"{bootp}/vmlinuz-{EAC_PKG} 가 없습니다. systemd-boot는 커널이 EFI 시스템 파티션(/boot)에 있어야 합니다.")
+    opts = eac_options(base_options_sdboot(esp))
+    if not any(o.startswith("root=") for o in opts):
+        die("root= 옵션을 찾지 못했습니다.")
+    lines = [f"title   {ENTRY_TITLE}", f"sort-key {ENTRY_ID}", f"linux   /vmlinuz-{EAC_PKG}"]
+    for u in ("intel-ucode.img", "amd-ucode.img"):
+        if os.path.isfile(os.path.join(bootp, u)):
+            lines.append(f"initrd  /{u}")
+    lines += [f"initrd  /initramfs-{EAC_PKG}.img", "options " + " ".join(opts)]
+    path = os.path.join(bootp, "loader", "entries", SDBOOT_ENTRY)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+    say(f"    {path} 작성")
+
+
+def esp_disk_part(esp):
+    rc, src = run(["findmnt", "-no", "SOURCE", "--target", esp])
+    name = os.path.basename(os.path.realpath(src.strip()))
+    part = (read(f"/sys/class/block/{name}/partition") or "").strip()
+    parent = os.path.basename(os.path.dirname(os.path.realpath(f"/sys/class/block/{name}")))
+    if not part or not parent:
+        die(f"{esp} 의 디스크/파티션 번호를 찾지 못했습니다.")
+    return "/dev/" + parent, part
+
+
+def import_mok(args):
+    step("TEMUOS 인증서를 MOK(Machine Owner Key)로 등록 요청")
+    if not os.path.isfile(CA_CER):
+        die(f"{CA_CER} 가 없습니다 (temuos-sb-signed 패키지).")
+    mok = mok_info()
+    if mok["temuos"] == "enrolled":
+        say("    이미 등록되어 있습니다.")
+        return False
+    if mok["temuos"] == "pending":
+        say("    이미 등록 요청되어 있습니다. 재부팅 후 MokManager에서 승인하세요.")
+        return True
+    if args.mok_password_stdin:
+        pw = sys.stdin.readline().rstrip("\r\n")
+        if not 1 <= len(pw) <= 256:
+            die("MOK 비밀번호가 비어 있습니다.")
+        rc, hashed = run(["openssl", "passwd", "-6", "-stdin"], inp=pw + "\n")
+        if rc != 0 or not hashed.startswith("$6$"):
+            die("비밀번호 해시를 만들지 못했습니다 (openssl).")
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write(hashed.strip() + "\n")
+            hf = f.name
+        try:
+            os.chmod(hf, 0o600)
+            sh(["mokutil", "--import", CA_CER, "--hash-file", hf], "mokutil --import")
+        finally:
+            os.unlink(hf)
+    elif sys.stdin.isatty():
+        say("    지금 정하는 '일회용 비밀번호'는 재부팅 후 파란 화면(MokManager)에서 한 번 더 입력합니다.")
+        say("    (MokManager는 영문 키보드 배열입니다. 숫자와 영문 소문자만 쓰는 것을 권장합니다.)")
+        sh(["mokutil", "--import", CA_CER], "mokutil --import")
+    else:
+        die("터미널이 없습니다. --mok-password-stdin 으로 비밀번호를 넘기거나 터미널에서 실행하세요.")
+    return True
+
+
+def confirm(args, question):
+    if args.yes:
+        return True
+    if not sys.stdin.isatty():
+        die("확인할 수 없습니다(터미널 없음). --yes 를 붙여 실행하세요.")
+    ans = input(f"    {question} [y/N] ").strip().lower()
+    return ans in ("y", "yes", "ㅇ", "예", "네")
+
+
+def cmd_setup(args):
+    need_root()
+    say("TEMUOS 안티치트 모드 설정 (Easy Anti-Cheat Linux v2)")
+    step("요구 사항 확인")
+    if not os.path.isdir("/sys/firmware/efi"):
+        die("UEFI 모드로 부팅되지 않았습니다. 레거시(CSM) 부팅에서는 안티치트 모드를 쓸 수 없습니다.")
+    if os.uname().machine != "x86_64":
+        die("x86_64 PC만 지원합니다.")
+    if (read("/sys/class/tpm/tpm0/tpm_version_major") or "").strip() != "2":
+        say("    주의: TPM 2.0이 보이지 않습니다. 설정 후 BIOS에서 TPM(Intel PTT / AMD fTPM)을 켜야 합니다.")
+    if not (os.path.exists("/sys/firmware/acpi/tables/DMAR") or os.path.exists("/sys/firmware/acpi/tables/IVRS")):
+        say("    주의: IOMMU가 꺼져 있습니다. BIOS에서 VT-d(Intel) 또는 AMD-Vi/IOMMU를 켜야 합니다.")
+    esp = find_esp()
+    if not esp:
+        die("EFI 시스템 파티션을 찾지 못했습니다.")
+    loader = args.loader if args.loader != "auto" else detect_loader()
+    if loader not in ("grub", "systemd-boot"):
+        die("GRUB 또는 systemd-boot를 찾지 못했습니다. --loader 로 지정하세요.")
+    say(f"    EFI 시스템 파티션: {esp}, 부트로더: {loader}")
+
+    step("설치할 패키지 확인")
+    files, repo, missing = plan_packages()
+    if missing:
+        die("다음 패키지를 찾을 수 없습니다: " + ", ".join(missing) +
+            ("\n      shim-signed는 AUR 패키지입니다: yay -S shim-signed" if "shim-signed" in missing else ""))
+    check_nvidia_match(files)
+    for f in files:
+        say("    " + os.path.basename(f))
+    for n in repo:
+        say("    " + n + " (저장소)")
+    say("")
+    say("    안티치트 모드에서는 최대 절전(하이버네이션), 서명되지 않은 DKMS 모듈(xpadneo 등),")
+    say("    /dev/mem·MSR 쓰기 도구가 동작하지 않습니다. 일반 모드는 그대로입니다.")
+    if not confirm(args, "안티치트 모드를 설정할까요?"):
+        die("취소했습니다.")
+
+    step("패키지 설치")
+    if files:
+        sh(["pacman", "-U", "--needed", "--noconfirm"] + files, "pacman -U")
+    if repo:
+        sh(["pacman", "-S", "--needed", "--noconfirm"] + repo, "pacman -S")
+    if not os.path.isfile(f"/boot/vmlinuz-{EAC_PKG}") or not os.path.isfile(f"/boot/initramfs-{EAC_PKG}.img"):
+        sh(["mkinitcpio", "-p", EAC_PKG], "mkinitcpio")
+    if os.path.exists(CA_CRT) and shutil.which("sbverify"):
+        if run(["sbverify", "--cert", CA_CRT, f"/boot/vmlinuz-{EAC_PKG}"])[0] != 0:
+            die(f"/boot/vmlinuz-{EAC_PKG} 가 TEMUOS 키로 서명되어 있지 않습니다.")
+
+    step(f"shim 설치 ({esp}/EFI/{ESP_SUBDIR})")
+    shim = find_shim()
+    if not shim:
+        die("shimx64.efi 를 찾지 못했습니다 (shim-signed 패키지).")
+    sbdir = os.path.join(esp, "EFI", ESP_SUBDIR)
+    os.makedirs(sbdir, exist_ok=True)
+    for f in ("shimx64.efi", "mmx64.efi"):
+        if os.path.isfile(os.path.join(shim, f)):
+            shutil.copyfile(os.path.join(shim, f), os.path.join(sbdir, f))
+    if not os.path.isfile(os.path.join(sbdir, "mmx64.efi")):
+        die("mmx64.efi(MokManager)를 찾지 못했습니다 (shim-signed 패키지).")
+    # MokManager can also enroll it by hand ("Enroll key from disk")
+    shutil.copyfile(CA_CER, os.path.join(sbdir, "temuos-sb-ca.cer"))
+
+    if loader == "grub":
+        setup_grub(esp, sbdir)
+    else:
+        setup_sdboot(esp, sbdir)
+
+    step("UEFI 부팅 항목 '%s'" % NVRAM_LABEL)
+    num = eac_nvram_num()
+    if not num:
+        disk, part = esp_disk_part(esp)
+        sh(["efibootmgr", "--quiet", "--create", "--disk", disk, "--part", part, "--label", NVRAM_LABEL,
+            "--loader", f"\\EFI\\{ESP_SUBDIR}\\shimx64.efi"], "efibootmgr --create")
+        num = eac_nvram_num()
+    if not num:
+        die("UEFI 부팅 항목을 만들지 못했습니다.")
+    run(["efibootmgr", "--quiet", "--bootnext", num])
+    say(f"    Boot{num} {NVRAM_LABEL} (부팅 순서 맨 앞, 다음 부팅에 사용)")
+
+    pending = import_mok(args)
+    try:
+        write_facts(collect_root_facts())    # so "status" as a user sees the new ESP state right away
+    except OSError:
+        pass
+
+    mok = mok_info()
+    if mok["unknown"]:
+        say("\n    주의: EAC는 Epic이 아는 키만 MOK에 있어야 합니다. 다음 키를 지우세요(sudo mokutil --delete ...):")
+        for s in mok["unknown"]:
+            say("      - " + s)
+
+    step("완료. 다음 순서로 진행하세요")
+    n = 1
+    if pending:
+        say(f"  {n}. 재부팅하면 파란 화면(MokManager)이 나타납니다: 'Enroll MOK' → 'Continue' → 'Yes' →")
+        say("     방금 정한 비밀번호 입력 → 'Reboot'. (10초 안에 아무 키나 눌러야 합니다.)")
+        n += 1
+    say(f"  {n}. BIOS 설정(부팅 중 Del / F2)에서:")
+    say("       - Secure Boot 켜기 (OS 유형 'Windows UEFI', 'Microsoft 3rd-party UEFI CA 허용'이 있으면 켜기)")
+    say("       - TPM 2.0 켜기 (Intel PTT / AMD fTPM)")
+    say("       - IOMMU 켜기 (Intel VT-d / AMD-Vi, 'IOMMU: Enabled')")
+    n += 1
+    say(f"  {n}. 부팅 메뉴에서 '{ENTRY_TITLE}'를 고르세요(Secure Boot가 켜져 있으면 자동 선택).")
+    say("     Secure Boot가 켜져 있으면 안티치트 모드와 Windows만 부팅됩니다. 일반 모드(linux-temuos)는")
+    say("     Secure Boot를 끈 상태에서 씁니다.")
+    n += 1
+    say(f"  {n}. 안티치트 모드에서 'temu-eac status'로 확인하세요.")
+    say("")
+    say("  참고: Epic이 TEMUOS 키를 승인하기 전까지 EAC 게임은 모든 조건을 갖춰도 실행을 거부합니다.")
+    say("        그때까지는 Secure Boot를 끈 채 일반 모드로 게임하면 됩니다.")
+    return 0
+
+
+def cmd_boot(args):
+    need_root()
+    loader = detect_loader()
+    num = eac_nvram_num()
+    if loader == "grub":
+        if not grub_entry_present():
+            die("안티치트 부팅 항목이 없습니다. 먼저 temu-eac setup 을 실행하세요.")
+        sh(["grub-reboot", ENTRY_ID], "grub-reboot")
+        if num:
+            run(["efibootmgr", "--quiet", "--bootnext", num])
+        os.execvp("systemctl", ["systemctl", "reboot"])
+    elif loader == "systemd-boot":
+        os.execvp("systemctl", ["systemctl", "reboot", f"--boot-loader-entry={SDBOOT_ENTRY}"])
+    die("부트로더를 찾지 못했습니다.")
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(prog="temu-eac", description="TEMUOS 안티치트 모드 (Easy Anti-Cheat Linux v2)")
+    sub = ap.add_subparsers(dest="cmd")
+    p = sub.add_parser("status", help="요구 사항 확인")
+    p.add_argument("--json", action="store_true", help="설정 앱용 JSON 출력")
+    p = sub.add_parser("setup", help="안티치트 모드 설정 (root)")
+    p.add_argument("--yes", "-y", action="store_true", help="묻지 않고 진행")
+    p.add_argument("--loader", choices=("auto", "grub", "systemd-boot"), default="auto")
+    p.add_argument("--mok-password-stdin", action="store_true", help="MOK 일회용 비밀번호를 표준 입력에서 읽기")
+    sub.add_parser("boot", help="안티치트 모드로 한 번 다시 시작 (root)")
+    sub.add_parser("facts", help="(root, 부팅 시 서비스용) TPM 기록 확인 결과 저장")
+    args = ap.parse_args()
+    if args.cmd in (None, "status"):
+        return cmd_status(getattr(args, "json", False))
+    if args.cmd == "setup":
+        return cmd_setup(args)
+    if args.cmd == "boot":
+        return cmd_boot(args)
+    if args.cmd == "facts":
+        return cmd_facts()
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

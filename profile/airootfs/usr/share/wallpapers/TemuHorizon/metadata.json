@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "TEMUOS"
+            }
+        ],
+        "Id": "TemuHorizon",
+        "License": "CC-BY-SA-4.0",
+        "Name": "TEMUOS Horizon",
+        "Name[ko]": "TEMUOS 수평선"
+    }
+}

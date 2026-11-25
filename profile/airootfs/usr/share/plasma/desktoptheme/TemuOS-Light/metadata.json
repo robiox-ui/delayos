@@ -1,0 +1,14 @@
+{
+    "KPlugin": {
+        "Authors": [{ "Name": "TEMUOS_LINUX" }],
+        "Category": "",
+        "Description": "TEMUOS glass (light)",
+        "EnabledByDefault": true,
+        "Id": "TemuOS-Light",
+        "License": "GPL-2.0+",
+        "Name": "TEMUOS Light",
+        "Version": "1.0",
+        "Website": ""
+    },
+    "X-Plasma-API": "5.0"
+}

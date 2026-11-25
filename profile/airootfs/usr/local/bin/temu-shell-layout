@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# TEMUOS shell layout switcher (Settings > Personalisation > "Dock and taskbar").
+#
+#   temu-shell-layout dock            top bar + floating dock (default)
+#   temu-shell-layout taskbar         one full-width bottom taskbar, no top bar
+#   temu-shell-layout autohide on|off auto-hide the dock (dock look only)
+#   temu-shell-layout reset-pins      put back the apps the dock started with
+#   temu-shell-layout look dark|light glass theme + window frame + colour scheme
+#   temu-shell-layout status          prints "layout=dock|taskbar" and "autohide=true|false"
+#
+# Works live in the running Plasma session (plasmashell evaluateScript); the choice is stored in
+# ~/.config/temuosrc [Shell] so the Settings app can show it.
+set -u
+Q=$(command -v qdbus6 || command -v qdbus)
+CFG=temuosrc
+
+ps_eval() { "$Q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$1"; }
+get() { kreadconfig6 --file "$CFG" --group Shell --key "$1" --default "$2"; }
+set_() { kwriteconfig6 --file "$CFG" --group Shell --key "$1" "$2"; }
+
+# keep the user's pins across the switch: saved to ~/.config/temuosrc [Dock] launchers,
+# which the panel templates read back
+JS_KEEP='
+panels().forEach(function (p) {
+    p.widgets("org.temuos.dock").forEach(function (w) {
+        w.currentConfigGroup = ["General"];
+        var pins = w.readConfig("launchers");
+        if (pins && String(pins).length) {
+            var c = ConfigFile("temuosrc", "Dock");
+            c.writeEntry("launchers", String(pins));
+        }
+    });
+});'
+
+apply_layout() { # $1 = dock|taskbar
+  local tpl ah
+  ah=$(get autohide false)
+  if [[ $1 == taskbar ]]; then
+    tpl='loadTemplate("org.temuos.panel.taskbar");'
+  else
+    tpl='loadTemplate("org.temuos.panel.topbar"); loadTemplate("org.temuos.panel.dock");'
+    [[ $ah == true ]] && tpl+=' panels().forEach(function(p){ if (p.widgets("org.temuos.dock").length && p.location == "bottom") p.hiding = "autohide"; });'
+  fi
+  ps_eval "$JS_KEEP
+panels().forEach(function (p) { p.remove(); });
+$tpl" >/dev/null
+  set_ layout "$1"
+}
+
+case "${1:-status}" in
+  dock|taskbar)
+    apply_layout "$1" ;;
+  autohide)
+    v=false; [[ ${2:-} == on || ${2:-} == true ]] && v=true
+    set_ autohide "$v"
+    mode=$([[ $v == true ]] && echo autohide || echo windowsgobelow)
+    ps_eval "panels().forEach(function(p){ var w = p.widgets(\"org.temuos.dock\"); if (w.length) { w[0].currentConfigGroup=[\"General\"]; if (w[0].readConfig(\"mode\") != \"taskbar\") p.hiding = \"$mode\"; } });" >/dev/null ;;
+  reset-pins)
+    kwriteconfig6 --file "$CFG" --group Dock --key launchers --delete
+    ps_eval 'panels().forEach(function(p){ p.widgets("org.temuos.dock").forEach(function(w){ w.currentConfigGroup=["General"]; var d = w.readConfig("defaultLaunchers"); if (d) w.writeConfig("launchers", d); w.reloadConfig(); }); });' >/dev/null ;;
+  look)
+    # dark|light: shell glass theme + window frame + colour scheme in one go (temu-darkmode may call this)
+    if [[ ${2:-dark} == light ]]; then dt=TemuOS-Light; deco=TemuOS-Light; cs=TemuLight; else dt=TemuOS; deco=TemuOS; cs=TemuDark; fi
+    plasma-apply-desktoptheme "$dt" >/dev/null 2>&1
+    plasma-apply-colorscheme "$cs" >/dev/null 2>&1
+    kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key library org.kde.kwin.aurorae
+    kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme "__aurorae__svg__$deco"
+    "$Q" org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1
+    set_ look "${2:-dark}" ;;
+  status)
+    echo "layout=$(get layout dock)"
+    echo "autohide=$(get autohide false)" ;;
+  *)
+    sed -n '3,11p' "$0"; exit 1 ;;
+esac

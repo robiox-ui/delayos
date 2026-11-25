@@ -8,18 +8,18 @@ GC_FILE = os.path.expanduser("~/.config/temuos/gamecontrols.json")
 GC_DEFAULT = {"enabled": True, "autoOn": True, "showKeys": True, "aimSpeed": 0.45,
               "games": [{"package": "com.dts.freefiremax", "name": "Free Fire MAX", "layout": "TEMUOS 배치"}]}
 
-EAC_ITEMS = [  # (canonical key, label, aliases accepted from temu-eac)
-    ("signed_kernel", "서명된 커널/모듈", ("signed_kernel", "signed_modules", "module_signing", "signed")),
+# Epic's 8 requirements in order: (contract id, label, aliases accepted from older/other outputs)
+EAC_ITEMS = [
+    ("kernel", "서명된 커널/모듈", ("kernel", "signed_kernel", "signed_modules", "module_signing", "signed")),
     ("tpm", "TPM 2.0", ("tpm", "tpm2", "tpm_2_0")),
     ("secure_boot", "보안 부팅", ("secure_boot", "secureboot", "sb")),
     ("measured_boot", "측정 부팅", ("measured_boot", "measuredboot", "ima")),
     ("iommu", "IOMMU", ("iommu",)),
     ("lockdown", "커널 잠금", ("lockdown", "kernel_lockdown")),
-    ("kexec_disabled", "kexec 비활성화", ("kexec_disabled", "kexec", "no_kexec")),
+    ("kexec", "kexec 비활성화", ("kexec", "kexec_disabled", "no_kexec")),
     ("bpf_lsm", "BPF LSM", ("bpf_lsm", "bpf", "lsm_bpf")),
 ]
-
-
+EAC_OK = ("ok", "warn", "not_required")
 def _which(b):
     return shutil.which(b) is not None
 
@@ -45,63 +45,84 @@ def _norm(k):
     return str(k).lower().replace("-", "_").replace(" ", "_")
 
 
-def _truth(v):
+def _status(v):
+    """Map any value to the contract status ok|warn|fail|pending|not_required|unknown."""
     if isinstance(v, dict):
-        for k in ("ok", "pass", "passed", "enabled", "status", "value", "state"):
+        if "status" in v:
+            return _status(v["status"])
+        for k in ("ok", "pass", "passed", "enabled", "value", "state"):
             if k in v:
-                return _truth(v[k])
-        return False
-    if isinstance(v, str):
-        return v.strip().lower() in ("1", "true", "yes", "ok", "pass", "passed", "enabled", "on", "active")
-    return bool(v)
+                return _status(v[k])
+        return "unknown"
+    if isinstance(v, bool):
+        return "ok" if v else "fail"
+    if v is None:
+        return "unknown"
+    s = str(v).strip().lower()
+    if s in ("ok", "warn", "fail", "pending", "not_required", "unknown"):
+        return s
+    if s in ("1", "true", "yes", "pass", "passed", "enabled", "on", "active"):
+        return "ok"
+    if s in ("0", "false", "no", "failed", "disabled", "off"):
+        return "fail"
+    return "unknown"
+
+
+def _mock():
+    def rd(p, d=""):
+        try:
+            with open(p) as f:
+                return f.read()
+        except Exception:
+            return d
+    lock = rd("/sys/kernel/security/lockdown", "[none]")
+    return {"state": "not_installed", "summary": "", "next_step": "", "checks": [
+        {"id": "kernel", "status": "fail"},
+        {"id": "tpm", "status": "ok" if os.path.exists("/dev/tpmrm0") else "fail"},
+        {"id": "secure_boot", "status": "ok" if out(["sh", "-c", "bootctl status 2>/dev/null | grep -i 'secure boot: enabled'"]) else "fail"},
+        {"id": "measured_boot", "status": "unknown"},
+        {"id": "iommu", "status": "ok" if os.path.isdir("/sys/class/iommu") and os.listdir("/sys/class/iommu") else "fail"},
+        {"id": "lockdown", "status": "fail" if "[none]" in lock else "ok"},
+        {"id": "kexec", "status": "ok" if rd("/proc/sys/kernel/kexec_load_disabled").strip() == "1" else "fail"},
+        {"id": "bpf_lsm", "status": "ok" if "bpf" in rd("/sys/kernel/security/lsm") else "fail"},
+    ]}
 
 
 def eac():
-    """Run `temu-eac status --json` and normalise (tolerant: dict, list of {name,ok}, nested 'checks')."""
+    """`temu-eac status --json` (contract in docs/reports/eac.md), tolerant of other shapes; mocked when missing."""
     raw, mock = None, False
-    if _which("temu-eac"):
-        rc, o = sh(["temu-eac", "status", "--json"], 20)
+    if _which("temu-eac") or os.path.exists("/usr/local/bin/temu-eac"):
+        rc, o = sh(["temu-eac", "status", "--json"], 30)
         try:
-            raw = json.loads(o)
+            raw = json.loads(o[o.find("{"):]) if "{" in o else None
         except Exception:
             raw = None
-    if raw is None:
+    if not isinstance(raw, dict):
         mock = True
-        raw = {"secure_boot": bool(out(["sh", "-c", "bootctl status 2>/dev/null | grep -i 'secure boot: enabled'"])),
-               "tpm": os.path.exists("/dev/tpmrm0"),
-               "iommu": bool(os.listdir("/sys/class/iommu")) if os.path.isdir("/sys/class/iommu") else False,
-               "lockdown": "[none]" not in (open("/sys/kernel/security/lockdown").read() if os.path.exists("/sys/kernel/security/lockdown") else "[none]"),
-               "kexec_disabled": out(["cat", "/proc/sys/kernel/kexec_load_disabled"]) == "1",
-               "bpf_lsm": "bpf" in out(["cat", "/sys/kernel/security/lsm"]),
-               "signed_kernel": False, "measured_boot": False}
-    flat = {}
-    src = raw
-    if isinstance(raw, dict):
-        for k in ("checks", "requirements", "items", "results"):
-            if k in raw:
-                src = raw[k]
-                break
+        raw = _mock()
+    src = raw.get("checks", raw.get("requirements", raw.get("items", raw)))
+    found = {}
     if isinstance(src, list):
         for it in src:
             if isinstance(it, dict):
-                k = it.get("id") or it.get("key") or it.get("name") or ""
-                flat[_norm(k)] = _truth(it)
+                k = _norm(it.get("id") or it.get("key") or it.get("name") or "")
+                found[k] = it
     elif isinstance(src, dict):
         for k, v in src.items():
-            flat[_norm(k)] = _truth(v)
+            found[_norm(k)] = v if isinstance(v, dict) else {"status": v}
     items = []
     for key, label, aliases in EAC_ITEMS:
-        val = None
-        for a in aliases:
-            if a in flat:
-                val = flat[a]
-                break
-        items.append({"key": key, "label": label, "ok": bool(val), "known": val is not None})
-    ready = all(i["ok"] for i in items)
-    if isinstance(raw, dict) and "ready" in raw:
-        ready = _truth(raw["ready"])
-    return {"items": items, "ready": ready, "mock": mock, "available": _which("temu-eac")}
-
+        it = next((found[a] for a in aliases if a in found), None)
+        st = _status(it) if it is not None else "unknown"
+        d = it if isinstance(it, dict) else {}
+        items.append({"key": key, "label": d.get("title") or label, "status": st, "ok": st in EAC_OK,
+                      "known": st != "unknown", "detail": d.get("detail", ""), "fix": d.get("fix", "")})
+    state = str(raw.get("state", "")) or ("ready" if all(i["ok"] for i in items) else "check_failed")
+    ready = bool(raw.get("ready", state in ("ready", "ready_waiting_epic")))
+    epic = raw.get("epic_key") if isinstance(raw.get("epic_key"), dict) else {}
+    return {"items": items, "state": state, "ready": ready, "playable": bool(raw.get("playable", state == "ready")),
+            "summary": raw.get("summary", ""), "next_step": raw.get("next_step", ""),
+            "epic": epic.get("detail", ""), "mock": mock, "available": not mock}
 
 def gamecontrols():
     try:

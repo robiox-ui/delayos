@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "TEMUOS"
+            }
+        ],
+        "Id": "TemuBloom",
+        "License": "CC-BY-SA-4.0",
+        "Name": "TEMUOS Bloom",
+        "Name[ko]": "TEMUOS 불꽃"
+    }
+}

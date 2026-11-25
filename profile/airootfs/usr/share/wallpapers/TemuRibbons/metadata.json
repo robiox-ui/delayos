@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "TEMUOS"
+            }
+        ],
+        "Id": "TemuRibbons",
+        "License": "CC-BY-SA-4.0",
+        "Name": "TEMUOS Ribbons",
+        "Name[ko]": "TEMUOS 리본"
+    }
+}

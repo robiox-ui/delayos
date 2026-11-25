@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [ { "Name": "TEMUOS" } ],
+        "Category": "Application Launchers",
+        "Description": "TEMUOS Win+X quick menu",
+        "Description[ko]": "TEMUOS 빠른 메뉴 (Win+X)",
+        "Icon": "application-menu",
+        "Id": "org.temuos.winx",
+        "License": "GPL-2.0-or-later",
+        "Name": "Quick menu",
+        "Name[ko]": "빠른 메뉴",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

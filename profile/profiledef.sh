@@ -31,6 +31,10 @@ file_permissions=(
   ["/usr/local/bin/temu-firstboot"]="0:0:755"
   ["/usr/local/bin/temu-lowmem-session"]="0:0:755"
   ["/usr/local/bin/temu-postinstall"]="0:0:755"
+  ["/usr/local/bin/temu-eac"]="0:0:755"
+  ["/usr/bin/temu-darkmode"]="0:0:755"
+  ["/usr/bin/temu-run-in-terminal"]="0:0:755"
+  ["/usr/bin/temu-shell"]="0:0:755"
   # Tuning tools taken from CachyOS-Settings
   ["/usr/bin/dlss-swapper"]="0:0:755"
   ["/usr/bin/dlss-swapper-dll"]="0:0:755"

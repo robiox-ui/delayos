@@ -11,7 +11,9 @@ DBus.SignalWatcher {
     signal toggleRequested()
     signal showRequested()
     signal hideRequested()
+    signal queryRequested(string text)
 
+    enabled: true
     busType: DBus.BusType.Session
     service: "org.temuos.Shell"
     path: "/org/temuos/Shell"
@@ -19,5 +21,6 @@ DBus.SignalWatcher {
 
     function dbusToggle(target) { if (String(target) === name) watcher.toggleRequested() }
     function dbusShow(target) { if (String(target) === name) watcher.showRequested() }
+    function dbusQuery(target, text) { if (String(target) === name) watcher.queryRequested(String(text)) }
     function dbusHide(target) { if (String(target) === name || String(target) === "all") watcher.hideRequested() }
 }

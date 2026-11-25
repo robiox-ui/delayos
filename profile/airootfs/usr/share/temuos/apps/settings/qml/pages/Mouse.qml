@@ -42,7 +42,7 @@ SPage {
         SSlider { value: pg.st.mouse ? pg.f2s(pg.st.mouse.scroll) : 0.29; onCommitted: (v) => pg.set(false, "scrollFactor", pg.s2f(v)) }
     }
     SRow {
-        key: "m-natural"; icon: "exchange-positions"
+        key: "m-natural"; icon: "g:swap"
         title: "스크롤 방향 반대로"; subtitle: "터치패드처럼 휠을 돌리는 방향으로 페이지가 움직입니다"
         enabled: pg.st.hasMouse !== false
         SToggle { checked: pg.st.mouse ? pg.st.mouse.natural : false; onToggled: (on) => pg.set(false, "naturalScroll", on) }
@@ -82,5 +82,5 @@ SPage {
 
     SHeader { text: "관련 설정" }
     SRow { icon: "input-keyboard"; title: "키 매핑"; subtitle: "키보드와 마우스로 Android 게임 플레이"; chevron: true; onClicked: pg.navigate("keymapping") }
-    SRow { icon: "preferences-desktop-cursors"; title: "추가 마우스 설정"; subtitle: "포인터 모양, 가속 프로필 및 고급 옵션"; chevron: true; onClicked: sys.detach(["kcmshell6", "kcm_mouse"]) }
+    SRow { icon: "g:cursor"; title: "추가 마우스 설정"; subtitle: "포인터 모양, 가속 프로필 및 고급 옵션"; chevron: true; onClicked: sys.detach(["kcmshell6", "kcm_mouse"]) }
 }

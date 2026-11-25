@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Dock app 7
+Name[ko]=독 앱 7
+Comment=Opens or switches to app 7 in the dock (Meta+7)
+Exec=/usr/local/bin/temu-shell-activate dock-entry 7
+Icon=user-desktop
+NoDisplay=true
+StartupNotify=false
+X-KDE-Shortcuts=Meta+7

@@ -8,6 +8,7 @@ Item {
     property int size: 48
     property string fallback: "application-x-executable"
     width: size; height: size
+    implicitWidth: size; implicitHeight: size
     readonly property bool isFile: source.indexOf("/") === 0 || source.indexOf("file:") === 0 || source.indexOf("http") === 0
     Image {
         id: img

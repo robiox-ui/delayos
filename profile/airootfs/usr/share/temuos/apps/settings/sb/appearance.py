@@ -98,6 +98,9 @@ def _apply_scheme(name, hexcol):
         other = "BreezeDark" if "light" not in name.lower() else "BreezeLight"
         sh(["plasma-apply-colorscheme", other], 20)
         sh(["plasma-apply-colorscheme", "--accent-color", hexcol, name], 20)
+    # make the accent explicit for everything that reads kdeglobals (TemuUI Theme, shell plasmoids, our apps)
+    kwrite("kdeglobals", "General", "AccentColor", "%d,%d,%d" % _hex_rgb(hexcol))
+    kwrite("kdeglobals", "General", "LastUsedCustomAccentColor", "%d,%d,%d" % _hex_rgb(hexcol))
     return True
 
 

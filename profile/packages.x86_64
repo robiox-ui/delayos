@@ -227,3 +227,7 @@ nbd
 pyside6
 python-psutil
 plymouth
+papirus-icon-theme
+mokutil
+sbsigntools
+tpm2-tools

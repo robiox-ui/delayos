@@ -1,0 +1,2 @@
+module io.calamares.core
+singleton Global 1.0 Global.qml

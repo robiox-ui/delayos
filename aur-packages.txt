@@ -15,4 +15,4 @@ protonup-qt
 ?plasma6-applets-window-title
 # Mac apps (Darling) compiles for hours and is experimental: install later with
 #   yay -S darling
-
+?shim-signed

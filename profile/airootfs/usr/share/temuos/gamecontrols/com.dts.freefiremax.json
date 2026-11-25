@@ -1,0 +1,19 @@
+{
+ "package": "com.dts.freefiremax",
+ "name": "Free Fire MAX",
+ "layout": "TEMUOS 배치",
+ "controls": [
+  {"type": "joystick", "x": 0.16, "y": 0.66, "r": 0.125, "keys": ["W", "A", "S", "D"]},
+  {"type": "aim", "x": 0.62, "y": 0.41, "r": 0.225, "key": "Mouse"},
+  {"type": "tap", "x": 0.62, "y": 0.535, "key": "F"},
+  {"type": "tap", "x": 0.93, "y": 0.12, "key": "M"},
+  {"type": "tap", "x": 0.93, "y": 0.45, "key": "Right click"},
+  {"type": "tap", "x": 0.83, "y": 0.59, "key": "Click"},
+  {"type": "tap", "x": 0.93, "y": 0.68, "key": "Space"},
+  {"type": "tap", "x": 0.44, "y": 0.82, "key": "1"},
+  {"type": "tap", "x": 0.56, "y": 0.82, "key": "2"},
+  {"type": "tap", "x": 0.67, "y": 0.815, "key": "G"},
+  {"type": "tap", "x": 0.75, "y": 0.815, "key": "R"},
+  {"type": "tap", "x": 0.86, "y": 0.815, "key": "C"}
+ ]
+}

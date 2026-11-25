@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=TEMUOS
+Description=TEMUOS boot splash: logo on a dark crimson glow with a 3-dot pulse
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/temuos
+ScriptFile=/usr/share/plymouth/themes/temuos/temuos.script

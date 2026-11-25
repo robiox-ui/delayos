@@ -1,15 +1,12 @@
 [kdeglobals][General]
 ColorScheme=TemuDark
-AccentColor=242,115,95
-
-[kdeglobals][Icons]
-Theme=breeze-dark
+AccentColor=244,125,103
 
 [kdeglobals][KDE]
 widgetStyle=Breeze
 
 [plasmarc][Theme]
-name=breeze-dark
+name=TemuOS
 
 [kcminputrc][Mouse]
 cursorTheme=breeze_cursors
@@ -18,11 +15,11 @@ cursorTheme=breeze_cursors
 LayoutName=thumbnail_grid
 
 [kwinrc][org.kde.kdecoration2]
-library=org.kde.breeze
-theme=Breeze
+library=org.kde.kwin.aurorae
+theme=__aurorae__svg__TemuOS
 
 [KSplash]
-Theme=org.kde.Breeze
+Theme=None
 
 [Wallpaper]
-Image=/usr/share/wallpapers/TemuCurrent/
+Image=/usr/share/wallpapers/TemuTide/

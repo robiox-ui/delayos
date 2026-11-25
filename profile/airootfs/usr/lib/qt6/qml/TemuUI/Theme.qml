@@ -7,7 +7,7 @@ QtObject {
     id: t
     // dark is the default; apps/plasmoids may bind this to the Plasma colour scheme
     property bool dark: true
-    property color accent: "#F47D67"
+    property color accent: "#4D6BFE"
     readonly property color accentSoft: Qt.rgba(accent.r, accent.g, accent.b, 0.22)
     readonly property color accentBorder: Qt.rgba(accent.r, accent.g, accent.b, 0.60)
     readonly property color brandCrimson: "#D4194F"
@@ -59,7 +59,7 @@ QtObject {
     readonly property var accents: [
         { name: "크림슨", color: "#B41D49" }, { name: "코럴", color: "#EE7E69" }, { name: "피치", color: "#DB956A" },
         { name: "핑크", color: "#D87592" }, { name: "새먼", color: "#E67B84" }, { name: "앰버", color: "#E8BC6A" },
-        { name: "그린", color: "#89CA80" }, { name: "틸", color: "#6DC4A6" }, { name: "블루", color: "#7D9CD0" },
+        { name: "그린", color: "#89CA80" }, { name: "틸", color: "#6DC4A6" }, { name: "블루", color: "#4D6BFE" },
         { name: "바이올렛", color: "#AA8CDA" }, { name: "그레이", color: "#C0C4C8" } ]
 
     // radii

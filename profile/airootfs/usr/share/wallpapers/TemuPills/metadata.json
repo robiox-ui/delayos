@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "TEMUOS"
+            }
+        ],
+        "Id": "TemuPills",
+        "License": "CC-BY-SA-4.0",
+        "Name": "TEMUOS Pills",
+        "Name[ko]": "TEMUOS 캡슐"
+    }
+}

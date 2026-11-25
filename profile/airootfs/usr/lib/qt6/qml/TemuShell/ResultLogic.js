@@ -46,6 +46,13 @@ function answerSubtitle(kind, query, subtext) {
     return parts.join("  ·  ")
 }
 
+// "152.4 centimeters (cm)" -> "152.4 cm", "36.57 euros (EUR)" -> "36.57 EUR", "= 441" -> "441"
+function prettyAnswer(display) {
+    var d = String(display).replace(/^=\s*/, "").trim()
+    var m = d.match(/^([-+]?[\d.,\s]+(?:e[-+]?\d+)?)\s+[^()]*\(([^)]+)\)$/i)
+    return m ? (m[1].trim() + " " + m[2].trim()) : d
+}
+
 // value to put on the clipboard for an answer ("152.4 cm" -> "152.4 cm", "441" -> "441")
 function answerValue(display) {
     return String(display).replace(/^=\s*/, "").trim()

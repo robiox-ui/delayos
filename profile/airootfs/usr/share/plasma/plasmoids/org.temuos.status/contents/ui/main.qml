@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasma5support as P5Support
@@ -88,8 +89,8 @@ PlasmoidItem {
     Component.onCompleted: recountWin()
 
     Activator { id: act; containment: Plasmoid.containment }
-    readonly property var ccApplet: { Plasmoid.containment.applets; return act.find("org.temuos.controlcenter") }
-    readonly property var calApplet: { Plasmoid.containment.applets; return act.find("org.temuos.calendar") }
+    readonly property var ccApplet: { if (!Plasmoid.containment) return null; Plasmoid.containment.applets; return act.find("org.temuos.controlcenter") }
+    readonly property var calApplet: { if (!Plasmoid.containment) return null; Plasmoid.containment.applets; return act.find("org.temuos.calendar") }
     readonly property bool ccOpen: act.isOpen(ccApplet)
     readonly property bool calOpen: act.isOpen(calApplet)
 
@@ -128,6 +129,8 @@ PlasmoidItem {
 
     fullRepresentation: Item {
         id: full
+        // margin the panel containment leaves right of this applet (positions are from the screen edge)
+        readonly property real rightExtra: { width; Window.width; return Math.max(0, Window.width - mapToItem(null, 0, 0).x - width) }
         Layout.preferredWidth: (root.taskbar ? tbRow.implicitWidth + 12 : topRow.implicitWidth + 16 - 8)
         Layout.minimumWidth: Layout.preferredWidth
         Layout.fillHeight: true
@@ -137,7 +140,7 @@ PlasmoidItem {
             id: topRow
             visible: !root.taskbar
             anchors.right: parent.right
-            anchors.rightMargin: 16 - 8       // the time button carries 8 px of its own padding
+            anchors.rightMargin: 16 - 8 - full.rightExtra   // the time button carries 8 px of its own padding
             anchors.verticalCenter: parent.verticalCenter
             spacing: 14 - 16                   // neighbouring buttons each carry 8 px padding
 
@@ -197,7 +200,7 @@ PlasmoidItem {
             id: tbRow
             visible: root.taskbar
             anchors.right: parent.right
-            anchors.rightMargin: 12 - 6
+            anchors.rightMargin: 12 - 6 - full.rightExtra
             anchors.verticalCenter: parent.verticalCenter
             spacing: 0
 

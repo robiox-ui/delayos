@@ -5,8 +5,8 @@ import TemuUI
 Rectangle {
     id: root
     property string text: ""
-    property string icon: "checkmark"
-    property color iconColor: Theme.success
+    property string icon: "g:check"
+    property color iconColor: icon === "g:cross" ? "#E5484D" : Theme.success
     property int bottomMargin: 18
     anchors.horizontalCenter: parent.horizontalCenter
     y: parent.height - height - bottomMargin + slide
@@ -22,7 +22,7 @@ Rectangle {
     z: 1000
     function show(t, ic) {
         text = t
-        icon = ic || "checkmark"
+        icon = ic || "g:check"
         anim.restart()
     }
     Row {
@@ -34,7 +34,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             SIcon { anchors.centerIn: parent; name: root.icon; size: 10; tint: "#0E1018" }
         }
-        SText { text: root.text; color: "#F2F3F5"; font.pixelSize: 12.5; anchors.verticalCenter: parent.verticalCenter }
+        SText { text: root.text; color: "#F2F3F5"; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
     }
     SequentialAnimation {
         id: anim
