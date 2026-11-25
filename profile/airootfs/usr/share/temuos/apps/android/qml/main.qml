@@ -34,7 +34,7 @@ Window {
     }
     function setup() { job = "init"; line = "Android를 내려받는 중… (약 900 MB)"; frac = -1; sys.spawn("android-init", ["pkexec", sys.helper(), "android-init"]) }
     function installWaydroid() { job = "pkg"; line = "설치를 준비하는 중…"; sys.spawn("android-pkg", ["pkexec", sys.helper(), "install", "waydroid"]) }
-    Component.onCompleted: { Theme.accent = sys.accent(); Theme.dark = sys.dark(); load() }
+    Component.onCompleted: { var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = sys.dark(); load() }
     Connections {
         target: sys
         function onProcLine(id, l) {

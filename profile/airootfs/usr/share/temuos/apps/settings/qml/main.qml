@@ -53,14 +53,14 @@ Window {
     }
 
     Component.onCompleted: {
-        Theme.accent = sys.accent()
+        var _ac = sys.accent(); if (_ac) Theme.accent = _ac
         Theme.dark = sys.dark()
         handleArgs(appArgs)
         call("sb.accounts.me", [], function(r) { if (r && !r.error) win.me = r })
     }
     Connections {
         target: sys
-        function onAccentChanged(a) { Theme.accent = a }
+        function onAccentChanged(a) { if (a) Theme.accent = a }
         function onDarkChanged(d) { Theme.dark = d }
         function onActivated(a) { win.handleArgs(a); win.raise(); win.requestActivate() }
     }

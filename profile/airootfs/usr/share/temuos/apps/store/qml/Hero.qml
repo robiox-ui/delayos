@@ -46,7 +46,7 @@ Rectangle {
     Column {
         x: 26; y: 24
         spacing: 6
-        SText { text: "앱"; color: "#F2738F"; font.pixelSize: 12; font.weight: Font.DemiBold }
+        SText { text: "앱"; color: Qt.lighter(Theme.accent, 1.3); font.pixelSize: 12; font.weight: Font.DemiBold }
         SText { text: "필요한 모든 일을 위한 앱"; color: "white"; font.pixelSize: 28; font.weight: Font.DemiBold }
         SText { text: "Flathub와 제작자가 제공하는 앱을 한곳에서 업데이트하세요."; color: "#C9B3BC"; font.pixelSize: 13 }
         Item { width: 1; height: 10 }
@@ -57,7 +57,7 @@ Rectangle {
                         ["g:check", "클릭 한 번", "설치 파일을 찾을 필요 없음"], ["g:bag", "한곳에서", "찾아보기, 설치, 제거"]]
                 Row {
                     spacing: 8
-                    SIcon { name: modelData[0]; size: 15; tint: "#F2738F"; anchors.verticalCenter: parent.verticalCenter }
+                    SIcon { name: modelData[0]; size: 15; tint: Qt.lighter(Theme.accent, 1.3); anchors.verticalCenter: parent.verticalCenter }
                     Column {
                         SText { text: modelData[1]; color: "white"; font.pixelSize: 13; font.weight: Font.DemiBold }
                         SText { text: modelData[2]; color: "#BFA9B2"; font.pixelSize: 12 }

@@ -14,7 +14,8 @@ SPage {
         var a = ("" + ap.st.accent).toUpperCase()
         for (var i = 0; i < Theme.accents.length; i++) if (Theme.accents[i].color.toUpperCase() === a) return i
         for (i = 0; i < Theme.accents.length; i++) if (Theme.accents[i].name === ap.st.accentName) return i
-        return 1
+        for (i = 0; i < Theme.accents.length; i++) if (Theme.accents[i].name === "블루") return i
+        return 0
     }
     readonly property color shown: hover >= 0 ? Theme.accents[hover].color : Theme.accent
     readonly property string curName: Theme.accents[curIdx].name

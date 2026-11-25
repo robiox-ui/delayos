@@ -25,7 +25,7 @@ Window {
     function load() { loading = true; call("drivers.detect", [], function(r) { win.loading = false; if (Array.isArray(r)) win.devs = r }) }
     function install(slot, pkgs) { job = slot; line = "설치를 준비하는 중…"; frac = 0; sys.spawn("drv", ["pkexec", sys.helper(), "install"].concat(pkgs)) }
     function installAll() { var p = []; missing.forEach(function(d) { p = p.concat(d.missing) }); if (p.length) install("__all__", p) }
-    Component.onCompleted: { Theme.accent = sys.accent(); Theme.dark = sys.dark(); load() }
+    Component.onCompleted: { var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = sys.dark(); load() }
     Connections {
         target: sys
         function onProcLine(id, l) {

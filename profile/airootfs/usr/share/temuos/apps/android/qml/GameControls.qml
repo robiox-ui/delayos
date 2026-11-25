@@ -37,7 +37,7 @@ Window {
     }
     property bool started: false
     Component.onCompleted: {
-        Theme.accent = sys.accent(); Theme.dark = true
+        var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = true
         call("androidback.settings", [], function(r) { if (r) ov.gc = r })
         handle(appArgs)
         call("androidback.load_layout", [ov.pkg], function(r) { if (r && r.controls) { ov.layout = r; if (ov.editing) ov.backup = JSON.parse(JSON.stringify(r)) } })

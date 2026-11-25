@@ -86,14 +86,14 @@ Window {
         }
     }
     Component.onCompleted: {
-        Theme.accent = sys.accent(); Theme.dark = sys.dark()
+        var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = sys.dark()
         store.refreshInstalled()
         call("storeback.home", [], function(r) { if (r && r.essentials) win.homeData = r })
         handleArgs(appArgs)
     }
     Connections {
         target: sys
-        function onAccentChanged(a) { Theme.accent = a }
+        function onAccentChanged(a) { if (a) Theme.accent = a }
         function onDarkChanged(d) { Theme.dark = d }
         function onActivated(a) { win.handleArgs(a); win.raise(); win.requestActivate() }
     }
@@ -126,7 +126,7 @@ Window {
                     width: 202; height: 40; radius: 20
                     gradient: sel ? selGrad : null
                     color: sel ? "transparent" : (nma.containsMouse ? Qt.rgba(1,1,1, Theme.dark ? 0.05 : 0) : "transparent")
-                    Gradient { id: selGrad; orientation: Gradient.Horizontal; GradientStop { position: 0; color: "#B8174D" } GradientStop { position: 1; color: Qt.lighter(Theme.accent, 0.92) } }
+                    Gradient { id: selGrad; orientation: Gradient.Horizontal; GradientStop { position: 0; color: Qt.darker(Theme.accent, 1.45) } GradientStop { position: 1; color: Theme.accent } }
                     Row {
                         x: 16; anchors.verticalCenter: parent.verticalCenter; spacing: 10
                         SIcon { name: modelData.icon; size: 15; tint: parent.parent.sel ? "white" : Theme.text2; anchors.verticalCenter: parent.verticalCenter }

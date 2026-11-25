@@ -26,7 +26,7 @@ def state():
     layout = kread("temuosrc", "Shell", "Layout", "dock")
     return {
         "mode": mode, "scheme": scheme, "accent": read_accent(),
-        "accentName": _t("AccentName", "코럴"),
+        "accentName": _t("AccentName", "블루"),
         "layout": layout if layout in ("dock", "taskbar") else "dock",
         "autohide": kread("temuosrc", "Shell", "DockAutoHide", "false") == "true",
         "wallpaper": current_wallpaper(),

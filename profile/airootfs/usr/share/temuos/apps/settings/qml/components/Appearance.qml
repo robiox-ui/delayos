@@ -3,7 +3,7 @@ import QtQuick
 // Shared appearance state for Personalisation pages (loaded once per page).
 QtObject {
     id: ap
-    property var st: ({ mode: "dark", accent: "#F47D67", accentName: "코럴", layout: "dock", autohide: false, wallpaper: "" })
+    property var st: ({ mode: "dark", accent: Theme.accent.toString(), accentName: "블루", layout: "dock", autohide: false, wallpaper: "" })
     property var walls: []
     property bool loaded: false
     readonly property var cur: {

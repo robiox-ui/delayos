@@ -7,7 +7,7 @@ import TemuSys
     // ---- Windows Engine dialog (root window) ---------------------------------------------------
     Window {
         id: dlg
-        Component.onCompleted: { Theme.accent = sys.accent(); Theme.dark = sys.dark(); engine.start() }
+        Component.onCompleted: { var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = sys.dark(); engine.start() }
         Connections { target: engine; function onCloseRequested() { Qt.quit() } }
         visible: false
         // 400x150 including the 28 px title bar

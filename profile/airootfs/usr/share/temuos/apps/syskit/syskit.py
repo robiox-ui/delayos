@@ -15,6 +15,7 @@ import shlex
 import subprocess
 import sys
 import itertools
+import re
 import importlib
 from concurrent.futures import ThreadPoolExecutor
 
@@ -75,14 +76,30 @@ def kwrite(file, group, key, value, typ=None):
     return sh(args)[0] == 0
 
 
-def read_accent():
-    """Accent colour as '#RRGGBB' from kdeglobals (AccentColor is 'r,g,b')."""
-    v = kread("kdeglobals", "General", "AccentColor", "")
+def _user_kdeglobals_accent():
+    """AccentColor from the user's own ~/.config/kdeglobals only (not the /etc/xdg default)."""
     try:
-        r, g, b = [int(x) for x in v.split(",")[:3]]
-        return "#%02X%02X%02X" % (r, g, b)
+        group = ""
+        with open(os.path.expanduser("~/.config/kdeglobals"), encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("["):
+                    group = line
+                elif group == "[General]" and line.startswith("AccentColor="):
+                    r, g, b = [int(x) for x in line.split("=", 1)[1].split(",")[:3]]
+                    return "#%02X%02X%02X" % (r, g, b)
     except Exception:
-        return "#F47D67"
+        pass
+    return ""
+
+
+def read_accent():
+    """The accent the user picked ('#RRGGBB'), or "" to keep TemuUI's default (Theme.accent, blue #4D6BFE).
+    Order: ~/.config/temuosrc [Appearance] Accent (written by Settings), then the user's kdeglobals AccentColor."""
+    v = kread("temuosrc", "Appearance", "Accent", "")
+    if re.match(r"^#[0-9A-Fa-f]{6}$", v or ""):
+        return v.upper()
+    return _user_kdeglobals_accent()
 
 
 def is_dark():

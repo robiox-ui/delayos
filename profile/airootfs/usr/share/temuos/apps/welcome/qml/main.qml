@@ -34,7 +34,7 @@ Window {
     function call(name, args, cb) { sys.call(name, args || [], function(s) { var r = null; try { r = JSON.parse(s) } catch (e) {} if (cb) cb(r) }) }
     function has(b) { return (b.repo && installedPk.indexOf(b.repo) >= 0) || installedFp.indexOf(b.id.toLowerCase()) >= 0 }
     Component.onCompleted: {
-        Theme.accent = sys.accent(); Theme.dark = sys.dark()
+        var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = sys.dark()
         call("storeback.installed_ids", [], function(r) { if (r && r.repo) { win.installedPk = r.repo; win.installedFp = r.flatpak } })
     }
 
@@ -126,8 +126,8 @@ Window {
                 Layout.alignment: Qt.AlignHCenter
                 width: 170; height: 46; radius: 8; color: sma.containsMouse ? Qt.lighter(Theme.accent, 1.06) : Theme.accent
                 Row { anchors.centerIn: parent; spacing: 8
-                    SIcon { name: "go-next"; size: 15; tint: "#1A1012"; anchors.verticalCenter: parent.verticalCenter }
-                    SText { text: "시작하기"; color: "#1A1012"; font.pixelSize: 14; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter } }
+                    SIcon { name: "go-next"; size: 15; tint: Theme.textOnAccent; anchors.verticalCenter: parent.verticalCenter }
+                    SText { text: "시작하기"; color: Theme.textOnAccent; font.pixelSize: 14; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter } }
                 MouseArea { id: sma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.pageIdx = 1 }
             }
         }
@@ -286,8 +286,8 @@ Window {
         Rectangle {
             width: pr.implicitWidth + 36; height: 40; radius: 8; color: pma.containsMouse ? Qt.lighter(Theme.accent, 1.06) : Theme.accent
             Row { id: pr; anchors.centerIn: parent; spacing: 8
-                SIcon { name: win.pageIdx === 4 ? "g:check" : "go-next"; size: 15; tint: "#1A1012"; anchors.verticalCenter: parent.verticalCenter }
-                SText { text: win.pageIdx === 2 ? "설정 적용" : win.pageIdx === 4 ? "완료" : "계속"; color: "#1A1012"; font.pixelSize: 14; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter } }
+                SIcon { name: win.pageIdx === 4 ? "g:check" : "go-next"; size: 15; tint: Theme.textOnAccent; anchors.verticalCenter: parent.verticalCenter }
+                SText { text: win.pageIdx === 2 ? "설정 적용" : win.pageIdx === 4 ? "완료" : "계속"; color: Theme.textOnAccent; font.pixelSize: 14; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter } }
             MouseArea { id: pma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                 onClicked: { if (win.pageIdx === 1) win.pageIdx = 2; else if (win.pageIdx === 2) win.start(); else if (win.pageIdx === 4) Qt.quit() } }
         }
