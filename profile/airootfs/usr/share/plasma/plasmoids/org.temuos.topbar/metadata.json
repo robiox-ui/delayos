@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "TEMUOS_LINUX" }],
+        "Category": "Windows and Tasks",
+        "Description": "Top bar: TEMUOS logo (Start) and the active app name",
+        "Description[ko]": "상단 바: TEMUOS 로고(시작)와 현재 앱 이름",
+        "Icon": "temuos-logo",
+        "Id": "org.temuos.topbar",
+        "License": "GPL-2.0+",
+        "Name": "TEMUOS top bar",
+        "Name[ko]": "TEMUOS 상단 바",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

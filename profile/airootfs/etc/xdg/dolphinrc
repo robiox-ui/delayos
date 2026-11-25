@@ -1,0 +1,24 @@
+[General]
+# Browser-style tabs, remember open tabs, show file details pane
+RememberOpenedTabs=true
+OpenNewTabAfterLastTab=true
+ShowFullPathInTitlebar=false
+ShowStatusBar=true
+ShowZoomSlider=false
+ShowSpaceInfo=true
+UseTabForSwitchingSplitView=false
+ConfirmClosingMultipleTabs=false
+HomeUrl=file:///home
+
+[DetailsMode]
+PreviewSize=22
+
+[IconsMode]
+PreviewSize=64
+
+[PreviewSettings]
+Plugins=appimagethumbnail,audiothumbnail,blenderthumbnail,comicbookthumbnail,djvuthumbnail,ebookthumbnail,exrthumbnail,directorythumbnail,fontthumbnail,imagethumbnail,jpegthumbnail,kraorathumbnail,windowsexethumbnail,windowsimagethumbnail,mobithumbnail,opendocumentthumbnail,gsthumbnail,rawthumbnail,svgthumbnail,textthumbnail,ffmpegthumbs
+
+[MainWindow]
+MenuBar=Disabled
+ToolBarsMovable=Disabled

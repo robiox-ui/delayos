@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- "dock" (floating 47 px dock) or "taskbar" (43 px full-width bar, items centred on screen) -->
+    <entry name="mode" type="String"><default>dock</default></entry>
+    <!-- pinned apps, in order (same format as the KDE task manager) -->
+    <entry name="launchers" type="StringList">
+      <default>applications:org.temuos.Files.desktop,applications:org.temuos.Notepad.desktop,applications:org.temuos.Calculator.desktop,applications:org.temuos.TaskManager.desktop,applications:org.temuos.Settings.desktop,applications:google-chrome.desktop</default>
+    </entry>
+    <!-- the pins the dock started with (Settings > Taskbar pins > Reset) -->
+    <entry name="defaultLaunchers" type="StringList">
+      <default>applications:org.temuos.Files.desktop,applications:org.temuos.Notepad.desktop,applications:org.temuos.Calculator.desktop,applications:org.temuos.TaskManager.desktop,applications:org.temuos.Settings.desktop,applications:google-chrome.desktop</default>
+    </entry>
+  </group>
+</kcfg>

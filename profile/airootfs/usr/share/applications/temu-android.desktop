@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Android apps
+Name[ko]=Android 앱
+Comment=Run Android apps on TEMUOS_LINUX — Play Store, install .apk files
+Exec=/usr/local/bin/temu-android
+Icon=waydroid
+Categories=System;Emulator;
+Keywords=android;apk;play;store;mobile;

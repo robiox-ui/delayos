@@ -1,0 +1,34 @@
+---
+componentName: temuos
+welcomeStyleCalamares: true
+welcomeExpandingLogo: true
+windowExpanding: normal
+windowSize: 900px,620px
+windowPlacement: center
+sidebar: widget
+navigation: widget
+
+strings:
+  productName: TEMUOS_LINUX
+  shortProductName: TEMUOS_LINUX
+  version: rolling
+  shortVersion: rolling
+  versionedName: TEMUOS_LINUX
+  shortVersionedName: TEMUOS_LINUX
+  bootloaderEntryName: TEMUOS_LINUX
+  productUrl: https://archlinux.org
+  supportUrl: https://wiki.archlinux.org
+
+images:
+  productLogo: "/usr/share/icons/hicolor/scalable/apps/temuos-logo.svg"
+  productIcon: "/usr/share/icons/hicolor/scalable/apps/temuos-logo.svg"
+  productWelcome: "/usr/share/icons/hicolor/scalable/apps/temuos-logo.svg"
+
+slideshow: "show.qml"
+slideshowAPI: 2
+
+style:
+  SidebarBackground: "#161b22"
+  SidebarText: "#e6e8eb"
+  SidebarTextCurrent: "#ffffff"
+  SidebarBackgroundCurrent: "#f2735f"

@@ -1,0 +1,63 @@
+[Compositing]
+Backend=OpenGL
+GLCore=true
+LatencyPolicy=Low
+# Let fullscreen games bypass the compositor (= no extra input lag, more FPS)
+AllowTearing=true
+WindowsBlockCompositing=true
+
+[Plugins]
+# "Glass" look
+blurEnabled=true
+contrastEnabled=true
+backgroundcontrastEnabled=true
+# Genie minimise into the dock
+magiclampEnabled=true
+squashEnabled=false
+# Smooth desktop switching + Task View
+slideEnabled=true
+overviewEnabled=true
+# Rounded window corners (from kwin-effect-rounded-corners, optional AUR)
+kwin4_effect_shapecornersEnabled=true
+wobblywindowsEnabled=false
+# Light/dark that follows the time of day
+nightlightEnabled=false
+
+[Effect-blur]
+BlurStrength=12
+NoiseStrength=3
+
+[Effect-overview]
+BorderActivate=9
+TouchBorderActivate=9
+
+[Desktops]
+Number=1
+Rows=1
+
+[Windows]
+# Windows-style behaviour
+FocusPolicy=ClickToFocus
+ElectricBorderMaximize=true
+ElectricBorderTiling=true
+BorderlessMaximizedWindows=false
+Placement=Centered
+
+[org.kde.kdecoration2]
+library=org.kde.breeze
+theme=Breeze
+# Windows-style buttons on the right
+ButtonsOnLeft=
+ButtonsOnRight=IAX
+BorderSize=None
+BorderSizeAuto=false
+
+[TabBox]
+LayoutName=thumbnail_grid
+HighlightWindows=false
+
+[Xwayland]
+Scale=1
+
+[Wayland]
+InputMethod[$e]=/usr/share/applications/org.fcitx.Fcitx5.desktop

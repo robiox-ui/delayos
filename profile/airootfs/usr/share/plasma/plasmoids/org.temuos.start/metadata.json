@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [ { "Name": "TEMUOS" } ],
+        "Category": "Application Launchers",
+        "Description": "TEMUOS Start menu",
+        "Description[ko]": "TEMUOS 시작 메뉴",
+        "Icon": "temuos-logo",
+        "Id": "org.temuos.start",
+        "License": "GPL-2.0-or-later",
+        "Name": "Start",
+        "Name[ko]": "시작",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-Provides": [ "org.kde.plasma.launchermenu" ]
+}

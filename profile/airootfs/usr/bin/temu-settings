@@ -1,0 +1,8 @@
+#!/usr/bin/python3
+# TEMUOS 설정 (org.temuos.Settings). Usage: temu-settings [page[#rowkey]]  e.g. temu-settings personalisation
+import sys
+sys.path[:0] = ["/usr/share/temuos/apps/syskit", "/usr/share/temuos/apps/settings"]
+from syskit import run_app, single_instance
+if single_instance("org.temuos.Settings", sys.argv[1:]):
+    sys.exit(0)
+sys.exit(run_app("org.temuos.Settings", "설정", "/usr/share/temuos/apps/settings/qml/main.qml", icon="temuos-settings"))

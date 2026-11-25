@@ -1,0 +1,8 @@
+[Notifications]
+# Banners top-centre under the top bar (like the "island" pill in the video)
+PopupPosition=TopCenter
+PopupTimeout=5000
+LowPriorityHistory=true
+
+[Jobs]
+PermanentPopups=false

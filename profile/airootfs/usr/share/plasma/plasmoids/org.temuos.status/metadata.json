@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "TEMUOS_LINUX" }],
+        "Category": "System Information",
+        "Description": "Top bar / taskbar status area: network, sound, battery, clock (opens Control Center and calendar)",
+        "Description[ko]": "상단 바/작업 표시줄 상태 영역: 네트워크, 소리, 배터리, 시계",
+        "Icon": "preferences-system-time",
+        "Id": "org.temuos.status",
+        "License": "GPL-2.0+",
+        "Name": "TEMUOS status",
+        "Name[ko]": "TEMUOS 상태 표시",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

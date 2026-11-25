@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Search
+Name[ko]=검색
+Comment=Find apps, files, quick maths and the web (Super+Space)
+Exec=krunner
+Icon=search
+Categories=Utility;

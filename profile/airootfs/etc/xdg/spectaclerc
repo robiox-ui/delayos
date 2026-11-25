@@ -1,0 +1,9 @@
+[General]
+autoSaveImage=true
+clipboardGroup=PostScreenshotCopyImage
+launchAction=UseLastUsedCapturemode
+showCaptureInstructions=true
+
+[ImageSave]
+imageSaveLocation[$e]=file://$HOME/Pictures/Screenshots
+translatedScreenshotsFolder=Screenshots

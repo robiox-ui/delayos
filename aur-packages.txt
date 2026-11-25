@@ -1,0 +1,18 @@
+# AUR packages built by build.sh into the local repo.
+# Lines starting with "?" are optional: if they fail to build, the ISO is built without them.
+calamares
+ckbcomp
+yay-bin
+protonup-qt
+?bottles
+?game-devices-udev
+?xpadneo-dkms
+?python-pyclip
+?waydroid-script-git
+?waydroid-helper
+?winboat-bin
+?kwin-effect-rounded-corners-git
+?plasma6-applets-window-title
+# Mac apps (Darling) compiles for hours and is experimental: install later with
+#   yay -S darling
+

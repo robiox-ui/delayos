@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# temu-open: double-click any app file and it just runs.
+#   .exe/.msi/.bat  -> Windows Engine (WinBoat VM if set up, else Wine/Proton prefix)
+#   .apk            -> Android layer (Waydroid)
+#   .deb/.rpm       -> Debian/Fedora container (distrobox), exported to the Start menu
+#   .dmg            -> Mac apps (Darling, experimental)
+#   .AppImage       -> run directly
+set -u
+f="${1:?usage: temu-open FILE}"
+name="$(basename "$f")"
+note() { notify-send -a "$1" -i "$2" "$3" "${4:-}" 2>/dev/null; }
+
+case "${f,,}" in
+  *.exe|*.msi|*.bat|*.lnk)
+    if command -v winboat >/dev/null && [[ -f "$HOME/.winboat/docker-compose.yml" ]] \
+       && [[ "${TEMU_WINE:-0}" != 1 ]] && ! grep -qi -E 'setup|install|game' <<<"$name"; then
+      note "Windows Engine" computer "Opening $name..." "Running in the Windows Engine"
+      exec winboat --open "$f"
+    fi
+    prefix="$HOME/.local/share/temu/windows"
+    mkdir -p "$prefix"
+    note "Windows Engine" wine "Opening $name..." "This can take a moment the first time."
+    export WINEPREFIX="$prefix" WINEDEBUG=-all WINEFSYNC=1 DXVK_LOG_LEVEL=none
+    # Prefer Valve's Proton-based runtime (umu) when available: DXVK/VKD3D included
+    if command -v umu-run >/dev/null; then
+      exec env GAMEID=0 PROTONPATH=GE-Proton umu-run "$f"
+    fi
+    [[ -f "$prefix/.temu-dxvk" ]] || { winetricks -q dxvk vkd3d >/dev/null 2>&1; touch "$prefix/.temu-dxvk"; }
+    case "${f,,}" in
+      *.msi) exec gamemoderun wine msiexec /i "$f" ;;
+      *)     exec gamemoderun wine "$f" ;;
+    esac
+    ;;
+  *.apk|*.xapk)
+    note "Android apps" android "Installing $name..." "It will appear in Start when it's ready."
+    if ! waydroid status 2>/dev/null | grep -q "RUNNING"; then
+      waydroid session start >/dev/null 2>&1 &
+      for _ in $(seq 60); do waydroid status 2>/dev/null | grep -q "RUNNING" && break; sleep 1; done
+    fi
+    waydroid app install "$f" && note "Android apps" android "$name is ready" "Open it from Start."
+    ;;
+  *.deb)
+    note "Linux apps" debian-logo "Installing $name..." "Using a Debian container"
+    distrobox list 2>/dev/null | grep -q temu-debian || distrobox create -Y -n temu-debian -i debian:stable
+    distrobox enter temu-debian -- sudo apt-get install -y "$f"
+    pkg=$(dpkg-deb -f "$f" Package 2>/dev/null || basename "$f" .deb)
+    distrobox enter temu-debian -- distrobox-export --app "$pkg" 2>/dev/null
+    note "Linux apps" debian-logo "$pkg is ready" "Open it from Start."
+    ;;
+  *.rpm)
+    note "Linux apps" fedora-logo "Installing $name..." "Using a Fedora container"
+    distrobox list 2>/dev/null | grep -q temu-fedora || distrobox create -Y -n temu-fedora -i fedora:latest
+    distrobox enter temu-fedora -- sudo dnf install -y "$f"
+    pkg=$(rpm -qp --qf '%{NAME}' "$f" 2>/dev/null || basename "$f" .rpm)
+    distrobox enter temu-fedora -- distrobox-export --app "$pkg" 2>/dev/null
+    note "Linux apps" fedora-logo "$pkg is ready" "Open it from Start."
+    ;;
+  *.dmg)
+    if command -v darling >/dev/null; then
+      note "Mac apps (preview)" applications-other "Opening $name" "This can take a moment the first time."
+      exec darling shell open "$f"
+    fi
+    note "Mac apps" dialog-warning "Mac app support isn't installed" "Install 'darling' from the store (experimental)."
+    ;;
+  *.appimage)
+    chmod +x "$f" && exec "$f"
+    ;;
+  *)
+    exec xdg-open "$f"
+    ;;
+esac

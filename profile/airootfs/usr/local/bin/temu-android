@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# First run: download the Android image (with Google Play) and start in
+# multi-window mode so every Android app gets its own desktop window.
+set -u
+if [[ ! -d /var/lib/waydroid/images ]] || [[ -z "$(ls -A /var/lib/waydroid/images 2>/dev/null)" ]]; then
+  notify-send -a "Android apps" -i android "Setting up Android apps" "Downloading Android (about 900 MB). This happens once." 2>/dev/null
+  pkexec sh -c 'waydroid init -s GAPPS -f && systemctl enable --now waydroid-container.service' || exit 1
+  waydroid prop set persist.waydroid.multi_windows true
+  waydroid prop set persist.waydroid.cursor_on_subsurface true
+  waydroid prop set persist.waydroid.width_padding 0
+fi
+systemctl is-active --quiet waydroid-container.service || pkexec systemctl start waydroid-container.service
+exec waydroid show-full-ui

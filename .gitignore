@@ -1,0 +1,21 @@
+# never publish signing keys
+*.key
+*.pem
+*.p12
+*.der.key
+temuos-keys/
+keys/
+# build outputs
+out/
+work/
+*.iso
+*.iso.sha256
+*.pkg.tar.zst
+*.tar
+*.tar.gz
+src/
+pkg/
+# local scratch
+*.log# internal working notes (local paths, test VM details)
+docs/dev-guide.md
+docs/reports/

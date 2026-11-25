@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Runs once as root on every boot of the live ISO and on the first boot of an
+# installed system (temu-firstboot.service). Idempotent.
+set -u
+STAMP=/var/lib/temu/firstboot.done
+mkdir -p /var/lib/temu
+
+# ---- Live session user (only on the ISO) ----
+if grep -q archisobasedir /proc/cmdline && ! id live >/dev/null 2>&1; then
+  useradd -m -G wheel,video,audio,input,gamemode,docker -s /bin/bash live
+  passwd -d live
+  echo 'live ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/10-live
+  chmod 440 /etc/sudoers.d/10-live
+  install -d -o live -g live /home/live/Desktop
+  cp /usr/share/applications/calamares.desktop /home/live/Desktop/install-temuos.desktop 2>/dev/null &&
+    chown live:live /home/live/Desktop/install-temuos.desktop && chmod +x /home/live/Desktop/install-temuos.desktop
+fi
+
+[[ -e $STAMP ]] && exit 0
+
+# ---- Low-memory machines (< 1.5 GB): lightweight session as default ----
+mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+if (( mem_kb < 1500000 )); then
+  mkdir -p /etc/sddm.conf.d
+  printf '[Autologin]\nSession=temu-lite\n' > /etc/sddm.conf.d/20-lite.conf
+  # zram up to 2x RAM on tiny machines
+  mkdir -p /etc/systemd
+  printf '[zram0]\ncompression-algorithm = zstd\nzram-size = ram * 2\nswap-priority = 100\nfs-type = swap\n' > /etc/systemd/zram-generator.conf
+fi
+
+# ---- Hardware-specific tuning ----
+if lspci | grep -qi 'vga.*nvidia\|3d.*nvidia'; then
+  systemctl enable nvidia-suspend.service nvidia-resume.service nvidia-hibernate.service 2>/dev/null
+fi
+
+# ---- Flathub for the app store (Discover) ----
+flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null
+
+touch "$STAMP"

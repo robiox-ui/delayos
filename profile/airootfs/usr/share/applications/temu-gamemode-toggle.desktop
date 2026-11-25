@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Gaming mode
+Name[ko]=게이밍 모드
+Comment=Turn Gaming mode on or off
+Exec=/usr/local/bin/temu-gamemode toggle
+Icon=input-gaming
+Categories=Game;System;
+Keywords=game;performance;fps;boost;

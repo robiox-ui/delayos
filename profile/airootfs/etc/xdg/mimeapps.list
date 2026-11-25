@@ -1,0 +1,21 @@
+[Default Applications]
+application/x-ms-dos-executable=temu-open.desktop
+application/x-msdownload=temu-open.desktop
+application/x-msi=temu-open.desktop
+application/x-ms-shortcut=temu-open.desktop
+application/x-bat=temu-open.desktop
+application/vnd.android.package-archive=temu-open.desktop
+application/vnd.debian.binary-package=temu-open.desktop
+application/x-rpm=temu-open.desktop
+application/x-apple-diskimage=temu-open.desktop
+application/x-appimage=temu-open.desktop
+application/vnd.appimage=temu-open.desktop
+text/plain=org.kde.kwrite.desktop
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+text/html=firefox.desktop
+image/png=org.kde.gwenview.desktop
+image/jpeg=org.kde.gwenview.desktop
+application/pdf=org.kde.okular.desktop
+video/mp4=vlc.desktop
+video/x-matroska=vlc.desktop

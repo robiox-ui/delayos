@@ -1,0 +1,19 @@
+[General]
+FreeFloating=true
+ActivityAware=true
+historyBehavior=CompletionSuggestion
+
+[Plugins]
+# Quick answers: maths, units, currency, web; ">cmd" runs in a terminal
+calculatorEnabled=true
+unitconverterEnabled=true
+webshortcutsEnabled=true
+shellEnabled=true
+baloosearchEnabled=true
+krunner_appstreamEnabled=false
+krunner_spellcheckEnabled=false
+browserhistoryEnabled=false
+browsertabsEnabled=false
+
+[Runners][webshortcuts]
+DefaultWebShortcut=duckduckgo

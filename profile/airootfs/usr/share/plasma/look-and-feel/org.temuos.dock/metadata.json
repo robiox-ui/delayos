@@ -1,0 +1,13 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [{ "Name": "TEMUOS_LINUX" }],
+        "Category": "",
+        "Description": "Top bar + floating dock, glass, coral accent",
+        "Id": "org.temuos.dock",
+        "License": "GPL-2.0+",
+        "Name": "Temu (Dock and top bar)",
+        "Version": "1.0"
+    },
+    "X-Plasma-APIVersion": "2"
+}

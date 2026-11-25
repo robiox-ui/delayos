@@ -1,0 +1,45 @@
+#!/usr/bin/python3
+"""TEMUOS shell popups remote control (stream shell-popups).
+
+    temu-shell toggle|show|hide <popup>
+
+popups: start commandbar controlcenter calendar clipboard emoji winx allapps
+        ("hide all" closes every popup)
+
+Briefly owns the session-bus name org.temuos.Shell and emits the signal
+org.temuos.Shell.<Toggle|Show|Hide>(s popup) on /org/temuos/Shell. Every popup
+plasmoid listens for it (TemuShell/ShellListener.qml, a Plasma SignalWatcher,
+which only accepts signals from that well-known name).
+"""
+import sys
+
+NAMES = ("start", "commandbar", "controlcenter", "calendar", "clipboard", "emoji",
+         "winx", "allapps", "all")
+
+
+def main():
+    if len(sys.argv) != 3 or sys.argv[1] not in ("toggle", "show", "hide") or sys.argv[2] not in NAMES:
+        sys.stderr.write("usage: temu-shell toggle|show|hide <%s>\n" % "|".join(NAMES))
+        return 2
+    from PySide6.QtDBus import QDBusConnection, QDBusMessage, QDBusConnectionInterface
+    bus = QDBusConnection.sessionBus()
+    if not bus.isConnected():
+        sys.stderr.write("temu-shell: no session bus\n")
+        return 1
+    # wait in the queue if another temu-shell holds the name right now
+    reply = bus.interface().registerService("org.temuos.Shell",
+                                            QDBusConnectionInterface.QueueService,
+                                            QDBusConnectionInterface.AllowReplacement)
+    member = sys.argv[1].capitalize()
+    sig = QDBusMessage.createSignal("/org/temuos/Shell", "org.temuos.Shell", member)
+    sig.setArguments([sys.argv[2]])
+    bus.send(sig)
+    # a blocking round trip flushes the signal before we exit and drop the name
+    bus.call(QDBusMessage.createMethodCall("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                           "org.freedesktop.DBus", "GetId"))
+    bus.unregisterService("org.temuos.Shell")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

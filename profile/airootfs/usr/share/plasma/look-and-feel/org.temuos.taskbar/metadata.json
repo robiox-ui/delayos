@@ -1,0 +1,13 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [{ "Name": "TEMUOS_LINUX" }],
+        "Category": "",
+        "Description": "Full-width Windows-style taskbar, glass, coral accent",
+        "Id": "org.temuos.taskbar",
+        "License": "GPL-2.0+",
+        "Name": "Temu (Taskbar)",
+        "Version": "1.0"
+    },
+    "X-Plasma-APIVersion": "2"
+}

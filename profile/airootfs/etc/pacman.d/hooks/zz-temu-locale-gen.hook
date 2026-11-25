@@ -1,0 +1,12 @@
+# Generate the Korean (and English) locales right after glibc is installed into the image
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = glibc
+
+[Action]
+Description = Generating locales (ko_KR, en_US)...
+When = PostTransaction
+Depends = glibc
+Exec = /usr/bin/sh -c "sed -i -E 's/^#(ko_KR.UTF-8 UTF-8|en_US.UTF-8 UTF-8)/\1/' /etc/locale.gen && locale-gen"

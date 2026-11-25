@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "TEMUOS_LINUX" }],
+        "Category": "System Information",
+        "Description": "One-click Gaming mode pill",
+        "Description[ko]": "한 번 클릭으로 게이밍 모드 켜기/끄기",
+        "Icon": "input-gaming",
+        "Id": "org.temuos.gamingtoggle",
+        "License": "GPL-2.0+",
+        "Name": "Gaming mode",
+        "Name[ko]": "게이밍 모드",
+        "Version": "2.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

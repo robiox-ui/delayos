@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+MimeType=image/png;image/jpeg;image/webp;image/svg+xml;
+Actions=setWallpaper;
+X-KDE-Priority=TopLevel
+
+[Desktop Action setWallpaper]
+Name=Set as desktop background
+Name[ko]=바탕 화면 배경으로 설정
+Icon=preferences-desktop-wallpaper
+Exec=sh -c 'plasma-apply-wallpaperimage "%f" && notify-send -a Background -i preferences-desktop-wallpaper "Background changed" "$(basename "%f")"'

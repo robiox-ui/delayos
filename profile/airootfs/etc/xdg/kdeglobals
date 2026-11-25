@@ -1,0 +1,30 @@
+[General]
+ColorScheme=TemuDark
+AccentColor=242,115,95
+font=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+fixed=JetBrains Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+smallestReadableFont=Inter,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+toolBarFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+menuFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+TerminalApplication=konsole
+BrowserApplication=firefox.desktop
+
+[Icons]
+Theme=breeze-dark
+
+[KDE]
+LookAndFeelPackage=org.temuos.dock
+widgetStyle=Breeze
+SingleClick=false
+# Snappier animations, same as CachyOS (1.0 = default; lower = faster)
+AnimationDurationFactor=0.25
+ShowDeleteCommand=false
+
+[WM]
+activeFont=Inter,10,-1,5,600,0,0,0,0,0,0,0,0,0,0,1
+
+[KFileDialog Settings]
+Show hidden files=false
+
+[PreviewSettings]
+MaximumRemoteSize=0

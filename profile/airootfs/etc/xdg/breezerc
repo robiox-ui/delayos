@@ -1,0 +1,9 @@
+[Common]
+OutlineCloseButton=false
+ShadowSize=ShadowLarge
+ShadowStrength=110
+
+[Windeco]
+DrawBorderOnMaximizedWindows=false
+DrawTitleBarSeparator=false
+TitleAlignment=AlignLeft

@@ -1,0 +1,7 @@
+# File indexing off, same as CachyOS (apps/settings search still works)
+[Basic Settings]
+Indexing-Enabled=false
+
+[General]
+only basic indexing=true
+exclude folders[$e]=$HOME/.steam/,$HOME/.local/share/Steam/,$HOME/.local/share/waydroid/,$HOME/Games/,$HOME/.wine/,$HOME/.cache/
