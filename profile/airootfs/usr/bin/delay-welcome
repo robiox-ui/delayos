@@ -19,4 +19,4 @@ def ctx():
 
 
 sys.exit(run_app("org.delayos.Welcome", "시작하기", "/usr/share/delayos/apps/welcome/qml/main.qml",
-                 icon="delayos-welcome", extra_ctx=ctx))
+                 icon="delayos-welcome", extra_ctx=ctx, light_theme=True))

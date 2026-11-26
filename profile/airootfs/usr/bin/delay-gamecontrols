@@ -6,4 +6,4 @@ sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/andro
 from syskit import run_app, single_instance
 if single_instance("org.delayos.GameControls", sys.argv[1:]):
     sys.exit(0)
-sys.exit(run_app("org.delayos.GameControls", "게임 컨트롤", "/usr/share/delayos/apps/android/qml/GameControls.qml", icon="input-gaming"))
+sys.exit(run_app("org.delayos.GameControls", "게임 컨트롤", "/usr/share/delayos/apps/android/qml/GameControls.qml", icon="input-gaming", light_theme=True))

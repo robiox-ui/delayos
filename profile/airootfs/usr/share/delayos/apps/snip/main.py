@@ -24,13 +24,8 @@ RUN = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 
 
 def pictures_dir():
-    try:
-        out = subprocess.run(["xdg-user-dir", "PICTURES"], capture_output=True, text=True, timeout=1).stdout.strip()
-        if out and out != os.path.expanduser("~"):
-            return out
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return os.path.expanduser("~/Pictures")
+    from userdirs import user_dir        # user-dirs.dirs read in-process (was a process spawn per call)
+    return user_dir("PICTURES", os.path.expanduser("~/Pictures"))
 
 
 @ClassInfo({"D-Bus Interface": "org.delayos.Snip"})

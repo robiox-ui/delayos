@@ -340,8 +340,13 @@ def _hook_instance(bridge):
     bridge._notifier = n
 
 
-def run_app(app_id, title, qml_file, modules=None, icon=None, extra_ctx=None, argv=None):
-    """Create the app, expose `sys`, load qml_file and exec."""
+def run_app(app_id, title, qml_file, modules=None, icon=None, extra_ctx=None, argv=None, light_theme=False):
+    """Create the app, expose `sys`, load qml_file and exec.
+    light_theme: for apps without a native file dialog; skips the KDE platform theme plugin, about 20 ms of
+    the start and 5 MB (see light_platform_theme in apps/common/delayapp.py; same switch, kept in step)."""
+    themed = light_theme and "QT_QPA_PLATFORMTHEME" not in os.environ
+    if themed:
+        os.environ["QT_QPA_PLATFORMTHEME"] = "generic"
     QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
     try:        # no usable GPU (delay-render-detect): CPU scene graph, see apps/common/delayapp.py
@@ -351,6 +356,8 @@ def run_app(app_id, title, qml_file, modules=None, icon=None, extra_ctx=None, ar
     except OSError:
         pass
     app = QGuiApplication(argv or sys.argv)
+    if themed:      # Qt has read it; programs started from this app must not inherit it
+        os.environ.pop("QT_QPA_PLATFORMTHEME", None)
     app.setOrganizationName("DelayOS")
     app.setApplicationName(app_id.split(".")[-1].lower())
     app.setApplicationDisplayName(title)

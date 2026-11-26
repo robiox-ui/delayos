@@ -1,4 +1,0 @@
-# DelayOS software-render profile (no GPU): no animations in KWin, Plasma and the widget styles.
-# A window that appears at once looks smoother than an animation the CPU cannot keep at 60 fps.
-[KDE]
-AnimationDurationFactor=0

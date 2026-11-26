@@ -974,7 +974,7 @@ def _publisher_from(pkg, url):
 def main():
     backend = Backend()
     return run("org.delayos.TaskManager", os.path.join(HERE, "qml", "Main.qml"),
-               context={"backend": backend}, single_instance=True, name="작업 관리자")
+               context={"backend": backend}, single_instance=True, name="작업 관리자", light_theme=True)
 
 
 if __name__ == "__main__":

@@ -85,15 +85,10 @@ class Backend(QObject):
 
     @Slot(result=str)
     def documentsUrl(self):
-        d = os.path.expanduser("~/Documents")
-        try:
-            import subprocess
-            out = subprocess.run(["xdg-user-dir", "DOCUMENTS"], capture_output=True, text=True, timeout=1).stdout.strip()
-            if out:
-                d = out
-        except Exception:
-            pass
-        return QUrl.fromLocalFile(d).toString()
+        # read from user-dirs.dirs: this runs while the window is built (the open dialog's start folder), and
+        # starting the xdg-user-dir script for it (plus importing subprocess) was about 6 ms of every launch
+        from userdirs import user_dir
+        return QUrl.fromLocalFile(user_dir("DOCUMENTS")).toString()
 
     @Slot(result=str)
     def loadSession(self):

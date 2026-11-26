@@ -136,7 +136,7 @@ class Backend(QObject):
 
 def main():
     return run("org.delayos.Calculator", os.path.join(HERE, "qml", "Main.qml"),
-               context={"backend": Backend()}, name="계산기")
+               context={"backend": Backend()}, name="계산기", light_theme=True)
 
 
 if __name__ == "__main__":

@@ -33,6 +33,25 @@ if software_render():
     # memory, first frame 218 -> 182 ms. No DelayOS app uses shaders or layers.
     os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
+
+def light_platform_theme():
+    """Use Qt's built-in platform theme instead of the KDE one (plasma-integration) for this process.
+
+    For apps that draw everything themselves (DelayUI) and open no native file/colour dialog: the KDE theme
+    plugin loads about 130 KDE Frameworks mappings and reads the Plasma configuration before the first
+    window, which measured 18-20 ms of every start and 14 MB RSS / 5 MB PSS per app. Fonts (Inter is set
+    explicitly), colours (Theme tokens), icons (own lookup) and the mouse cursor (drawn by KWin through the
+    cursor-shape protocol) do not come from it; a calculator screenshot is pixel-identical either way.
+    Must run before the QGuiApplication is created. Apps with a FileDialog must not call it: the native
+    (portal) dialog comes from the KDE theme. A user's own QT_QPA_PLATFORMTHEME wins.
+    Returns True when it set the variable: the caller removes it again once the application object exists
+    (Qt has read it by then), so programs started from the app do not inherit it."""
+    if "QT_QPA_PLATFORMTHEME" in os.environ:
+        return False
+    os.environ["QT_QPA_PLATFORMTHEME"] = "generic"
+    return True
+
+
 from PySide6.QtCore import QObject, Signal, Slot, Property, QFileSystemWatcher, QTimer, QUrl, Qt  # noqa: E402
 from PySide6.QtGui import QFont, QGuiApplication, QColor, QIcon  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
@@ -213,13 +232,17 @@ def _quit_on_signals(app):
     app._delay_sig = (r, w, notifier)
 
 
-def run(app_id, qml_path, context=None, widgets=False, single_instance=False, name=None, setup=None):
+def run(app_id, qml_path, context=None, widgets=False, single_instance=False, name=None, setup=None,
+        light_theme=False):
+    themed = light_theme and not widgets and light_platform_theme()
     if widgets:
         from PySide6.QtWidgets import QApplication as App
     else:
         App = QGuiApplication
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = App(sys.argv)
+    if themed:
+        os.environ.pop("QT_QPA_PLATFORMTHEME", None)
     app.setOrganizationName("DelayOS")
     app.setApplicationName(name or app_id.split(".")[-1])
     app.setDesktopFileName(app_id)

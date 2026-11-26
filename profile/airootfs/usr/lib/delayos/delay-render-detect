@@ -7,7 +7,7 @@
 #   /run/delay/SoftwareRender.qml   only in software mode; DelayUI's Theme.softwareRender tests for it
 #   /run/delay/plasmashell.env      only in software mode; environment of plasmashell (systemd drop-in)
 # The session (/etc/xdg/plasma-workspace/env/delay-render.sh), the DelayOS apps (delayapp.py) and the
-# shell read these and switch to the cheap look: no blur, no rounded-corner shader, no animations,
+# shell read these and switch to the cheap look: no blur, no rounded-corner shader, light animations,
 # opaque panels, CPU scene graph for the apps. Nothing is stored on disk, so a machine that gets a
 # working GPU (driver installed, 3D enabled in the VM) is back to the full look at the next boot.
 #

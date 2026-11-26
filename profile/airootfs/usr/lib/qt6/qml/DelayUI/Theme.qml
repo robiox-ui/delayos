@@ -9,7 +9,8 @@ QtObject {
     property bool dark: true
     // true when the CPU draws the desktop (no usable GPU: llvmpipe in a VM without 3D, an old card, a broken
     // driver). Decided at boot by /usr/lib/delayos/delay-render-detect, which leaves this file in /run only
-    // then. Components use it for the cheap look: opaque surfaces instead of glass, no motion, no layers.
+    // then. Components use it for the cheap look: opaque surfaces instead of glass, no layers or shaders.
+    // Motion stays (opacity, a small scale or shift): it is cheap for the CPU scene graph.
     readonly property bool softwareRender: Qt.createComponent("file:///run/delay/SoftwareRender.qml").status === Component.Ready
     property color accent: "#4D6BFE"
     readonly property color accentSoft: Qt.rgba(accent.r, accent.g, accent.b, 0.22)

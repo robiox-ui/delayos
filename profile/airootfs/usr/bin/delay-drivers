@@ -5,4 +5,4 @@ sys.path[:0] = ["/usr/share/delayos/apps/syskit"]
 from syskit import run_app, single_instance
 if single_instance("org.delayos.Drivers", []):
     sys.exit(0)
-sys.exit(run_app("org.delayos.Drivers", "드라이버", "/usr/share/delayos/apps/drivers/qml/main.qml", icon="delayos-drivers"))
+sys.exit(run_app("org.delayos.Drivers", "드라이버", "/usr/share/delayos/apps/drivers/qml/main.qml", icon="delayos-drivers", light_theme=True))
