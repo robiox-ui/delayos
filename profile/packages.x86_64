@@ -237,3 +237,4 @@ pacman-contrib
 desktop-file-utils
 xdg-utils
 polkit
+fastfetch

@@ -40,6 +40,7 @@ file_permissions=(
   ["/usr/local/bin/delay-game-key"]="0:0:755"
   # DelayOS apps
   ["/usr/bin/delay-notepad"]="0:0:755"
+  ["/usr/bin/delayfetch"]="0:0:755"
   ["/usr/bin/delay-calc"]="0:0:755"
   ["/usr/bin/delay-taskmanager"]="0:0:755"
   ["/usr/bin/delay-snip"]="0:0:755"

@@ -1,0 +1,3 @@
+#!/bin/sh
+# DelayOS system info: fastfetch with the DelayOS logo and Korean labels.
+exec fastfetch -c /etc/xdg/fastfetch/config.jsonc "$@"

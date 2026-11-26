@@ -22,3 +22,6 @@ pkg/
 # internal working notes (local paths, test VM details)
 docs/dev-guide.md
 docs/reports/
+
+docs/video-analysis/
+docs/ui-spec.md
