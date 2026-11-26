@@ -88,6 +88,29 @@ if ! ls "$KDIR"/linux-delayos-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
 fi
 cp -u "$KDIR"/linux-delayos-*.pkg.tar.zst "$LOCALREPO/"
 
+# ------------------- linux-delayos-v3: the same kernel built for x86-64-v3 (optional)
+# Opt-in with DELAYOS_KERNEL_V3=1: a second full kernel compile (about as long as the first).
+# It is the same PKGBUILD with two values changed, so the two can never drift apart. The packages
+# ride along on the ISO in /var/cache/delayos/kernel-v3; `delay-cpu-opt kernel install` installs
+# them on CPUs with x86-64-v3 when the CachyOS repositories (linux-cachyos) are not in use.
+# linux-delayos (generic x86-64) always stays installed as the GRUB fallback.
+V3_FILES=()
+if [[ ${DELAYOS_KERNEL_V3:-0} == 1 ]]; then
+  K3DIR="/home/$BUILDER/linux-delayos-v3"
+  if ! ls "$K3DIR"/linux-delayos-v3-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
+    log "Building linux-delayos-v3 kernel (x86-64-v3) - this takes a while"
+    rm -rf "$K3DIR"; mkdir -p "$K3DIR"; cp "$HERE/kernel/linux-delayos/"{PKGBUILD,config} "$K3DIR/"
+    sed -i -e 's/\r$//' -e 's/^_pkgsuffix=delayos$/_pkgsuffix=delayos-v3/' \
+           -e 's/^: "${_processor_opt:=generic_v1}"/: "${_processor_opt:=generic_v3}"/' "$K3DIR/PKGBUILD"
+    grep -q '^_pkgsuffix=delayos-v3$' "$K3DIR/PKGBUILD" && grep -q '_processor_opt:=generic_v3' "$K3DIR/PKGBUILD" \
+      || die "linux-delayos-v3: could not derive the PKGBUILD from kernel/linux-delayos/PKGBUILD"
+    chown -R "$BUILDER:$BUILDER" "$K3DIR"
+    as_builder "cd ~/linux-delayos-v3 && MAKEFLAGS=-j$(nproc) makepkg -s --noconfirm --skippgpcheck" \
+      || die "linux-delayos-v3 kernel failed to build"
+  fi
+  V3_FILES=("$K3DIR"/linux-delayos-v3-*.pkg.tar.zst)
+fi
+
 # ------------------- EAC Linux v2: DelayOS-signed boot loaders + linux-delayos-eac (optional)
 # Needs the DelayOS Secure Boot keys (tools/make-delayos-sb-key.sh). Skipped without them.
 KEYS="${DELAYOS_KEYS:-/root/delayos-keys}"
@@ -178,6 +201,11 @@ if (( ${#EAC_FILES[@]} )); then
   install -d "$PROFILE/airootfs/var/cache/delayos/eac-pkgs"
   cp "${EAC_FILES[@]}" "$LOCALREPO"/delayos-sb-signed-*.pkg.tar.zst "$PROFILE/airootfs/var/cache/delayos/eac-pkgs/"
   echo delayos-sb-signed >> "$PROFILE/packages.x86_64"
+fi
+# x86-64-v3 build of the kernel (DELAYOS_KERNEL_V3=1): installed on demand by `delay-cpu-opt kernel install`
+if (( ${#V3_FILES[@]} )); then
+  install -d "$PROFILE/airootfs/var/cache/delayos/kernel-v3"
+  cp "${V3_FILES[@]}" "$PROFILE/airootfs/var/cache/delayos/kernel-v3/"
 fi
 # Signed GRUB + kernel image for Secure Boot next to the hidden Windows (delay-winsetup)
 (( SBG_BUILT )) && echo delayos-sb-general >> "$PROFILE/packages.x86_64"

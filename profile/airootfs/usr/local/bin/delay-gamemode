@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # DelayOS "Gaming" mode — one click in the top bar.
-# Frees CPU/RAM/disk for the game: performance power profile, no desktop
-# glass/blur effects, file indexer + background updaters paused.
+# Frees CPU/RAM/disk for the game: performance power profile, CPU EPP performance, LAVD gaming
+# scheduler, AMD GPU at its highest power state, V-Cache cores first on Ryzen X3D, no desktop
+# glass/blur effects, file indexer + background updaters paused. "off" restores what was there.
 #
 #   delay-gamemode on|off|toggle|status
-#   delay-gamemode hook-start|hook-end   (called by gamemoded for every game)
+#   delay-gamemode mangohud on|off|toggle|status    FPS overlay for games started with delay-game
+#   delay-gamemode gamescope on|off|toggle|status   run games started with delay-game in gamescope
+#   delay-gamemode hook-start|hook-end              (called by gamemoded when games start / end)
+# Steam launch options for a game (nothing is forced on any game):  delay-game %command%
 set -u
 STATE="${XDG_RUNTIME_DIR:-/tmp}/delay-gaming"
+OPTS="${XDG_CONFIG_HOME:-$HOME/.config}/delayos/gaming.conf"   # mangohud=0|1, gamescope=0|1, gamescope_args=...
 KWIN_EFFECTS=(blur contrast backgroundcontrast slidingpopups kwin4_effect_translucency
               wobblywindows magiclamp overview windowview)
 
@@ -16,12 +21,13 @@ kwin_effects() { # $1 = load|unload
   local q; q=$(qdbus_cmd)
   for e in "${KWIN_EFFECTS[@]}"; do
     if [[ $1 == unload ]]; then
-      $q org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect "$e" >/dev/null 2>&1
-    else
-      # only reload effects that are enabled in the user's config
-      if kreadconfig6 --file kwinrc --group Plugins --key "${e}Enabled" --default true | grep -q true; then
-        $q org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect "$e" >/dev/null 2>&1
+      # remember which effects were really loaded: only those come back
+      if [[ $($q org.kde.KWin /Effects org.kde.kwin.Effects.isEffectLoaded "$e" 2>/dev/null) == true ]]; then
+        echo "$e" >> "$STATE"
+        $q org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect "$e" >/dev/null 2>&1
       fi
+    else
+      $q org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect "$e" >/dev/null 2>&1
     fi
   done
 }
@@ -30,27 +36,63 @@ kwin_effects() { # $1 = load|unload
 pill_refresh() { /usr/local/bin/delay-shell-activate gaming-changed >/dev/null 2>&1 & }
 
 on() {
-  touch "$STATE"
-  powerprofilesctl set performance 2>/dev/null
+  [[ -e $STATE ]] && return 0
+  : > "$STATE"
+  # privileged helper: power profile, governor/EPP, scheduler, GPU power state, background jobs
+  # (it saves every value it changes). Without sudo rights only the power profile is switched.
+  if ! sudo -n /usr/local/bin/delay-gamemode-root on 2>/dev/null; then
+    echo "profile=$(powerprofilesctl get 2>/dev/null)" >> "$STATE"
+    powerprofilesctl set performance 2>/dev/null
+  fi
   kwin_effects unload
-  balooctl6 suspend >/dev/null 2>&1 || balooctl suspend >/dev/null 2>&1
-  systemctl --user stop plasma-discover-notifier.service 2>/dev/null
+  local bs; bs=$(LC_ALL=C LANGUAGE=C balooctl6 status 2>/dev/null)
+  if grep -qi 'is running' <<<"$bs" && ! grep -qi suspended <<<"$bs"; then
+    echo baloo >> "$STATE"; balooctl6 suspend >/dev/null 2>&1
+  fi
   pkill -STOP -x DiscoverNotifier 2>/dev/null
-  # ask the privileged helper to pause system-wide background jobs
-  sudo -n /usr/local/bin/delay-gamemode-root on 2>/dev/null
   pill_refresh
-  notify-send -a "게이밍" -i input-gaming "게이밍 모드 켜짐" "성능 전원 모드를 사용하고, 화면 효과와 백그라운드 작업을 잠시 멈췄어요." 2>/dev/null
+  notify-send -a "게이밍" -i input-gaming "게이밍 모드 켜짐" "CPU와 GPU를 최고 성능으로 두고, 화면 효과와 백그라운드 작업을 잠시 멈췄어요." 2>/dev/null
 }
 
 off() {
+  [[ -e $STATE ]] || return 0
+  local saved; saved=$(cat "$STATE" 2>/dev/null)
   rm -f "$STATE"
-  powerprofilesctl set balanced 2>/dev/null
-  kwin_effects load
-  balooctl6 resume >/dev/null 2>&1 || balooctl resume >/dev/null 2>&1
+  if ! sudo -n /usr/local/bin/delay-gamemode-root off 2>/dev/null; then
+    local p; p=$(sed -n 's/^profile=//p' <<<"$saved")
+    powerprofilesctl set "${p:-balanced}" 2>/dev/null
+  fi
+  local q e; q=$(qdbus_cmd)
+  for e in "${KWIN_EFFECTS[@]}"; do
+    grep -qx "$e" <<<"$saved" && $q org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect "$e" >/dev/null 2>&1
+  done
+  grep -qx baloo <<<"$saved" && balooctl6 resume >/dev/null 2>&1
   pkill -CONT -x DiscoverNotifier 2>/dev/null
-  sudo -n /usr/local/bin/delay-gamemode-root off 2>/dev/null
   pill_refresh
-  notify-send -a "게이밍" -i input-gaming "게이밍 모드 꺼짐" 2>/dev/null
+  notify-send -a "게이밍" -i input-gaming "게이밍 모드 꺼짐" "전원 모드와 화면 효과를 원래대로 되돌렸어요." 2>/dev/null
+}
+
+opt_get() { sed -n "s/^$1=//p" "$OPTS" 2>/dev/null | tail -n1; }
+opt_set() {
+  mkdir -p "$(dirname "$OPTS")"; touch "$OPTS"
+  if grep -q "^$1=" "$OPTS"; then sed -i "s|^$1=.*|$1=$2|" "$OPTS"; else echo "$1=$2" >> "$OPTS"; fi
+}
+option() { # $1 = mangohud|gamescope  $2 = on|off|toggle|status
+  local v; v=$(opt_get "$1"); [[ $v == 1 ]] || v=0
+  case "${2:-status}" in
+    on) opt_set "$1" 1 ;;
+    off) opt_set "$1" 0 ;;
+    toggle) opt_set "$1" $(( 1 - v )) ;;
+    status) (( v )) && echo on || echo off; return 0 ;;
+    *) echo "usage: $0 $1 on|off|toggle|status"; return 1 ;;
+  esac
+  v=$(opt_get "$1")
+  case "$1:$v" in
+    mangohud:1)  notify-send -a "게이밍" -i input-gaming "성능 표시(MangoHud) 켜짐" "delay-game으로 실행하는 게임부터 FPS와 프레임 시간이 표시됩니다." 2>/dev/null ;;
+    mangohud:0)  notify-send -a "게이밍" -i input-gaming "성능 표시(MangoHud) 꺼짐" 2>/dev/null ;;
+    gamescope:1) notify-send -a "게이밍" -i input-gaming "gamescope 켜짐" "delay-game으로 실행하는 게임이 gamescope 안에서 실행됩니다." 2>/dev/null ;;
+    gamescope:0) notify-send -a "게이밍" -i input-gaming "gamescope 꺼짐" 2>/dev/null ;;
+  esac
 }
 
 case "${1:-toggle}" in
@@ -58,8 +100,9 @@ case "${1:-toggle}" in
   off) off ;;
   toggle) [[ -e $STATE ]] && off || on ;;
   status) [[ -e $STATE ]] && echo on || echo off ;;
-  # gamemoded hooks: make games always get full power, even without the toggle
-  hook-start) powerprofilesctl set performance 2>/dev/null ;;
-  hook-end) [[ -e $STATE ]] || powerprofilesctl set balanced 2>/dev/null ;;
-  *) echo "usage: $0 on|off|toggle|status"; exit 1 ;;
+  mangohud|gamescope) option "$1" "${2:-status}" ;;
+  # gamemoded hooks: games always get full power, even without the toggle
+  hook-start) sudo -n /usr/local/bin/delay-gamemode-root game-start 2>/dev/null || powerprofilesctl set performance 2>/dev/null ;;
+  hook-end)   sudo -n /usr/local/bin/delay-gamemode-root game-end 2>/dev/null || { [[ -e $STATE ]] || powerprofilesctl set balanced 2>/dev/null; } ;;
+  *) echo "usage: $0 on|off|toggle|status | mangohud|gamescope on|off|toggle|status"; exit 1 ;;
 esac

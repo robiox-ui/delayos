@@ -23,18 +23,42 @@ Window {
 
     function call(name, args, cb) { sys.call(name, args || [], function(s) { var r = null; try { r = JSON.parse(s) } catch (e) {} if (cb) cb(r) }) }
     function load() { loading = true; call("drivers.detect", [], function(r) { win.loading = false; if (Array.isArray(r)) win.devs = r }) }
-    function install(slot, pkgs) { job = slot; line = "설치를 준비하는 중…"; frac = 0; sys.spawn("drv", ["pkexec", sys.helper(), "install"].concat(pkgs)) }
+    function install(slot, pkgs, action) {
+        job = slot; line = "설치를 준비하는 중…"; frac = 0
+        sys.spawn("drv", action === "gpu-setup" ? ["pkexec", sys.helper(), "gpu-setup"] : ["pkexec", sys.helper(), "install"].concat(pkgs))
+    }
+
+    // ---- 성능 최적화: CPU-optimized packages (delay-cpu-opt), CPU-matched kernel, Proton ----
+    property var opt: null
+    property string optJob: ""       // "enable" | "disable" | "kernel-install" | "kernel-remove" | "proton"
+    property string optLine: ""
+    function loadOpt() { call("cpuopt.status", [], function(r) { if (r && !r.error) win.opt = r }) }
+    function runOpt(what) {
+        optJob = what; optLine = "준비하는 중…"
+        sys.spawn("opt", what === "proton" ? ["pkexec", sys.helper(), "install", "proton-cachyos-slr"] : ["pkexec", sys.helper(), "cpu-opt", what])
+    }
     function installAll() { var p = []; missing.forEach(function(d) { p = p.concat(d.missing) }); if (p.length) install("__all__", p) }
-    Component.onCompleted: { var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = sys.dark(); load() }
+    Component.onCompleted: { var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = sys.dark(); load(); loadOpt() }
     Connections {
         target: sys
         function onProcLine(id, l) {
+            if (id === "opt") { win.optLine = l; return }
             if (id !== "drv") return
             win.line = l
             var m = l.match(/^\(\s*(\d+)\/(\d+)\)\s+(installing|upgrading)/)
             if (m) win.frac = 0.5 + 0.5 * (+m[1] / +m[2]); else if (l.indexOf("downloading") >= 0) win.frac = Math.min(0.5, win.frac + 0.02)
         }
         function onProcDone(id, code) {
+            if (id === "opt") {
+                var what = win.optJob; win.optJob = ""
+                if (code === 0 && (what === "proton" || what === "enable")) sys.detach(["/usr/bin/delay-steam-compat"])
+                win.loadOpt(); win.load()
+                toast.show(code === 0 ? ({ "enable": "CPU 최적화 패키지로 바꿨습니다. 다시 시작하면 적용됩니다.", "disable": "기본 패키지로 되돌렸습니다. 다시 시작하세요.",
+                                           "kernel-install": "최적화 커널을 설치했습니다. 다시 시작하면 사용됩니다.", "kernel-remove": "기본 커널로 되돌렸습니다.",
+                                           "proton": "Proton-CachyOS를 설치했습니다. Steam을 다시 시작하면 기본 호환 도구로 쓰입니다." })[what]
+                                      : "작업을 완료하지 못했습니다", code === 0 ? "g:check" : "g:cross")
+                return
+            }
             if (id !== "drv") return
             win.job = ""; win.load()
             toast.show(code === 0 ? "드라이버를 설치했습니다. 다시 시작하면 적용됩니다." : "드라이버를 설치하지 못했습니다", code === 0 ? "g:check" : "g:cross")
@@ -86,8 +110,52 @@ Window {
                             SText { text: "최신"; font.pixelSize: 12; color: Theme.success } }
                         SButton { visible: !modelData.ok; kind: "accent"; text: "설치"; implicitWidth: 72
                             busy: win.job === modelData.slot || win.job === "__all__"; enabled: win.job === ""
-                            onClicked: win.install(modelData.slot, modelData.missing) }
+                            onClicked: win.install(modelData.slot, modelData.missing, modelData.action) }
                     }
+                }
+            }
+            SHeader { text: "성능 최적화"; visible: !!win.opt }
+            SRow {
+                visible: !!win.opt
+                icon: "g:package"; iconColor: win.opt && win.opt.enabled ? Theme.text2 : Theme.accent
+                title: "CPU 맞춤 패키지"
+                subtitle: !win.opt ? "" : win.optJob === "enable" || win.optJob === "disable" ? win.optLine
+                    : (win.opt.cpu + "\n" + (!win.opt.supported ? "이 CPU는 기본 패키지를 사용합니다 (x86-64-v3 미지원)"
+                       : win.opt.enabled ? "사용 중: " + win.opt.enabledName + " 최적화 빌드 (CachyOS 저장소)"
+                       : win.opt.pending ? "네트워크에 연결되면 자동으로 적용됩니다: " + win.opt.levelName
+                       : "사용 가능: " + win.opt.levelName + " · 시스템 패키지를 이 CPU용 빌드로 바꿉니다 (약 2GB 다운로드)"))
+                Row { spacing: 8
+                    SButton { visible: !!win.opt && win.opt.supported && !win.opt.enabled; kind: "accent"; text: "켜기"; implicitWidth: 72
+                        busy: win.optJob === "enable"; enabled: win.optJob === "" && win.job === ""; onClicked: optOn.open() }
+                    SButton { visible: !!win.opt && !!win.opt.enabled; text: "끄기"; implicitWidth: 72
+                        busy: win.optJob === "disable"; enabled: win.optJob === "" && win.job === ""; onClicked: optOff.open() }
+                }
+            }
+            SRow {
+                visible: !!win.opt && win.opt.supported && (!!win.opt.enabled || win.opt.localKernel || win.opt.kernel !== "")
+                icon: "g:terminal"; title: "CPU 맞춤 커널"
+                subtitle: !win.opt ? "" : win.optJob.indexOf("kernel") === 0 ? win.optLine
+                    : win.opt.signedBoot ? "Secure Boot용 서명 커널(linux-delayos)을 사용 중이라 설치할 수 없습니다"
+                    : win.opt.kernel !== "" ? "설치됨: " + win.opt.kernel + " · 실행 중: " + win.opt.running + "\nlinux-delayos는 부팅 메뉴의 고급 옵션에 남아 있습니다"
+                    : "이 CPU 수준으로 빌드한 커널을 추가합니다. 기본 커널(linux-delayos)은 부팅 메뉴에 그대로 남습니다"
+                Row { spacing: 8
+                    SButton { visible: !!win.opt && win.opt.kernel === "" && !win.opt.signedBoot; text: "설치"; implicitWidth: 72
+                        busy: win.optJob === "kernel-install"; enabled: win.optJob === "" && win.job === ""; onClicked: win.runOpt("kernel-install") }
+                    SButton { visible: !!win.opt && win.opt.kernel !== ""; text: "제거"; implicitWidth: 72
+                        busy: win.optJob === "kernel-remove"; enabled: win.optJob === "" && win.job === ""; onClicked: win.runOpt("kernel-remove") }
+                }
+            }
+            SRow {
+                visible: !!win.opt
+                icon: "g:gamepad"; title: "Proton (Windows 게임 호환 도구)"
+                subtitle: !win.opt ? "" : win.optJob === "proton" ? win.optLine
+                    : win.opt.proton.preferred !== "" ? "Steam Play 기본 도구: " + (win.opt.proton.default || win.opt.proton.preferred + " (다음 로그인부터)")
+                    : win.opt.enabled ? "Proton-CachyOS를 설치하면 Steam Play 기본 도구로 지정됩니다"
+                    : "CPU 맞춤 패키지를 켜면 Proton-CachyOS를, 그렇지 않으면 ProtonUp-Qt로 GE-Proton을 설치할 수 있습니다"
+                Row { spacing: 8
+                    SButton { visible: !!win.opt && !!win.opt.enabled && win.opt.proton.available.indexOf("proton-cachyos-slr") < 0; kind: "accent"; text: "설치"; implicitWidth: 72
+                        busy: win.optJob === "proton"; enabled: win.optJob === "" && win.job === ""; onClicked: win.runOpt("proton") }
+                    SButton { visible: !!win.opt && !win.opt.enabled && win.opt.proton.preferred === ""; text: "ProtonUp-Qt"; onClicked: sys.detach(["protonup-qt"]) }
                 }
             }
             SHeader { text: "관련 설정" }
@@ -96,4 +164,20 @@ Window {
         }
     }
     SToast { id: toast }
+    SDialog {
+        id: optOn
+        cardWidth: 460
+        title: "CPU 맞춤 패키지를 켤까요?"
+        text: "이 PC의 CPU(" + (win.opt ? win.opt.levelName : "") + ")에 맞게 빌드된 CachyOS 저장소를 추가하고, 설치된 패키지를 그 빌드로 바꿉니다. 약 2GB를 내려받으며 10~30분 걸립니다.\n\nCachyOS는 DelayOS가 아닌 외부 저장소입니다. 언제든지 [끄기]로 Arch 기본 패키지로 되돌릴 수 있습니다."
+        acceptText: "켜기"
+        onAccepted: { close(); win.runOpt("enable") }
+    }
+    SDialog {
+        id: optOff
+        cardWidth: 460
+        title: "기본 패키지로 되돌릴까요?"
+        text: "CachyOS 저장소를 제거하고 모든 패키지를 Arch 기본 빌드로 다시 설치합니다. 약 2GB를 내려받습니다."
+        acceptText: "되돌리기"
+        onAccepted: { close(); win.runOpt("disable") }
+    }
 }

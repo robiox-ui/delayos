@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Steam compatibility tool default
+Name[ko]=Steam 호환 도구 기본값
+Comment[ko]=설치된 Proton(CachyOS/GE)을 Steam Play 기본 도구로 지정합니다
+Exec=/usr/bin/delay-steam-compat
+NoDisplay=true
+X-KDE-autostart-phase=2
+X-KDE-StartupNotify=false

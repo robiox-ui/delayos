@@ -1,0 +1,19 @@
+[Unit]
+Description=DelayOS: switch to CPU-optimized packages (deferred from the installation)
+Documentation=file:///usr/local/bin/delay-cpu-opt
+# only while a request is waiting; delay-postinstall enables the unit when it has to defer
+ConditionPathExists=/var/lib/delay/cpu-opt/pending
+After=network.target NetworkManager.service delay-firstboot.service
+
+[Service]
+# exec, not oneshot: the boot must not wait for a download of several GB
+Type=exec
+ExecStart=/usr/local/bin/delay-cpu-opt apply-pending
+# the script ignores SIGTERM while pacman commits (and holds a shutdown inhibitor): give it time to finish
+TimeoutStopSec=15min
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+[Install]
+WantedBy=multi-user.target

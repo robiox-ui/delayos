@@ -1,29 +1,119 @@
 #!/usr/bin/env bash
 # Privileged half of Gaming mode (allowed via /etc/sudoers.d/20-delay-gamemode).
-# Only accepts "on" or "off".
+#   on | off              the Gaming toggle in the top bar (delay-gamemode on/off)
+#   game-start | game-end gamemoded's hooks: a game started / the last game ended
+#   status                what is active and what would be restored
+#
+# The hardware boost is applied when the first of the two (toggle, game) becomes active and taken
+# back when the last one ends. Every value is read before it is changed and written to
+# /run/delay-gamemode/saved, so "off" puts back exactly what was there (not a guessed default).
 set -u
+RUN=/run/delay-gamemode
+SAVE=$RUN/saved          # "path<TAB>old value", one line per changed sysfs file
 SERVICES=(packagekit.service fwupd.service snapper-timeline.timer snapper-cleanup.timer
           man-db.timer updatedb.timer)
+mkdir -p "$RUN"
+
+cur() { # current value of a sysfs file; selector files print "a [b] c"
+  local v; v=$(cat "$1" 2>/dev/null) || return 1
+  [[ $v == *\[*\]* ]] && v=$(sed 's/.*\[\(.*\)\].*/\1/' <<<"$v")
+  printf '%s' "$v"
+}
+remember() { # $1 = path: keep the value from before the boost (only the first time)
+  local old; [[ -w $1 ]] || return 1
+  old=$(cur "$1") || return 1
+  grep -qsF "$1"$'\t' "$SAVE" || printf '%s\t%s\n' "$1" "$old" >> "$SAVE"
+}
+put() { echo "$2" > "$1" 2>/dev/null; }
+
+boost_on() {
+  [[ -e $RUN/boost ]] && return 0
+  : > "$SAVE"; touch "$RUN/boost"
+  local f
+
+  # ---- CPU: performance governor + EPP "performance" (amd-pstate-epp / intel_pstate) ----
+  # EPP has to be read before the governor changes: with the performance governor the kernel
+  # reports (and forces) EPP=performance.
+  for f in /sys/devices/system/cpu/cpufreq/policy*/energy_performance_preference; do remember "$f"; done
+  for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do remember "$f"; done
+  # power-profiles-daemon owns governor and EPP on most machines: let it switch first
+  if command -v powerprofilesctl >/dev/null; then
+    powerprofilesctl get > "$RUN/profile" 2>/dev/null || rm -f "$RUN/profile"
+    powerprofilesctl set performance 2>/dev/null
+  fi
+  for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do
+    grep -qsw performance "${f%/*}/scaling_available_governors" && put "$f" performance
+  done
+  for f in /sys/devices/system/cpu/cpufreq/policy*/energy_performance_preference; do [[ -w $f ]] && put "$f" performance; done
+
+  # ---- AMD X3D (two CCDs, one with V-Cache): rank the V-Cache cores first ----
+  for f in /sys/bus/platform/drivers/amd_x3d_vcache/*/amd_x3d_mode; do remember "$f" && put "$f" cache; done
+
+  # ---- AMD GPU: highest power state while gaming (auto -> high). A dGPU that is asleep stays asleep. ----
+  for f in /sys/class/drm/card[0-9]*/device/power_dpm_force_performance_level; do
+    [[ -e $f ]] || continue
+    [[ $(basename "$(readlink -f "${f%/*}/driver")") == amdgpu ]] || continue
+    [[ $(cat "${f%/*}/power/runtime_status" 2>/dev/null) == suspended ]] && continue
+    remember "$f" && put "$f" high
+  done
+
+  # ---- sched-ext: LAVD performance mode (all cores, no core compaction); Intel P/E cores and
+  #      AMD preferred cores are ranked by the scheduler itself ----
+  if command -v scxctl >/dev/null; then
+    scxctl get > "$RUN/scx" 2>/dev/null || echo none > "$RUN/scx"
+    scxctl switch -s lavd -m gaming >/dev/null 2>&1 || scxctl start -s lavd -m gaming >/dev/null 2>&1
+  fi
+}
+
+boost_off() {
+  [[ -e $RUN/boost ]] || return 0
+  local f v prof name mode
+  if [[ -s $RUN/profile ]] && command -v powerprofilesctl >/dev/null; then
+    prof=$(<"$RUN/profile"); powerprofilesctl set "$prof" 2>/dev/null
+  fi
+  # governors first: EPP cannot be changed while the governor is "performance"
+  while IFS=$'\t' read -r f v; do [[ $f == */scaling_governor ]] && put "$f" "$v"; done < "$SAVE"
+  while IFS=$'\t' read -r f v; do [[ $f == */scaling_governor ]] || put "$f" "$v"; done < "$SAVE"
+  if command -v scxctl >/dev/null && [[ -e $RUN/scx ]]; then
+    # "running Lavd in Auto mode" -> lavd / auto
+    read -r _ name _ mode _ < "$RUN/scx"
+    if grep -qi '^running ' "$RUN/scx" && [[ -n ${mode:-} ]]; then
+      scxctl switch -s "${name,,}" -m "${mode,,}" >/dev/null 2>&1 || scxctl restore >/dev/null 2>&1
+    elif grep -qi 'running' "$RUN/scx"; then
+      scxctl restore >/dev/null 2>&1      # started with custom arguments: back to scx_loader.toml
+    else
+      scxctl stop >/dev/null 2>&1         # no sched-ext scheduler was running before
+    fi
+  fi
+  rm -f "$RUN/boost" "$SAVE" "$RUN/profile" "$RUN/scx"
+}
+
 case "${1:-}" in
   on)
-    for s in "${SERVICES[@]}"; do systemctl stop "$s" 2>/dev/null; done
-    # all cores to max clocks; disable deep idle on the scheduler side
-    cpupower frequency-set -g performance >/dev/null 2>&1
-    for f in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
-      [[ -w $f ]] && echo performance > "$f"
+    touch "$RUN/toggle"
+    : > "$RUN/services"
+    for s in "${SERVICES[@]}"; do
+      systemctl is-active -q "$s" && { echo "$s" >> "$RUN/services"; systemctl stop "$s" 2>/dev/null; }
     done
-    # sched-ext: LAVD in gaming mode (latency-critical tasks first), like CachyOS's gaming setup
-    command -v scxctl >/dev/null && { scxctl switch -s lavd -m gaming >/dev/null 2>&1 || scxctl start -s lavd -m gaming >/dev/null 2>&1; }
-    # Write back dirty pages now, so the game never waits on them
-    sync
+    boost_on
+    sync    # write back dirty pages now, so the game never waits on them
     ;;
   off)
-    for s in snapper-timeline.timer snapper-cleanup.timer man-db.timer; do systemctl start "$s" 2>/dev/null; done
-    cpupower frequency-set -g schedutil >/dev/null 2>&1 || cpupower frequency-set -g powersave >/dev/null 2>&1
-    for f in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
-      [[ -w $f ]] && echo balance_performance > "$f"
-    done
-    command -v scxctl >/dev/null && { scxctl switch -s lavd -m auto >/dev/null 2>&1 || true; }
+    rm -f "$RUN/toggle"
+    if [[ -e $RUN/services ]]; then
+      # timers come back; packagekit and fwupd start by themselves when something needs them
+      while read -r s; do [[ $s == *.timer ]] && systemctl start "$s" 2>/dev/null; done < "$RUN/services"
+      rm -f "$RUN/services"
+    fi
+    [[ -e $RUN/game ]] || boost_off
     ;;
+  game-start) touch "$RUN/game"; boost_on ;;
+  game-end)   rm -f "$RUN/game"; [[ -e $RUN/toggle ]] || boost_off ;;
+  status)
+    echo "toggle: $([[ -e $RUN/toggle ]] && echo on || echo off)   game: $([[ -e $RUN/game ]] && echo on || echo off)   boost: $([[ -e $RUN/boost ]] && echo on || echo off)"
+    [[ -s $SAVE ]] && { echo "restored on off:"; sed 's/^/  /' "$SAVE"; }
+    [[ -s $RUN/profile ]] && echo "  power profile: $(<"$RUN/profile")"
+    [[ -s $RUN/scx ]] && echo "  scheduler: $(<"$RUN/scx")"
+    exit 0 ;;
   *) exit 1 ;;
 esac

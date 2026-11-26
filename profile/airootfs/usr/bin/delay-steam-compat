@@ -1,0 +1,220 @@
+#!/usr/bin/python3
+# DelayOS: make the best installed Proton the default Steam Play compatibility tool.
+#
+#   delay-steam-compat            set the default when the user has none yet (run at login, cheap)
+#   delay-steam-compat --status   print the tool that would be used and what Steam has now
+#   delay-steam-compat --force    replace an existing default too
+#
+# Steam keeps the choice of "Steam Play > 다른 모든 타이틀에 Steam Play 사용 > 실행 도구" in
+#   ~/.local/share/Steam/config/config.vdf
+#   InstallConfigStore > Software > Valve > Steam > CompatToolMapping > "0" > name
+# ("0" = every title without its own setting; priority 75 is what the Steam client writes for the
+# global default, 250 for a per-game choice). Rules, so Steam is never broken:
+#   - nothing is written while Steam runs (it rewrites config.vdf when it exits);
+#   - an existing "0" entry is the user's choice and is left alone;
+#   - the file is edited in place (text insertion, everything else byte for byte), with a backup;
+#   - only a tool that is really installed is named, by the name in its compatibilitytool.vdf.
+# Also writes steam_dev.cfg once so Steam compiles shaders in the background on most cores.
+import glob
+import os
+import re
+import sys
+
+HOME = os.path.expanduser("~")
+STEAM = os.path.join(HOME, ".local/share/Steam")
+CONFIG = os.path.join(STEAM, "config/config.vdf")
+TOOL_DIRS = ["/usr/share/steam/compatibilitytools.d", os.path.join(STEAM, "compatibilitytools.d")]
+# best first; GE-Proton (ProtonUp-Qt) is matched by prefix, newest version wins
+PREFER = ["proton-cachyos-slr", "proton-cachyos"]   # then any other proton-cachyos* (native build)
+PATH = ["InstallConfigStore", "Software", "Valve", "Steam"]
+
+
+def tool_names():
+    """Internal names of the installed compatibility tools ({name: directory})."""
+    found = {}
+    for base in TOOL_DIRS:
+        for vdf in glob.glob(os.path.join(base, "*", "compatibilitytool.vdf")):
+            try:
+                text = open(vdf, encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            m = re.search(r'"compat_tools"\s*\{\s*"([^"]+)"', text)
+            if m:
+                found[m.group(1)] = os.path.dirname(vdf)
+    return found
+
+
+def _ver(name):
+    return [int(x) for x in re.findall(r"\d+", name)]
+
+
+def pick_tool():
+    names = tool_names()
+    for n in PREFER:
+        if n in names:
+            return n
+    cachy = sorted(n for n in names if n.lower().startswith("proton-cachyos"))
+    if cachy:
+        return cachy[0]
+    ge = sorted((n for n in names if n.lower().startswith(("ge-proton", "proton-ge"))), key=_ver)
+    return ge[-1] if ge else ""
+
+
+def steam_running():
+    uid = os.getuid()
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            if os.stat("/proc/" + pid).st_uid != uid:
+                continue
+            with open("/proc/%s/comm" % pid) as f:
+                if f.read().strip() in ("steam", "steamwebhelper"):
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def scan(text):
+    """Walk the VDF text. Returns {"steam": offset after the '{' of ...>Steam, "map": same for
+    CompatToolMapping, "zero": current name of the "0" entry or None, "ok": balanced}."""
+    res = {"steam": -1, "map": -1, "zero": None, "has_zero": False, "ok": False}
+    stack, key, i, n = [], None, 0, len(text)
+    low = [p.lower() for p in PATH]
+    while i < n:
+        c = text[i]
+        if c == '"':
+            j = i + 1
+            buf = []
+            while j < n and text[j] != '"':
+                if text[j] == "\\" and j + 1 < n:
+                    buf.append(text[j + 1])
+                    j += 2
+                else:
+                    buf.append(text[j])
+                    j += 1
+            tok = "".join(buf)
+            i = j + 1
+            if key is None:
+                key = tok
+            else:                      # key value pair
+                here = [s.lower() for s in stack]
+                if here == low + ["compattoolmapping", "0"] and key.lower() == "name":
+                    res["zero"] = tok
+                key = None
+            continue
+        if c == "{":
+            stack.append(key if key is not None else "")
+            key = None
+            here = [s.lower() for s in stack]
+            if here == low:
+                res["steam"] = i + 1
+            elif here == low + ["compattoolmapping"]:
+                res["map"] = i + 1
+            elif here == low + ["compattoolmapping", "0"]:
+                res["has_zero"] = True
+            i += 1
+            continue
+        if c == "}":
+            if not stack:
+                return res
+            stack.pop()
+            key = None
+            i += 1
+            continue
+        if c == "/" and text[i:i + 2] == "//":
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        i += 1
+    res["ok"] = not stack
+    return res
+
+
+def entry(tool, indent):
+    t = "\t" * indent
+    return ('\n%s"0"\n%s{\n%s\t"name"\t\t"%s"\n%s\t"config"\t\t""\n%s\t"priority"\t\t"75"\n%s}'
+            % (t, t, t, tool, t, t, t))
+
+
+def new_text(text, tool, force):
+    """config.vdf with the default tool set, or None when there is nothing (safe) to do."""
+    if not text.strip():
+        return ('"InstallConfigStore"\n{\n\t"Software"\n\t{\n\t\t"Valve"\n\t\t{\n\t\t\t"Steam"\n\t\t\t{\n'
+                '\t\t\t\t"CompatToolMapping"\n\t\t\t\t{%s\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n' % entry(tool, 5))
+    s = scan(text)
+    if not s["ok"] or s["steam"] < 0:
+        return None                    # not the layout we know: leave it to Steam
+    if s["has_zero"]:
+        if not force or s["zero"] is None or s["zero"] == tool:
+            return None
+        m = re.compile(r'("name"\s*")' + re.escape(s["zero"]) + '"')
+        # the "0" block is the first "name" after the CompatToolMapping brace that carries this value
+        return text[:s["map"]] + m.sub(lambda g: g.group(1) + tool + '"', text[s["map"]:], count=1)
+    if s["map"] >= 0:
+        return text[:s["map"]] + entry(tool, 5) + text[s["map"]:]
+    block = '\n\t\t\t\t"CompatToolMapping"\n\t\t\t\t{%s\n\t\t\t\t}' % entry(tool, 5)
+    return text[:s["steam"]] + block + text[s["steam"]:]
+
+
+def write_shader_threads():
+    """Steam compiles Vulkan shaders with one thread by default while a game could start; let it use
+    most cores (only when the user has no steam_dev.cfg of their own)."""
+    path = os.path.join(STEAM, "steam_dev.cfg")
+    if os.path.exists(path):
+        return
+    threads = max(1, (os.cpu_count() or 2) * 3 // 4)
+    try:
+        os.makedirs(STEAM, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("unShaderBackgroundProcessingThreads %d\n" % threads)
+    except OSError:
+        pass
+
+
+def current():
+    try:
+        return scan(open(CONFIG, encoding="utf-8", errors="surrogateescape").read())["zero"] or ""
+    except OSError:
+        return ""
+
+
+def main(argv):
+    tool = pick_tool()
+    if "--status" in argv:
+        print("available: %s" % (", ".join(sorted(tool_names())) or "-"))
+        print("preferred: %s" % (tool or "-"))
+        print("steam default: %s" % (current() or "(Steam 기본값)"))
+        return 0
+    if not tool:
+        return 0                       # nothing better than Valve's Proton installed (yet): try again next login
+    if steam_running():
+        return 3
+    try:
+        text = open(CONFIG, encoding="utf-8", errors="surrogateescape").read()
+    except FileNotFoundError:
+        text = ""
+    except OSError:
+        return 1
+    out = new_text(text, tool, "--force" in argv)
+    if out is None:
+        return 0
+    if scan(out)["zero"] != tool:      # the result must parse back to what we meant
+        return 1
+    try:
+        os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+        if text:
+            with open(CONFIG + ".delay-bak", "w", encoding="utf-8", errors="surrogateescape") as f:
+                f.write(text)
+        tmp = CONFIG + ".delay-new"
+        with open(tmp, "w", encoding="utf-8", errors="surrogateescape") as f:
+            f.write(out)
+        os.replace(tmp, CONFIG)
+    except OSError:
+        return 1
+    write_shader_threads()
+    print("Steam Play 기본 호환 도구: %s" % tool)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

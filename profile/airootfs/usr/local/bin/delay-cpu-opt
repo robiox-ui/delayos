@@ -1,0 +1,443 @@
+#!/usr/bin/env bash
+# DelayOS CPU-optimized packages (docs/gaming-performance.md).
+#
+# Switches the system to the CachyOS repositories built for this CPU's x86-64 level, the same way
+# CachyOS's own cachyos-repo.sh does: trust the CachyOS signing key, install cachyos-keyring and the
+# cachyos mirrorlists, put the optimized repos above the Arch repos in /etc/pacman.conf, pacman -Syu.
+#
+#   delay-cpu-opt detect            generic | v3 | v4 | znver4   (what this CPU can run)
+#   delay-cpu-opt status [--json]   detected level, enabled level, pending flag, kernels
+#   delay-cpu-opt enable [opts]     enable the repos for the detected level and upgrade
+#        --install-time   called by delay-postinstall (chroot): bounded download time, and when
+#                         there is no network or anything fails, leave the system untouched and
+#                         defer to the first boot with a network (delay-cpu-opt.service)
+#        --no-upgrade     only set the repos up (no pacman -Syu)
+#        --no-proton      do not install proton-cachyos
+#        --kernel         also install the CPU-matched kernel (see "kernel install")
+#   delay-cpu-opt disable           back to plain Arch packages (removes the repos, downgrades)
+#   delay-cpu-opt kernel install    CPU-matched kernel: linux-cachyos from the optimized repo, or the
+#                                   locally built linux-delayos-v3 when the ISO carries it
+#   delay-cpu-opt kernel remove     remove it again; GRUB boots linux-delayos by default
+#   delay-cpu-opt apply-pending     first boot: do what --install-time had to defer
+#
+# Safety: a level is only used when glibc's loader reports it as "supported" on this CPU
+# (/lib/ld-linux-x86-64.so.2 --help). The repo block in pacman.conf sits between two marker lines
+# and the file from before is kept as /etc/pacman.conf.delay-bak.
+# Exit codes: 0 ok, 2 usage, 3 CPU not supported (nothing to do), 10 deferred (offline), 1 failed.
+set -u
+export LC_ALL=C
+
+CONF=/etc/pacman.conf
+BACKUP=/etc/pacman.conf.delay-bak
+VARDIR=/var/lib/delay/cpu-opt
+LOG=/var/log/delay-cpu-opt.log
+KEY_FPR=882DCFE48E2051D48E2562ABF3B607488DB35A47   # CachyOS <admin@cachyos.org>, the key cachyos-repo.sh trusts
+KEY_FILE=/usr/share/delayos/trust/cachyos.asc
+BOOT_SERVER='https://mirror.cachyos.org/repo/$arch/$repo'
+BEGIN='# >>> DelayOS CPU-optimized repositories (managed by delay-cpu-opt, do not edit) >>>'
+END='# <<< DelayOS CPU-optimized repositories <<<'
+LOCAL_KERNEL_DIR=/var/cache/delayos/kernel-v3
+PACMAN=(pacman --noconfirm --noprogressbar --color never)
+LD_SO=/lib/ld-linux-x86-64.so.2
+
+say()  { printf ':: %s\n' "$*"; }
+fail() { printf 'error: %s\n' "$*" >&2; }
+need_root() { [[ $EUID -eq 0 ]] || { fail "root 권한이 필요합니다"; exit 1; }; }
+
+# ------------------------------------------------------------------ CPU level
+isa_supported() { "$LD_SO" --help 2>/dev/null | grep -q "x86-64-$1 (supported, searched)"; }
+
+cpu_field() { awk -F': *' -v k="$1" '$1 ~ "^"k"[ \t]*$" {print $2; exit}' /proc/cpuinfo; }
+
+detect_level() {
+  # Zen 4 / Zen 5: AMD family 25 or 26 with AVX-512 (Zen 3 is family 25 too, but has no AVX-512).
+  # CachyOS asks gcc -march=native for this; DelayOS has to work without a compiler.
+  local vendor family
+  vendor=$(cpu_field vendor_id); family=$(cpu_field 'cpu family')
+  if isa_supported v4; then
+    if [[ $vendor == AuthenticAMD && ( $family == 25 || $family == 26 ) ]]; then echo znver4; else echo v4; fi
+  elif isa_supported v3; then
+    echo v3
+  else
+    echo generic
+  fi
+}
+
+# the level to use: the detected one, or a lower one forced with DELAYOS_CPUOPT_LEVEL (never a higher one)
+target_level() {
+  local det want; det=$(detect_level); want=${DELAYOS_CPUOPT_LEVEL:-}
+  case "$det:$want" in
+    znver4:v4|znver4:v3|v4:v3) echo "$want" ;;
+    *) echo "$det" ;;
+  esac
+}
+
+enabled_level() {
+  sed -n "/^$BEGIN\$/,/^$END\$/p" "$CONF" 2>/dev/null |
+    sed -n 's/^\[cachyos-\(v3\|v4\|znver4\)\]$/\1/p' | head -n1
+}
+
+# ------------------------------------------------------------------ pacman.conf
+repo_block() { # $1 = level | bootstrap
+  echo "$BEGIN"
+  case "$1" in
+    bootstrap) ;;
+    znver4) printf '[cachyos-znver4]\nInclude = /etc/pacman.d/cachyos-v4-mirrorlist\n[cachyos-core-znver4]\nInclude = /etc/pacman.d/cachyos-v4-mirrorlist\n[cachyos-extra-znver4]\nInclude = /etc/pacman.d/cachyos-v4-mirrorlist\n' ;;
+    v3|v4)  printf '[cachyos-%s]\nInclude = /etc/pacman.d/cachyos-%s-mirrorlist\n[cachyos-core-%s]\nInclude = /etc/pacman.d/cachyos-%s-mirrorlist\n[cachyos-extra-%s]\nInclude = /etc/pacman.d/cachyos-%s-mirrorlist\n' "$1" "$1" "$1" "$1" "$1" "$1" ;;
+  esac
+  if [[ $1 == bootstrap ]]; then printf '[cachyos]\nServer = %s\n' "$BOOT_SERVER"
+  else printf '[cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n'; fi
+  echo "$END"
+}
+
+strip_block() { sed -i "/^$BEGIN\$/,/^$END\$/d" "$CONF"; }
+
+# Stock pacman only accepts packages whose architecture is listed; "auto" means x86_64 there.
+# CachyOS's own pacman also understands the explicit list, so this works with either.
+set_arch() { # $1 = level | auto
+  local a
+  case "$1" in v3) a='x86_64 x86_64_v3' ;; v4|znver4) a='x86_64 x86_64_v3 x86_64_v4' ;; *) a=auto ;; esac
+  if grep -q '^[# ]*Architecture *=' "$CONF"; then
+    sed -i "0,/^[# ]*Architecture *=.*/s//Architecture = $a/" "$CONF"
+  else
+    sed -i "s/^\[options\]/[options]\nArchitecture = $a/" "$CONF"
+  fi
+}
+
+write_block() { # $1 = level | bootstrap ; the block goes above the first repository section
+  local tmp first
+  strip_block
+  tmp=$(mktemp)
+  first=$(grep -n '^\[' "$CONF" | grep -v '^[0-9]*:\[options\]' | head -n1 | cut -d: -f1)
+  if [[ -n $first ]]; then
+    { head -n $((first - 1)) "$CONF"; repo_block "$1"; echo; tail -n +"$first" "$CONF"; } > "$tmp"
+  else
+    { cat "$CONF"; echo; repo_block "$1"; } > "$tmp"
+  fi
+  cat "$tmp" > "$CONF"; rm -f "$tmp"
+}
+
+# DelayOS needs multilib (Steam, lib32 drivers); stock pacman.conf has it commented out
+ensure_multilib() {
+  grep -q '^\[multilib\]' "$CONF" && return 0
+  if grep -q '^#\[multilib\]' "$CONF"; then
+    sed -i '/^#\[multilib\]/,/^#Include/ s/^#//' "$CONF"
+  else
+    printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> "$CONF"
+  fi
+}
+
+# ------------------------------------------------------------------ helpers
+online() {
+  local u
+  for u in https://mirror.cachyos.org/repo/x86_64/cachyos/cachyos.db https://cdn77.cachyos.org/repo/x86_64/cachyos/cachyos.db; do
+    curl -fsI --connect-timeout 6 --max-time 12 -o /dev/null "$u" 2>/dev/null && return 0
+  done
+  return 1
+}
+
+# Calamares runs delay-postinstall in a chroot with an empty /run: /etc/resolv.conf (a link to
+# systemd-resolved's stub file) dangles there. Give the chroot a resolver for the time being
+# (the file lives on the chroot's tmpfs /run and is gone after the installation).
+fix_chroot_dns() {
+  [[ -e /etc/resolv.conf ]] && return 0
+  local t; t=$(readlink -m /etc/resolv.conf 2>/dev/null) || return 0
+  case "$t" in /run/*) mkdir -p "$(dirname "$t")" && printf 'nameserver 127.0.0.53\nnameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$t" ;; esac
+}
+
+wait_lock() {
+  local i
+  for i in $(seq 90); do [[ -e /var/lib/pacman/db.lck ]] || return 0; say "다른 패키지 작업이 끝나기를 기다리는 중"; sleep 2; done
+  return 1
+}
+
+trust_key() {
+  [[ -d /etc/pacman.d/gnupg && -n "$(ls -A /etc/pacman.d/gnupg 2>/dev/null)" ]] || { pacman-key --init && pacman-key --populate; } >/dev/null 2>&1
+  if ! pacman-key --list-keys "$KEY_FPR" >/dev/null 2>&1; then
+    if [[ -s $KEY_FILE ]]; then
+      pacman-key --add "$KEY_FILE" >/dev/null 2>&1
+    fi
+  fi
+  if ! pacman-key --list-keys "$KEY_FPR" >/dev/null 2>&1; then
+    local ks
+    for ks in keyserver.ubuntu.com keys.openpgp.org; do
+      pacman-key --recv-keys "$KEY_FPR" --keyserver "$ks" >/dev/null 2>&1 && break
+    done
+  fi
+  # the key in the keyring must be exactly the pinned one
+  pacman-key --finger "$KEY_FPR" 2>/dev/null | tr -d ' ' | grep -qi "$KEY_FPR" || { fail "CachyOS 서명 키를 가져오지 못했습니다"; return 1; }
+  pacman-key --lsign-key "$KEY_FPR" >/dev/null 2>&1 || { fail "CachyOS 서명 키를 신뢰 목록에 넣지 못했습니다"; return 1; }
+}
+
+# tell the people at the desktop (the first-boot service runs without a terminal)
+notify_users() { # $1 title  $2 text
+  local d uid user
+  for d in /run/user/*; do
+    [[ -S $d/bus ]] || continue
+    uid=${d##*/}; (( uid >= 1000 )) || continue
+    user=$(id -nu "$uid" 2>/dev/null) || continue
+    runuser -u "$user" -- env XDG_RUNTIME_DIR="$d" DBUS_SESSION_BUS_ADDRESS="unix:path=$d/bus" \
+      notify-send -a "DelayOS" -i cpu "$1" "$2" 2>/dev/null
+  done
+}
+
+grub_default_kernel() { # $1 = kernel package name whose image becomes the top GRUB entry
+  [[ -f /etc/default/grub ]] || return 0
+  sed -i '/^GRUB_TOP_LEVEL=/d' /etc/default/grub
+  echo "GRUB_TOP_LEVEL=\"/boot/vmlinuz-$1\"" >> /etc/default/grub
+  [[ -d /boot/grub ]] && grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1
+  return 0
+}
+
+# ------------------------------------------------------------------ enable
+revert_conf() {
+  if [[ -f $BACKUP ]]; then cat "$BACKUP" > "$CONF"; rm -f "$BACKUP"; else strip_block; set_arch auto; fi
+  rm -f /var/lib/pacman/sync/cachyos*.db /var/lib/pacman/sync/cachyos*.db.sig
+}
+
+defer() { # $1 = reason ; remember the request for delay-cpu-opt.service
+  mkdir -p "$VARDIR"
+  printf 'proton=%s\nkernel=%s\n' "$OPT_PROTON" "$OPT_KERNEL" > "$VARDIR/pending"
+  systemctl enable delay-cpu-opt.service >/dev/null 2>&1
+  say "$1: 네트워크에 연결된 첫 부팅 때 자동으로 적용합니다"
+  exit 10
+}
+
+do_enable() {
+  need_root
+  local level; level=$(target_level)
+  if [[ $level == generic ]]; then
+    say "이 CPU는 x86-64-v3를 지원하지 않습니다. 일반 패키지를 그대로 사용합니다."
+    rm -f "$VARDIR/pending"; exit 3
+  fi
+  # belt and braces: the level we are about to enable must be one the loader reports as supported
+  local isa=$level; [[ $isa == znver4 ]] && isa=v4
+  isa_supported "$isa" || { fail "x86-64-$isa 지원을 확인하지 못했습니다"; exit 3; }
+  mkdir -p "$VARDIR"
+
+  (( OPT_INSTALL )) && fix_chroot_dns
+  if ! online; then
+    (( OPT_INSTALL || OPT_PENDING )) && defer "네트워크 없음"
+    fail "CachyOS 저장소에 연결할 수 없습니다. 네트워크를 확인하세요."; exit 1
+  fi
+  wait_lock || { fail "다른 패키지 작업이 실행 중입니다"; exit 1; }
+
+  local was; was=$(enabled_level)
+  say "CPU 수준: $level  (CachyOS 최적화 저장소 사용)"
+  [[ -n $was ]] || cp -f "$CONF" "$BACKUP"
+  ensure_multilib
+
+  bail() { # $1 message ; undo and stop (or defer at install time)
+    [[ -n $was ]] || revert_conf
+    (( OPT_INSTALL )) && defer "$1"
+    fail "$1"; exit 1
+  }
+
+  trust_key || bail "서명 키 준비 실패"
+
+  # 1) keyring + mirrorlists from the generic [cachyos] repo (only that database is touched)
+  if ! pacman -Qq cachyos-keyring cachyos-mirrorlist cachyos-v3-mirrorlist cachyos-v4-mirrorlist >/dev/null 2>&1; then
+    local boot; boot=$(mktemp)
+    { sed -n '1,/^\[options\]/p' "$CONF"; sed -n '/^\[options\]/,/^\[/p' "$CONF" | grep -E '^(SigLevel|LocalFileSigLevel|ParallelDownloads|DisableSandbox|DownloadUser)\b'
+      echo 'Architecture = x86_64'; printf '[cachyos]\nServer = %s\n' "$BOOT_SERVER"; } > "$boot"
+    "${PACMAN[@]}" --config "$boot" -Sy --needed cachyos-keyring cachyos-mirrorlist cachyos-v3-mirrorlist cachyos-v4-mirrorlist
+    local rc=$?; rm -f "$boot"
+    (( rc == 0 )) || bail "CachyOS 키링/미러 목록 설치 실패"
+  fi
+
+  # 2) the optimized repos above everything else
+  write_block "$level"
+  set_arch "$level"
+  echo "$level" > "$VARDIR/level"
+
+  if (( OPT_UPGRADE )); then
+    say "최적화 패키지를 내려받는 중 (시간이 걸립니다)"
+    local dl=("${PACMAN[@]}" -Syuw)
+    (( OPT_INSTALL )) && dl=(timeout --signal=INT --kill-after=30 "${DELAYOS_CPUOPT_DL_TIMEOUT:-2400}" "${dl[@]}")
+    "${dl[@]}" || bail "패키지 내려받기 실패"
+    say "최적화 패키지로 바꾸는 중"
+    # never let a shutdown or a closed window cut the transaction in half
+    trap '' TERM HUP INT
+    local inh=(); command -v systemd-inhibit >/dev/null && [[ -d /run/systemd/system ]] && (( ! OPT_INSTALL )) &&
+      inh=(systemd-inhibit --what=shutdown:sleep --who=DelayOS --why="CPU 최적화 패키지 설치 중" --mode=block)
+    "${inh[@]}" "${PACMAN[@]}" -Su
+    local rc=$?
+    trap - TERM HUP INT
+    if (( rc != 0 )); then
+      # nothing was changed when pacman stops before the transaction; go back to the Arch repos
+      [[ -n $was ]] || { revert_conf; "${PACMAN[@]}" -Sy >/dev/null 2>&1; }
+      (( OPT_INSTALL )) && defer "업그레이드 실패"
+      fail "업그레이드 실패 (저장소 설정을 되돌렸습니다)"; exit 1
+    fi
+  else
+    "${PACMAN[@]}" -Sy || bail "저장소 동기화 실패"
+  fi
+  rm -f "$VARDIR/pending"
+  systemctl disable delay-cpu-opt.service >/dev/null 2>&1
+
+  # 3) extras; a failure here does not undo the switch
+  if (( OPT_PROTON )); then
+    say "Proton-CachyOS 설치"
+    "${PACMAN[@]}" -S --needed proton-cachyos-slr || say "proton-cachyos-slr 설치를 건너뜁니다 (나중에 드라이버 앱에서 설치할 수 있습니다)"
+  fi
+  (( OPT_KERNEL )) && { do_kernel_install || true; }
+  command -v delay-gpu-setup >/dev/null && { delay-gpu-setup --quiet || true; }
+  say "완료: x86-64 $level 최적화 패키지를 사용합니다. 다시 시작하면 모두 적용됩니다."
+  return 0
+}
+
+# ------------------------------------------------------------------ disable
+# packages built by CachyOS (optimized architecture or CachyOS packager), one per line
+cachy_built() {
+  pacman -Qi 2>/dev/null | awk -F' *: *' '
+    $1=="Name"{n=$2} $1=="Architecture"{a=$2} $1=="Packager"{ if (a ~ /_v[34]$/ || $2 ~ /[Cc]achy[Oo][Ss]/) print n }'
+}
+
+do_disable() {
+  need_root
+  rm -f "$VARDIR/pending"; systemctl disable delay-cpu-opt.service >/dev/null 2>&1
+  if [[ -z $(enabled_level) ]] && ! grep -q "^$BEGIN\$" "$CONF" && [[ -z $(cachy_built) ]]; then
+    say "CPU 최적화 저장소를 사용하고 있지 않습니다."; return 0
+  fi
+  wait_lock || { fail "다른 패키지 작업이 실행 중입니다"; exit 1; }
+  if pacman -Qq linux-cachyos 2>/dev/null | grep -qx linux-cachyos && pacman -Qq linux-delayos >/dev/null 2>&1; then
+    do_kernel_remove || true
+  fi
+  strip_block; set_arch auto
+  rm -f /var/lib/pacman/sync/cachyos*.db /var/lib/pacman/sync/cachyos*.db.sig
+  "${PACMAN[@]}" -Sy || { fail "되돌리기 실패: 네트워크를 확인한 뒤 다시 실행하세요 (저장소 설정은 이미 Arch로 돌아갔습니다)"; exit 1; }
+  # Arch's own pacman first: CachyOS's pacman writes an extra field (%INSTALLED_DB%) into the local
+  # database for everything it installs, and Arch's pacman then warns about each such package
+  if pacman -Qi pacman 2>/dev/null | grep -q '^Packager *: .*[Cc]achy[Oo][Ss]'; then
+    "${PACMAN[@]}" -S pacman || { fail "되돌리기 실패: 다시 실행하세요 (저장소 설정은 이미 Arch로 돌아갔습니다)"; exit 1; }
+  fi
+  # Every CachyOS-built package that Arch has goes back to the Arch build, in one transaction.
+  # Not "pacman -Syuu": that would also downgrade DelayOS's own packages (pahole, AUR builds).
+  local back=() p avail
+  avail=$(pacman -Slq 2>/dev/null | sort -u)
+  while read -r p; do
+    [[ -n $p ]] && grep -qxF "$p" <<<"$avail" && back+=("$p")
+  done < <(cachy_built)
+  if (( ${#back[@]} )); then
+    say "Arch 패키지로 되돌리는 중 (${#back[@]}개)"
+    "${PACMAN[@]}" -Sw "${back[@]}" || { fail "되돌리기 실패: 내려받지 못했습니다. 다시 실행하세요 (저장소 설정은 이미 Arch로 돌아갔습니다)"; exit 1; }
+    trap '' TERM HUP INT
+    "${PACMAN[@]}" -S "${back[@]}"
+    local rc=$?
+    trap - TERM HUP INT
+    (( rc == 0 )) || { fail "되돌리기 실패: 다시 실행하세요 (저장소 설정은 이미 Arch로 돌아갔습니다)"; exit 1; }
+  fi
+  "${PACMAN[@]}" -Rns cachyos-v3-mirrorlist cachyos-v4-mirrorlist cachyos-mirrorlist cachyos-keyring >/dev/null 2>&1
+  # the CachyOS key is no longer needed: take it out of pacman's trusted keys again
+  pacman-key --delete "$KEY_FPR" >/dev/null 2>&1
+  # entries CachyOS's pacman wrote for packages that stay (pacman itself, CachyOS-only packages):
+  # drop the field Arch's pacman does not know, so it stops warning on every run
+  if ! pacman -Qi pacman 2>/dev/null | grep -q '^Packager *: .*[Cc]achy[Oo][Ss]'; then
+    grep -lsx '%INSTALLED_DB%' /var/lib/pacman/local/*/desc 2>/dev/null | while read -r p; do
+      sed -i '/^%INSTALLED_DB%$/,/^$/d' "$p"
+    done
+  fi
+  rm -f "$BACKUP" "$VARDIR/level"
+  local left; left=$(cachy_built | tr '\n' ' ')
+  [[ -n ${left// /} ]] && say "CachyOS에만 있는 패키지는 남겨 두었습니다 (업데이트되지 않음): $left"
+  say "완료: Arch 기본 패키지로 돌아왔습니다. 다시 시작하세요."
+}
+
+# ------------------------------------------------------------------ kernel
+sb_signed_boot() { grep -qs "^SB='1'" /etc/delayos/winsetup.conf; }
+
+do_kernel_install() {
+  need_root
+  if sb_signed_boot; then
+    fail "Secure Boot(숨겨진 Windows)용으로 서명된 linux-delayos를 쓰는 중입니다. 서명되지 않은 커널은 설치하지 않습니다."; return 1
+  fi
+  local level; level=$(target_level)
+  [[ $level == generic ]] && { say "이 CPU에 맞는 최적화 커널이 없습니다."; return 3; }
+  wait_lock || return 1
+  if [[ -n $(enabled_level) ]]; then
+    say "linux-cachyos ($(enabled_level)) 설치"
+    "${PACMAN[@]}" -S --needed linux-cachyos linux-cachyos-headers || { fail "linux-cachyos 설치 실패"; return 1; }
+    grub_default_kernel linux-cachyos
+  elif ls "$LOCAL_KERNEL_DIR"/linux-delayos-v3-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
+    say "linux-delayos-v3 (ISO에 포함된 x86-64-v3 빌드) 설치"
+    "${PACMAN[@]}" -U --needed "$LOCAL_KERNEL_DIR"/linux-delayos-v3-*.pkg.tar.zst || { fail "linux-delayos-v3 설치 실패"; return 1; }
+    grub_default_kernel linux-delayos-v3
+  else
+    fail "먼저 CPU 최적화 저장소를 켜세요 (delay-cpu-opt enable)"; return 1
+  fi
+  say "새 커널은 다시 시작하면 사용됩니다. linux-delayos와 linux-lts는 GRUB의 고급 옵션에 그대로 남습니다."
+}
+
+do_kernel_remove() {
+  need_root
+  pacman -Qq linux-delayos >/dev/null 2>&1 || { fail "linux-delayos가 설치되어 있지 않아 다른 커널을 지우지 않습니다"; return 1; }
+  grub_default_kernel linux-delayos
+  local rm=() p
+  for p in linux-cachyos-headers linux-cachyos linux-delayos-v3-headers linux-delayos-v3; do
+    pacman -Qq "$p" >/dev/null 2>&1 && rm+=("$p")
+  done
+  (( ${#rm[@]} )) && { "${PACMAN[@]}" -Rns "${rm[@]}" || return 1; }
+  grub_default_kernel linux-delayos
+  say "기본 커널을 linux-delayos로 되돌렸습니다."
+}
+
+# ------------------------------------------------------------------ status
+do_status() {
+  local det en pend=false kern="" k model
+  det=$(detect_level); en=$(enabled_level)
+  [[ -e $VARDIR/pending ]] && pend=true
+  for k in linux-cachyos linux-delayos-v3; do pacman -Qq "$k" >/dev/null 2>&1 && kern=$k; done
+  model=$(cpu_field 'model name')
+  local localk=false; ls "$LOCAL_KERNEL_DIR"/linux-delayos-v3-[0-9]*.pkg.tar.zst >/dev/null 2>&1 && localk=true
+  local sb=false; sb_signed_boot && sb=true
+  if [[ ${1:-} == --json ]]; then
+    printf '{"cpu":"%s","level":"%s","enabled":"%s","pending":%s,"kernel":"%s","running":"%s","localKernel":%s,"signedBoot":%s}\n' \
+      "${model//\"/}" "$det" "$en" "$pend" "$kern" "$(uname -r)" "$localk" "$sb"
+  else
+    echo "CPU:            $model"
+    echo "지원 수준:      $det"
+    echo "사용 중인 저장소: ${en:-Arch 기본 (최적화 꺼짐)}"
+    echo "첫 부팅 대기:   $pend"
+    echo "최적화 커널:    ${kern:-없음}  (실행 중: $(uname -r))"
+  fi
+}
+
+# ------------------------------------------------------------------ main
+OPT_INSTALL=0; OPT_UPGRADE=1; OPT_PROTON=1; OPT_KERNEL=0; OPT_PENDING=0
+cmd=${1:-}; shift || true
+case "$cmd" in
+  detect) detect_level ;;
+  status) do_status "${1:-}" ;;
+  enable)
+    for a in "$@"; do
+      case "$a" in
+        --install-time) OPT_INSTALL=1 ;; --no-upgrade) OPT_UPGRADE=0 ;; --no-proton) OPT_PROTON=0 ;;
+        --kernel) OPT_KERNEL=1 ;; *) fail "unknown option $a"; exit 2 ;;
+      esac
+    done
+    do_enable ;;
+  disable) do_disable ;;
+  kernel)
+    case "${1:-}" in install) do_kernel_install ;; remove) do_kernel_remove ;; *) fail "usage: delay-cpu-opt kernel install|remove"; exit 2 ;; esac ;;
+  apply-pending)
+    need_root
+    [[ -e $VARDIR/pending ]] || exit 0
+    grep -q '^proton=0' "$VARDIR/pending" && OPT_PROTON=0
+    grep -q '^kernel=1' "$VARDIR/pending" && OPT_KERNEL=1
+    OPT_PENDING=1
+    # wait for a network (up to 10 minutes); none -> stay pending and try again at the next boot
+    for _ in $(seq 60); do online && break; sleep 10; done
+    online || { say "네트워크 없음: 다음 부팅 때 다시 시도합니다"; exit 0; }
+    notify_users "CPU 최적화 패키지 설치 중" "이 PC의 CPU에 맞춘 패키지로 바꾸고 있습니다. 끝날 때까지 PC를 끄지 마세요."
+    ( do_enable ) >> "$LOG" 2>&1
+    rc=$?
+    case $rc in
+      0) notify_users "CPU 최적화 완료" "다시 시작하면 최적화된 패키지를 모두 사용합니다." ;;
+      3|10) ;;
+      *) # tried and failed: do not retry on every boot; the Drivers app still offers it
+         rm -f "$VARDIR/pending"; systemctl disable delay-cpu-opt.service >/dev/null 2>&1
+         notify_users "CPU 최적화를 적용하지 못했습니다" "드라이버 앱에서 다시 시도할 수 있습니다. 기록: $LOG" ;;
+    esac
+    exit 0 ;;
+  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

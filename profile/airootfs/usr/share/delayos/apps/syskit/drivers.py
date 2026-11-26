@@ -51,7 +51,7 @@ def detect():
     for d in _lspci():
         cid, ven, dev = d["clsId"], d["vendor"], int(d["device"], 16)
         item = {"slot": d["slot"], "name": _short(d["name"]), "driver": d["driver"] or "없음",
-                "kind": "", "icon": "", "packages": [], "note": "", "recommended": ""}
+                "kind": "", "icon": "", "packages": [], "note": "", "recommended": "", "action": ""}
         if cid.startswith("03"):  # display
             item["kind"] = "그래픽"
             item["icon"] = "video-display"
@@ -62,6 +62,10 @@ def detect():
                 elif dev >= NV_580_MIN:
                     item["packages"] = ["nvidia-580xx-dkms", "nvidia-580xx-utils", "lib32-nvidia-580xx-utils"]
                     item["recommended"] = "NVIDIA 580xx 레거시 드라이버"
+                    # not in the Arch repos: CachyOS repo (delay-cpu-opt) or AUR; delay-gpu-setup swaps the
+                    # conflicting nvidia-utils for it (a plain "install" would stop at the conflict)
+                    item["action"] = "gpu-setup"
+                    item["note"] = "CPU 최적화 저장소를 켜면 설치할 수 있습니다"
                 else:
                     item["recommended"] = "오픈소스 nouveau 드라이버 (이 GPU는 최신 NVIDIA 드라이버를 지원하지 않습니다)"
                     item["packages"] = ["mesa", "vulkan-nouveau", "lib32-mesa"]
@@ -105,7 +109,7 @@ def detect():
     # gaming extras that apply to every machine
     extras = {"slot": "extra", "name": "게임 런타임", "kind": "게임", "icon": "input-gaming",
               "driver": "Vulkan / 32비트 라이브러리", "packages": ["vulkan-icd-loader", "lib32-vulkan-icd-loader", "gamemode", "lib32-gamemode"],
-              "recommended": "Steam과 Proton 게임에 필요한 Vulkan·GameMode 구성 요소", "note": ""}
+              "recommended": "Steam과 Proton 게임에 필요한 Vulkan·GameMode 구성 요소", "note": "", "action": ""}
     res.append(extras)
     allp = sorted({p for r in res for p in r["packages"]})
     inst = _installed(allp)

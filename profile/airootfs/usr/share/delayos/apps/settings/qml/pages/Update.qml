@@ -140,7 +140,8 @@ SPage {
                 SButton {
                     visible: !modelData.ok
                     text: "설치"; kind: "accent"; busy: pg.drvJob === modelData.slot; enabled: pg.drvJob === ""
-                    onClicked: { pg.drvJob = modelData.slot; pg.drvLine = "설치를 준비하는 중…"; sys.spawn("drv", ["pkexec", sys.helper(), "install"].concat(modelData.missing)) }
+                    onClicked: { pg.drvJob = modelData.slot; pg.drvLine = "설치를 준비하는 중…"
+                        sys.spawn("drv", modelData.action === "gpu-setup" ? ["pkexec", sys.helper(), "gpu-setup"] : ["pkexec", sys.helper(), "install"].concat(modelData.missing)) }
                 }
             }
         }

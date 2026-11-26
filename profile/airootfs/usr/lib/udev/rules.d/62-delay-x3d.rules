@@ -1,0 +1,6 @@
+# DelayOS: Ryzen X3D with two CCDs (7900X3D/7950X3D/9900X3D/9950X3D): rank the 3D V-Cache cores first.
+# The amd_x3d_vcache platform driver exposes amd_x3d_mode (frequency | cache); "cache" makes
+# amd-pstate's preferred-core ranking put the V-Cache CCD on top, which is what games want.
+# The device only exists on those CPUs (and needs BIOS "CPPC Dynamic Preferred Cores" = Driver),
+# so the rule does nothing anywhere else. "add" covers the built-in driver (coldplug), "bind" a module.
+ACTION=="add|bind", SUBSYSTEM=="platform", DRIVER=="amd_x3d_vcache", TEST=="amd_x3d_mode", ATTR{amd_x3d_mode}="cache"

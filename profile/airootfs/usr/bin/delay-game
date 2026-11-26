@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# DelayOS game launcher wrapper. Nothing uses it unless you ask for it:
+#   Steam > 게임 속성 > 시작 옵션:   delay-game %command%
+#   Lutris / terminal:               delay-game ./game
+#
+# What it adds around the game:
+#   - performance power profile and no screen blanking while the game runs (game-performance)
+#   - GameMode (gamemoderun): renice, I/O priority, pins the game to the V-Cache cores on Ryzen X3D
+#     and to the P-cores on Intel hybrid CPUs (/etc/gamemode.ini pin_cores=yes)
+#   - MangoHud overlay when it is switched on   (delay-gamemode mangohud on,  or DELAY_MANGOHUD=1)
+#   - gamescope when it is switched on          (delay-gamemode gamescope on, or DELAY_GAMESCOPE=1)
+#       extra gamescope arguments: DELAY_GAMESCOPE_ARGS="-w 1920 -h 1080 -F fsr"
+#       (or gamescope_args=... in ~/.config/delayos/gaming.conf)
+# Per-game off switches: DELAY_MANGOHUD=0 DELAY_GAMESCOPE=0 DELAY_GAMEMODE=0
+set -u
+[[ $# -gt 0 ]] || { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+OPTS="${XDG_CONFIG_HOME:-$HOME/.config}/delayos/gaming.conf"
+opt() { sed -n "s/^$1=//p" "$OPTS" 2>/dev/null | tail -n1; }
+
+mangohud=${DELAY_MANGOHUD:-$(opt mangohud)}
+gamescope=${DELAY_GAMESCOPE:-$(opt gamescope)}
+gs_args=${DELAY_GAMESCOPE_ARGS:-$(opt gamescope_args)}
+
+cmd=("$@")
+[[ ${DELAY_GAMEMODE:-1} == 1 ]] && command -v gamemoderun >/dev/null && cmd=(gamemoderun "${cmd[@]}")
+
+# already inside gamescope (Steam Big Picture session, nested launch): do not nest another one
+if [[ $gamescope == 1 && -z ${GAMESCOPE_WAYLAND_DISPLAY:-} ]] && command -v gamescope >/dev/null; then
+  gs=(gamescope -f)
+  # output size = the native mode of the first connected display (gamescope defaults to 1280x720)
+  if [[ " $gs_args " != *" -W "* ]]; then
+    for c in /sys/class/drm/card*-*; do
+      [[ $(cat "$c/status" 2>/dev/null) == connected && $(cat "$c/enabled" 2>/dev/null) == enabled ]] || continue
+      mode=$(head -n1 "$c/modes" 2>/dev/null)
+      if [[ $mode =~ ^([0-9]+)x([0-9]+) ]]; then gs+=(-W "${BASH_REMATCH[1]}" -H "${BASH_REMATCH[2]}"); break; fi
+    done
+  fi
+  # inside gamescope MangoHud runs as mangoapp (one overlay for the whole gamescope output)
+  [[ $mangohud == 1 ]] && command -v mangoapp >/dev/null && gs+=(--mangoapp)
+  # shellcheck disable=SC2206
+  [[ -n $gs_args ]] && gs+=($gs_args)
+  cmd=("${gs[@]}" -- "${cmd[@]}")
+elif [[ $mangohud == 1 ]] && command -v mangohud >/dev/null; then
+  cmd=(mangohud "${cmd[@]}")
+fi
+
+# DELAY_GAME_DRYRUN=1 prints the final command instead of running it
+if [[ ${DELAY_GAME_DRYRUN:-0} == 1 ]]; then
+  command -v game-performance >/dev/null && printf 'game-performance '
+  printf '%q ' "${cmd[@]}"; echo; exit 0
+fi
+
+if command -v game-performance >/dev/null; then exec game-performance "${cmd[@]}"; fi
+exec "${cmd[@]}"

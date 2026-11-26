@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+# delay-bench: DelayOS 게임 벤치마크 도구 (docs/benchmark.md)
+#
+#   delay-bench run [-t 초] [-w 초] [-n 이름] -- <명령>   MangoHud로 프레임 시간을 기록하며 명령 실행
+#   delay-bench steam [-t 초] [-w 초]                     Steam 시작 옵션에 넣을 한 줄 출력
+#   delay-bench parse [옵션] <CSV>...                     평균 FPS / 1% low / 0.1% low 계산
+#   delay-bench compare [옵션] <기준.csv> <비교.csv>      두 기록 비교 (예: Windows vs DelayOS)
+#   delay-bench table [옵션] <CSV>...                     마크다운 표 행으로 출력
+#   delay-bench sysinfo                                   보고서에 붙일 시스템 정보
+#
+# parse/compare/table 옵션:
+#   --skip 초        처음 N초 버리기 (로딩, 셰이더 컴파일)
+#   --duration 초    그 뒤 N초만 사용
+#   --process 이름   PresentMon/CapFrameX CSV에서 이 프로세스만 (예: game.exe)
+#
+# CSV는 MangoHud(DelayOS), PresentMon·CapFrameX(Windows) 형식을 모두 읽고 같은 식으로 계산합니다:
+#   평균 FPS      = 프레임 수 / 전체 시간
+#   1% low        = 프레임 시간 99번째 백분위수의 FPS (CapFrameX의 P1, MangoHud 요약의 "1% Min FPS")
+#   0.1% low      = 99.9번째 백분위수의 FPS (P0.1)
+#   1% low 평균   = 가장 느린 1% 프레임의 평균 FPS (CapFrameX "1% Low Average")
+set -u
+export LC_ALL=C
+OUT_DIR="${DELAY_BENCH_DIR:-$HOME/delay-bench}"
+
+usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
+die() { echo "delay-bench: $*" >&2; exit 1; }
+
+# ---------------------------------------------------------------- frame times
+# Prints one frame time (ms) per line for a MangoHud / PresentMon / CapFrameX CSV.
+frametimes() { # $1 file  $2 skip(s)  $3 duration(s, 0 = all)  $4 process filter
+  tr -d '\r' < "$1" | awk -F, -v skip="$2" -v dur="$3" -v proc="$4" '
+    function lc(s) { return tolower(s) }
+    !hdr {
+      # the header is the first line with a frame time column (MangoHud has system-info lines before it)
+      for (i = 1; i <= NF; i++) {
+        n = lc($i); gsub(/^[ \t"]+|[ \t"]+$/, "", n)
+        if (n == "frametime" || n == "msbetweenpresents") ft = i
+        if (n == "fps") fps = i
+        if (n == "application" || n == "processname") app = i
+      }
+      if (ft) { hdr = 1; mango = (fps > 0) } else { fps = 0; app = 0 }
+      next
+    }
+    {
+      if (proc != "" && app && lc($app) != lc(proc)) next
+      v = $ft; gsub(/[ \t"]/, "", v)
+      if (v !~ /^[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)?$/ || v + 0 <= 0) next
+      n_++; t[n_] = v + 0
+      if (mango && $fps + 0 > 0 && nprobe < 400) { probe[++nprobe] = (v + 0) * ($fps + 0) }
+    }
+    END {
+      if (!hdr) { print "ERR no frame time column (frametime / MsBetweenPresents / FrameTime)" > "/dev/stderr"; exit 3 }
+      # MangoHud wrote the frame time in microseconds in older versions and in milliseconds later:
+      # fps x frametime is ~1000 for ms, ~1e6 for us, ~1e9 for ns.
+      scale = 1
+      if (nprobe) {
+        s = 0; for (i = 1; i <= nprobe; i++) s += probe[i]; s /= nprobe
+        if (s > 3e8) scale = 1e-6; else if (s > 3e5) scale = 1e-3
+      } else if (n_) {
+        s = 0; for (i = 1; i <= n_; i++) s += t[i]; s /= n_
+        if (s > 2000) scale = 1e-3      # no game runs at an average of 0.5 fps
+      }
+      el = 0
+      for (i = 1; i <= n_; i++) {
+        ms = t[i] * scale; el += ms
+        if (el < skip * 1000) continue
+        if (dur > 0 && el > (skip + dur) * 1000) break
+        printf "%.6f\n", ms
+      }
+    }'
+}
+
+# name;frames;seconds;avg;p1;p01;low1avg;low01avg;max_ms
+stats() { # $1 file
+  local tmp; tmp=$(mktemp)
+  frametimes "$1" "$SKIP" "$DURATION" "$PROCESS" | sort -g > "$tmp" || { rm -f "$tmp"; return 3; }
+  [[ -s $tmp ]] || { rm -f "$tmp"; echo "delay-bench: $1: 프레임 기록이 없습니다" >&2; return 3; }
+  awk -v name="$(basename "$1")" '
+    { v[NR] = $1; sum += $1 }
+    END {
+      n = NR
+      i1 = int(n * 0.99 + 0.999999); if (i1 > n) i1 = n; if (i1 < 1) i1 = 1
+      i01 = int(n * 0.999 + 0.999999); if (i01 > n) i01 = n; if (i01 < 1) i01 = 1
+      k1 = int(n * 0.01 + 0.999999); if (k1 < 1) k1 = 1
+      k01 = int(n * 0.001 + 0.999999); if (k01 < 1) k01 = 1
+      for (i = n; i > n - k1; i--) s1 += v[i]
+      for (i = n; i > n - k01; i--) s01 += v[i]
+      printf "%s;%d;%.1f;%.1f;%.1f;%.1f;%.1f;%.1f;%.2f\n", name, n, sum / 1000, n / (sum / 1000),
+             1000 / v[i1], 1000 / v[i01], 1000 / (s1 / k1), 1000 / (s01 / k01), v[n]
+    }' "$tmp"
+  local rc=$?; rm -f "$tmp"; return $rc
+}
+
+parse_opts() {
+  SKIP=0; DURATION=0; PROCESS=""; FILES=()
+  while (( $# )); do
+    case "$1" in
+      --skip) SKIP=${2:?}; shift 2 ;;
+      --duration) DURATION=${2:?}; shift 2 ;;
+      --process) PROCESS=${2:?}; shift 2 ;;
+      -*) die "알 수 없는 옵션: $1" ;;
+      *) FILES+=("$1"); shift ;;
+    esac
+  done
+  (( ${#FILES[@]} )) || die "CSV 파일을 지정하세요"
+  local f; for f in "${FILES[@]}"; do [[ -r $f ]] || die "$f: 읽을 수 없습니다"; done
+}
+
+cmd_parse() {
+  parse_opts "$@"
+  local f s rc=0
+  for f in "${FILES[@]}"; do
+    s=$(stats "$f") || { rc=1; continue; }
+    IFS=';' read -r name n secs avg p1 p01 l1 l01 mx <<<"$s"
+    printf '%s\n' "$name"
+    printf '  프레임 %s개, %s초\n' "$n" "$secs"
+    printf '  평균 FPS        %8s\n' "$avg"
+    printf '  1%% low          %8s   (1%% low 평균 %s)\n' "$p1" "$l1"
+    printf '  0.1%% low        %8s   (0.1%% low 평균 %s)\n' "$p01" "$l01"
+    printf '  가장 긴 프레임  %8s ms\n' "$mx"
+  done
+  return $rc
+}
+
+cmd_table() {
+  parse_opts "$@"
+  local f s
+  echo "| 기록 | 평균 FPS | 1% low | 0.1% low | 프레임 수 | 시간(초) |"
+  echo "|---|---:|---:|---:|---:|---:|"
+  for f in "${FILES[@]}"; do
+    s=$(stats "$f") || continue
+    IFS=';' read -r name n secs avg p1 p01 l1 l01 mx <<<"$s"
+    echo "| $name | $avg | $p1 | $p01 | $n | $secs |"
+  done
+}
+
+cmd_compare() {
+  parse_opts "$@"
+  (( ${#FILES[@]} == 2 )) || die "compare에는 CSV 두 개가 필요합니다: <기준.csv> <비교.csv>"
+  local a b
+  a=$(stats "${FILES[0]}") || exit 1
+  b=$(stats "${FILES[1]}") || exit 1
+  awk -F';' -v a="$a" -v b="$b" 'BEGIN {
+    split(a, x, ";"); split(b, y, ";")
+    printf "%-14s %12s %12s %9s\n", "", "기준", "비교", "차이"
+    printf "%-14s %12s %12s\n", "기록", substr(x[1], 1, 12), substr(y[1], 1, 12)
+    lab[4] = "평균 FPS"; lab[5] = "1% low"; lab[6] = "0.1% low"
+    for (i = 4; i <= 6; i++) printf "%-14s %12.1f %12.1f %+8.1f%%\n", lab[i], x[i], y[i], (y[i] / x[i] - 1) * 100
+    printf "\n| 항목 | %s | %s | 차이 |\n|---|---:|---:|---:|\n", x[1], y[1]
+    for (i = 4; i <= 6; i++) printf "| %s | %.1f | %.1f | %+.1f%% |\n", lab[i], x[i], y[i], (y[i] / x[i] - 1) * 100
+  }'
+}
+
+# ---------------------------------------------------------------- recording
+mango_config() { # $1 seconds  $2 warm-up seconds  $3 folder
+  # every frame is logged (log_interval=0); the log starts by itself after the warm-up and stops
+  # after the duration. Shift_L+F2 starts/stops a log by hand as well.
+  echo "output_folder=$3,log_interval=0,autostart_log=$2,log_duration=$1,fps,frametime,frame_timing=0,position=top-right,font_size=18"
+}
+
+cmd_run() {
+  local secs=60 warm=10 name=""
+  while (( $# )); do
+    case "$1" in
+      -t) secs=${2:?}; shift 2 ;; -w) warm=${2:?}; shift 2 ;; -n) name=${2:?}; shift 2 ;;
+      --) shift; break ;; -*) die "알 수 없는 옵션: $1" ;; *) break ;;
+    esac
+  done
+  (( $# )) || die "실행할 명령을 지정하세요: delay-bench run -- <명령>"
+  command -v mangohud >/dev/null || die "mangohud가 설치되어 있지 않습니다"
+  local dir="$OUT_DIR${name:+/$name}"; mkdir -p "$dir"
+  local stamp; stamp=$(mktemp)
+  echo "기록 폴더: $dir   (시작 후 ${warm}초 뒤부터 ${secs}초 동안 기록)"
+  MANGOHUD=1 MANGOHUD_CONFIG="$(mango_config "$secs" "$warm" "$dir")" mangohud "$@"
+  local new; new=$(find "$dir" -maxdepth 1 -name '*.csv' ! -name '*_summary.csv' -newer "$stamp" | sort | tail -n1)
+  rm -f "$stamp"
+  [[ -n $new ]] || die "기록 파일이 만들어지지 않았습니다 (게임이 기록 시작 전에 끝났을 수 있습니다)"
+  echo; cmd_parse "$new"
+}
+
+cmd_steam() {
+  local secs=60 warm=30
+  while (( $# )); do case "$1" in -t) secs=${2:?}; shift 2 ;; -w) warm=${2:?}; shift 2 ;; *) die "알 수 없는 옵션: $1" ;; esac; done
+  mkdir -p "$OUT_DIR"
+  echo "Steam > 게임 속성 > 일반 > 시작 옵션에 아래 한 줄을 넣으세요."
+  echo "게임 시작 ${warm}초 뒤부터 ${secs}초 동안 자동으로 기록합니다 (직접 시작/정지: 왼쪽 Shift+F2)."
+  echo
+  echo "MANGOHUD_CONFIG=\"$(mango_config "$secs" "$warm" "$OUT_DIR")\" mangohud %command%"
+  echo
+  echo "끝나면:  delay-bench parse $OUT_DIR/<게임>_<날짜>.csv"
+}
+
+cmd_sysinfo() {
+  local k v
+  echo "| 항목 | 값 |"; echo "|---|---|"
+  echo "| OS | $(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-Linux}") |"
+  echo "| 커널 | $(uname -r) |"
+  echo "| CPU | $(awk -F': *' '/^model name/ {print $2; exit}' /proc/cpuinfo) |"
+  echo "| 메모리 | $(awk '/MemTotal/ {printf "%.1f GB", $2 / 1048576}' /proc/meminfo) |"
+  if command -v lspci >/dev/null; then
+    lspci -nnk 2>/dev/null | awk '/\[03[0-9a-f][0-9a-f]\]:/ {sub(/^[^ ]+ /, ""); g = $0} g && /Kernel driver in use/ {print "| GPU | " g " (" $NF ") |"; g = ""}'
+  fi
+  command -v glxinfo >/dev/null && [[ -n ${DISPLAY:-}${WAYLAND_DISPLAY:-} ]] &&
+    echo "| 그래픽 드라이버 | $(glxinfo -B 2>/dev/null | sed -n 's/^OpenGL version string: //p' | head -n1) |"
+  command -v delay-cpu-opt >/dev/null && echo "| 패키지 빌드 | $(delay-cpu-opt status 2>/dev/null | sed -n 's/^사용 중인 저장소: *//p') |"
+  echo "| CPU 드라이버 / 거버너 / EPP | $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver 2>/dev/null) / $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null) / $(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null) |"
+  command -v powerprofilesctl >/dev/null && echo "| 전원 모드 | $(powerprofilesctl get 2>/dev/null) |"
+  command -v scxctl >/dev/null && echo "| 스케줄러 | $(scxctl get 2>/dev/null) |"
+  v=$(ls /sys/bus/platform/drivers/amd_x3d_vcache/*/amd_x3d_mode 2>/dev/null | head -n1)
+  [[ -n $v ]] && echo "| X3D 모드 | $(cat "$v") |"
+  echo "| 게이밍 모드 | $(/usr/local/bin/delay-gamemode status 2>/dev/null) |"
+  echo "| 세션 | ${XDG_SESSION_TYPE:-?} / ${XDG_CURRENT_DESKTOP:-?} |"
+  if [[ -n ${DISPLAY:-}${WAYLAND_DISPLAY:-} ]] && command -v kscreen-doctor >/dev/null; then
+    k=$(kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -o '[0-9]*x[0-9]*@[0-9.]*\*' | head -n1)
+    [[ -n $k ]] && echo "| 화면 | ${k%\*} Hz |"
+  fi
+}
+
+case "${1:-}" in
+  run) shift; cmd_run "$@" ;;
+  steam) shift; cmd_steam "$@" ;;
+  parse) shift; cmd_parse "$@" ;;
+  compare) shift; cmd_compare "$@" ;;
+  table) shift; cmd_table "$@" ;;
+  sysinfo) cmd_sysinfo ;;
+  -h|--help|help|"") usage ;;
+  *) die "알 수 없는 명령: $1 (delay-bench --help)" ;;
+esac

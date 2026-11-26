@@ -41,6 +41,9 @@ sudo ./build.sh
 - **GPU:** 셰이더 캐시 확대, ntsync, 전체 화면 게임 컴포지터 우회.
 - **네트워크:** BBRv3와 fq.
 - **부팅:** 부팅 메뉴 자동 선택, 불필요한 대기 서비스 제거.
+- **CPU 맞춤 패키지:** x86-64-v3/v4, Zen 4/5 CPU에서는 CachyOS 최적화 저장소로 전환(`delay-cpu-opt`, 드라이버 앱에서 켜고 끔). Proton-CachyOS를 Steam Play 기본 도구로 지정. 자세한 내용은 [docs/gaming-performance.md](docs/gaming-performance.md).
+- **게이밍 모드:** CPU EPP performance, LAVD gaming 모드, AMD GPU 최고 전원 상태, Ryzen X3D V-Cache 코어 우선. 끄면 켜기 전 값으로 복원.
+- **벤치마크:** `delay-bench`로 Windows(PresentMon/CapFrameX)와 DelayOS(MangoHud) 기록을 같은 식으로 비교 ([docs/benchmark.md](docs/benchmark.md)).
 
 ## 구조
 

@@ -76,3 +76,30 @@ rm -f /var/lib/delay/firstboot.done
 if [[ ${DELAYOS_SOFTWARE:-} == minimal ]]; then
   pacman -Rns --noconfirm libreoffice-fresh libreoffice-fresh-ko gimp vlc lutris bottles 2>/dev/null || true
 fi
+
+# ---- pacman: Steam and the 32-bit drivers come from multilib (commented out in the stock pacman.conf) ----
+if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
+  sed -i '/^#\[multilib\]/,/^#Include/ s/^#//' /etc/pacman.conf
+fi
+
+# ---- Graphics drivers that match this PC (the image carries every vendor's) ----
+/usr/local/bin/delay-gpu-setup --install-time --quiet || true
+
+# ---- CPU-optimized packages (docs/gaming-performance.md) ----
+# On a CPU with x86-64-v3 / v4 / Zen 4-5 the CachyOS repositories built for that level are enabled
+# and the system is upgraded to those builds, plus proton-cachyos. Without a network (or when
+# anything fails) nothing is changed here and delay-cpu-opt.service does it on the first boot that
+# has a network. Opt out: boot the installer with delayos.cpuopt=off (or DELAYOS_CPUOPT=off).
+# DELAYOS_CPUOPT_KERNEL=1 / delayos.cpuopt=kernel also installs the CPU-matched linux-cachyos.
+cpuopt="${DELAYOS_CPUOPT:-auto}"
+for w in $(cat /proc/cmdline 2>/dev/null); do
+  case "$w" in delayos.cpuopt=*) cpuopt="${w#delayos.cpuopt=}" ;; esac
+done
+case "$cpuopt" in
+  off|0|no) ;;
+  *)
+    cpuflags=(--install-time)
+    [[ ${DELAYOS_CPUOPT_KERNEL:-0} == 1 || $cpuopt == kernel ]] && cpuflags+=(--kernel)
+    /usr/local/bin/delay-cpu-opt enable "${cpuflags[@]}" || true
+    ;;
+esac

@@ -59,6 +59,12 @@ file_permissions=(
   ["/usr/lib/delayos/delay-winboot-helper"]="0:0:755"
   # Hidden Windows for anti-cheat games (delay-winsetup, docs/windows-switch.md)
   ["/usr/local/bin/delay-winsetup"]="0:0:755"
+  # Gaming performance (docs/gaming-performance.md): CPU-optimized packages, GPU drivers, Proton default, benchmark
+  ["/usr/local/bin/delay-cpu-opt"]="0:0:755"
+  ["/usr/local/bin/delay-gpu-setup"]="0:0:755"
+  ["/usr/bin/delay-steam-compat"]="0:0:755"
+  ["/usr/bin/delay-game"]="0:0:755"
+  ["/usr/bin/delay-bench"]="0:0:755"
   # Tuning tools taken from CachyOS-Settings
   ["/usr/bin/dlss-swapper"]="0:0:755"
   ["/usr/bin/dlss-swapper-dll"]="0:0:755"
