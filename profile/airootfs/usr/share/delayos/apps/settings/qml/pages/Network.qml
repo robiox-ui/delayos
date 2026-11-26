@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 네트워크 및 인터넷 (nmcli)
 SPage {
@@ -37,7 +38,7 @@ SPage {
     // status card
     Rectangle {
         Layout.fillWidth: true; Layout.preferredHeight: 92; Layout.bottomMargin: 8
-        radius: 8; color: Theme.card
+        radius: 8; color: Theme.card; border.width: 1; border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.035) : "#E6E7EB"
         RowLayout {
             anchors.fill: parent; anchors.margins: 18; spacing: 16
             Image { Layout.preferredWidth: 40; Layout.preferredHeight: 40; sourceSize: Qt.size(80, 80); source: win.navIcon("network"); opacity: pg.st.active ? 1 : 0.4 }

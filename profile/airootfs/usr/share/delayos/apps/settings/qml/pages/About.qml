@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 시스템 › 정보 (real hardware info)
 SPage {
@@ -28,7 +29,7 @@ SPage {
 
     component InfoLine: RowLayout {
         property string k; property string v
-        Layout.fillWidth: true; spacing: 12
+        Layout.fillWidth: true; Layout.leftMargin: 48; spacing: 12
         SText { text: k; role: "sub"; font.pixelSize: 13; Layout.preferredWidth: 140 }
         SText { text: v; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.Wrap; elide: Text.ElideNone }
     }

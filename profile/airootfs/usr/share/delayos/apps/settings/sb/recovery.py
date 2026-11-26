@@ -33,7 +33,13 @@ def status():
         kind = s.get("kind", "manual")
         if kind in ("pacman-pre", "pacman-post"):
             # snap-pac writes the pacman command line: "pacman -S vlc" -> "vlc"
-            words = [w for w in desc.split() if not w.startswith("-") and w != "pacman"]
+            # ("--color never" has a value; snapper cuts the text at 72 characters, so the last
+            # word of a long command line is a fragment: "linux-delayos-znve")
+            raw = desc.split()
+            if len(desc) >= 72 and raw:
+                raw.pop()
+            words = [w for i, w in enumerate(raw) if not w.startswith("-") and w != "pacman"
+                     and not (i and raw[i - 1] == "--color")]
             desc = ", ".join(words[:4]) + (" 외 %d개" % (len(words) - 4) if len(words) > 4 else "") if words else "시스템 업데이트"
         snaps.append({"num": s.get("num"), "date": s.get("date", ""), "kind": kind, "kindText": KIND.get(kind, ""),
                       "desc": desc or KIND.get(kind, "스냅샷"), "booted": bool(s.get("booted"))})

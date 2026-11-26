@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import DelayUI
 import DelaySys
 import "../components"
+import "../controls"
 
 // 개인 설정 › 색 [W 0:42, 6:01–6:09]
 SPage {
@@ -29,7 +30,7 @@ SPage {
     }
 
     SRow {
-        key: "mode"; icon: "g:contrast"
+        key: "mode"; icon: "g:contrast"; iconColor: Theme.accentText
         title: "모드 선택"; subtitle: "DelayOS와 앱의 색을 바꿉니다"
         SDropdown {
             model: ["라이트", "다크", "자동(일몰)"]
@@ -48,11 +49,11 @@ SPage {
         title: "강조색"
         subtitle: pg.curName + ". 버튼, 스위치, 선택 및 포커스에 사용됩니다."
         expanded: true
-        bodyPadding: 20
+        bodyPadding: 22
         trailing: Rectangle { width: 20; height: 20; radius: 4; color: pg.shown }
         RowLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: 40
+            Layout.leftMargin: 40; Layout.rightMargin: 14; Layout.bottomMargin: 2
             spacing: 24
             ColumnLayout {
                 spacing: 12
@@ -60,18 +61,18 @@ SPage {
                 SText { text: "DelayOS 색"; font.pixelSize: 13 }
                 Grid {
                     columns: 6
-                    spacing: 12
+                    spacing: 14
                     Repeater {
                         model: Theme.accents
                         Rectangle {
-                            width: 40; height: 40; radius: 10
+                            width: 40; height: 40; radius: 7
                             color: modelData.color
                             readonly property bool cur: index === pg.curIdx
                             border.width: cur ? 2 : 0
                             border.color: Theme.dark ? "white" : "#15171C"
                             scale: sma.containsMouse && !cur ? 1.06 : 1
                             Behavior on scale { NumberAnimation { duration: 80 } }
-                            Rectangle { visible: parent.cur; anchors.fill: parent; anchors.margins: 2; radius: 8; color: "transparent"; border.width: 2; border.color: Theme.windowBg }
+                            Rectangle { visible: parent.cur; anchors.fill: parent; anchors.margins: 2; radius: 5; color: "transparent"; border.width: 2; border.color: Theme.card }
                             SIcon { visible: parent.cur; anchors.centerIn: parent; name: "g:check"; size: 16; tint: Qt.color(modelData.color).hslLightness > 0.62 ? "#1A1A1A" : "#FFFFFF" }
                             MouseArea {
                                 id: sma
@@ -96,12 +97,12 @@ SPage {
                 spacing: 12
                 Layout.alignment: Qt.AlignTop
                 SText { text: "미리 보기"; font.pixelSize: 13 }
-                PreviewThumb { width: 245; height: 152; wallpaper: ap.thumb(ap.cur, Theme.dark); dark: Theme.dark; accent: pg.shown; taskbar: ap.st.layout === "taskbar" }
+                PreviewThumb { width: 220; height: 134; bg: Theme.card; wallpaper: ap.thumb(ap.cur, Theme.dark); dark: Theme.dark; accent: pg.shown; taskbar: ap.st.layout === "taskbar" }
             }
         }
     }
 
     SHeader { text: "관련 설정" }
-    SRow { icon: "insert-image"; title: "배경"; subtitle: "바탕 화면 배경 화면"; chevron: true; onClicked: pg.navigate("background") }
-    SRow { icon: "g:moon"; title: "야간 모드"; subtitle: "저녁에 화면 색을 따뜻하게"; chevron: true; onClicked: pg.navigate("display#d-night") }
+    SRow { icon: "insert-image"; iconColor: Theme.accentText; title: "배경"; subtitle: "바탕 화면 배경 화면"; chevron: true; onClicked: pg.navigate("background") }
+    SRow { icon: "g:moon"; iconColor: Theme.accentText; title: "야간 모드"; subtitle: "저녁에 화면 색을 따뜻하게"; chevron: true; onClicked: pg.navigate("display#d-night") }
 }

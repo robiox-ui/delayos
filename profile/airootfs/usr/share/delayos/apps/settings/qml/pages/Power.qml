@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 시스템 › 전원 및 배터리 (power-profiles-daemon + powerdevilrc)
 SPage {
@@ -16,7 +17,7 @@ SPage {
     Rectangle {
         visible: !!pg.p.battery
         Layout.fillWidth: true; Layout.preferredHeight: 84; Layout.bottomMargin: 8
-        radius: 8; color: Theme.card
+        radius: 8; color: Theme.card; border.width: 1; border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.035) : "#E6E7EB"
         RowLayout {
             anchors.fill: parent; anchors.margins: 18; spacing: 16
             SIcon { name: "battery-full"; size: 36; tint: Theme.text1 }
@@ -27,7 +28,7 @@ SPage {
         }
     }
 
-    SHeader { text: "전원"; Layout.topMargin: 0 }
+    SHeader { text: "전원" }
     SRow {
         key: "p-profile"; icon: "speedometer"; title: "전원 모드"; subtitle: "게임할 때는 최고 성능, 배터리를 아끼려면 절전"
         enabled: pg.p.profiles.length > 0

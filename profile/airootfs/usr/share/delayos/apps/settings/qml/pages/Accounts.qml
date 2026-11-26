@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import DelayUI
 import DelaySys
 import "../components"
+import "../controls"
 
 // 계정 (AccountsService + kcm_users for passwords/other users)
 SPage {
@@ -13,9 +14,10 @@ SPage {
     RowLayout {
         Layout.fillWidth: true; Layout.bottomMargin: 14; spacing: 18
         Rectangle {
-            width: 84; height: 84; radius: 42; color: Theme.dark ? "#2A2D35" : "#DADDE3"; clip: true
+            width: 84; height: 84; radius: 42; color: Theme.dark ? "#2A2D35" : "#DADDE3"
             SText { anchors.centerIn: parent; text: (pg.me.name || "?").charAt(0).toUpperCase(); font.pixelSize: 34; font.weight: Font.DemiBold; color: Theme.text2; visible: !av.visible }
             Image { id: av; anchors.fill: parent; source: pg.me.avatar ? "file://" + pg.me.avatar + "?" + Date.now() : ""; visible: status === Image.Ready; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(168, 168); cache: false }
+            RoundCorners { visible: av.visible; r: 42; bg: Theme.windowBg }
         }
         ColumnLayout { spacing: 3
             SText { text: pg.me.name || ""; font.pixelSize: 20; font.weight: Font.DemiBold }

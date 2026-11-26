@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 시스템 › 저장소
 SPage {
@@ -19,7 +20,7 @@ SPage {
     Repeater {
         model: pg.s.drives
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 86; radius: 8; color: Theme.card
+            Layout.fillWidth: true; Layout.preferredHeight: 86; radius: 8; color: Theme.card; border.width: 1; border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.035) : "#E6E7EB"
             ColumnLayout {
                 anchors.fill: parent; anchors.margins: 16; spacing: 8
                 RowLayout {

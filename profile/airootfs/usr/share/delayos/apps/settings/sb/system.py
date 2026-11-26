@@ -89,11 +89,17 @@ def rename(name):
 
 def storage():
     drives = []
+    seen = set()
     for l in out(["df", "-B1", "--output=source,target,size,used,avail,fstype", "-x", "tmpfs", "-x", "devtmpfs",
                   "-x", "efivarfs", "-x", "squashfs", "-x", "overlay"]).splitlines()[1:]:
         p = l.split()
         if len(p) < 6 or p[1].startswith(("/boot", "/efi", "/run", "/var/lib/docker")):
             continue
+        # the btrfs subvolumes of one partition (/, /home, /.snapshots, /var/log, ...) share its
+        # space: one row per device, the first mount point (df lists "/" first)
+        if p[0] in seen:
+            continue
+        seen.add(p[0])
         size, used = int(p[2]), int(p[3])
         drives.append({"dev": p[0], "mount": p[1], "size": _human(size), "used": _human(used),
                        "free": _human(int(p[4])), "frac": used / size if size else 0, "fs": p[5]})

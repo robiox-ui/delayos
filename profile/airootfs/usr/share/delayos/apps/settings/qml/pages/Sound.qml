@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 시스템 › 소리 (PipeWire via pactl)
 SPage {
@@ -14,7 +15,7 @@ SPage {
     readonly property var src: def(d.sources)
     Component.onCompleted: load()
 
-    SHeader { text: "출력"; Layout.topMargin: 0 }
+    SHeader { text: "출력" }
     SRow {
         key: "s-out"; icon: "g:speaker"; title: "소리를 재생할 장치 선택"; subtitle: pg.d.sinks.length ? "" : "출력 장치를 찾지 못했습니다"
         SDropdown { implicitWidth: 240; model: pg.d.sinks.map(function(s) { return s.desc }); currentIndex: pg.idx(pg.d.sinks)

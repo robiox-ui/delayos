@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 앱 지원 › Windows 전환 (delay-winboot, docs/windows-switch.md): status of the dual-boot switch,
 // its two options and the manually added Windows games. Backend: sb/winswitch.py.
@@ -17,7 +18,7 @@ ColumnLayout {
     Component.onCompleted: load()
     Connections { target: sys; function onProcDone(id, code) { if (id === "ws-ui") ws.load() } }
 
-    SHeader { text: "Windows 전환" }
+    SHeader { text: "Windows 전환"; Layout.topMargin: 28 }
     SRow {
         key: "winswitch"
         icon: "computer"; iconColor: ws.st.found && ws.st.blocker === "" ? Theme.success : Theme.text2
@@ -29,7 +30,7 @@ ColumnLayout {
                 : "Windows를 찾았습니다 · 연동 도우미 설치됨 · " + (ws.st.autologon ? "자동 로그인 켜짐" : "자동 로그인 꺼짐 (Windows에서 로그인 한 번 필요)")
         SButton { visible: ws.st.found && !ws.st.helper; text: "도우미 설치"; kind: "accent"; onClicked: ws.ui("--setup") }
     }
-    SText { visible: ws.st.warning !== ""; text: ws.st.warning; Layout.fillWidth: true; Layout.leftMargin: 52; Layout.rightMargin: 16; color: "#E8BC6A"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone }
+    SText { visible: ws.st.warning !== ""; text: ws.st.warning; Layout.fillWidth: true; Layout.leftMargin: 64; Layout.rightMargin: 16; color: "#E8BC6A"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone }
     SRow {
         visible: ws.st.found
         icon: "system-reboot"; title: "전환 전에 확인"; subtitle: "게임을 누르면 Windows로 다시 시작하기 전에 한 번 물어봅니다"

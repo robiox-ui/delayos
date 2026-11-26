@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // Bluetooth 및 장치 (bluetoothctl)
 SPage {
@@ -21,7 +22,7 @@ SPage {
         SToggle { checked: pg.st.powered; onToggled: (on) => win.call("sb.bt.power", [on], function(r) { if (r && !r.error) pg.st = r }) }
     }
     RowLayout {
-        Layout.fillWidth: true; Layout.topMargin: 16; Layout.bottomMargin: 4
+        Layout.fillWidth: true; Layout.topMargin: 28; Layout.bottomMargin: 8
         SText { role: "header"; text: "장치"; Layout.fillWidth: true }
         SButton { text: pg.scanning ? "찾는 중…" : "장치 추가"; icon: "list-add"; busy: pg.scanning; enabled: pg.st.powered; onClicked: pg.scan() }
     }

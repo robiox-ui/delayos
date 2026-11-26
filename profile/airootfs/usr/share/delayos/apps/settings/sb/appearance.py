@@ -8,6 +8,7 @@ from syskit import sh, out, kread, kwrite, read_accent, CONFIG
 
 DARK_SCHEME = "DelayDark"
 LIGHT_SCHEME = "DelayLight"
+DEFAULT_ACCENT = "#4D6BFE"   # DelayUI Theme.accent; read_accent() is "" until the user picks a colour
 DARK_LNF = "org.delayos.dark.desktop"
 LIGHT_LNF = "org.delayos.light.desktop"
 SCHEME_DIRS = [os.path.expanduser("~/.local/share/color-schemes"), "/usr/share/color-schemes"]
@@ -26,7 +27,7 @@ def state():
     # delay-shell-layout owns these keys ("layout", "autohide"); "Layout" is what older builds of this page wrote
     layout = kread("delayosrc", "Shell", "layout", "") or kread("delayosrc", "Shell", "Layout", "dock")
     return {
-        "mode": mode, "scheme": scheme, "accent": read_accent(),
+        "mode": mode, "scheme": scheme, "accent": read_accent() or DEFAULT_ACCENT,
         "accentName": _t("AccentName", "블루"),
         "layout": layout if layout in ("dock", "taskbar") else "dock",
         "autohide": kread("delayosrc", "Shell", "autohide", "false") == "true",
@@ -94,11 +95,11 @@ def _apply_scheme(name, hexcol):
     _write_scheme_accent(LIGHT_SCHEME, hexcol)
     if not _scheme_path(name):
         name = "BreezeLight" if "Light" in name else "BreezeDark"
-    rc, o = sh(["plasma-apply-colorscheme", "--accent-color", hexcol, name], 20)
-    if "already" in o.lower():  # same scheme: bounce so Plasma re-reads the edited file
-        other = "BreezeDark" if "light" not in name.lower() else "BreezeLight"
-        sh(["plasma-apply-colorscheme", other], 20)
-        sh(["plasma-apply-colorscheme", "--accent-color", hexcol, name], 20)
+    # plasma-apply-colorscheme ignores the scheme name when --accent-color is given (Plasma 6.5+),
+    # so the scheme and the accent are applied with two calls
+    if kread("kdeglobals", "General", "ColorScheme", "") != name:
+        sh(["plasma-apply-colorscheme", name], 20)
+    sh(["plasma-apply-colorscheme", "--accent-color", hexcol], 20)
     # make the accent explicit for everything that reads kdeglobals (DelayUI Theme, shell plasmoids, our apps)
     kwrite("kdeglobals", "General", "AccentColor", "%d,%d,%d" % _hex_rgb(hexcol))
     kwrite("kdeglobals", "General", "LastUsedCustomAccentColor", "%d,%d,%d" % _hex_rgb(hexcol))
@@ -119,7 +120,7 @@ def set_accent(hexcol, name=""):
 
 def set_mode(mode):
     kwrite("delayosrc", "Appearance", "Mode", mode)
-    acc = read_accent()
+    acc = read_accent() or DEFAULT_ACCENT
     if mode == "auto":
         # Plasma 6.5+: automatic light/dark look-and-feel switching by sunset/sunrise
         kwrite("kdeglobals", "KDE", "AutomaticLookAndFeel", "true")

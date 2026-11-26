@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 시간 및 언어 (timedatectl / localectl / plasma-localerc / kxkbrc). Korean is the default.
 SPage {
@@ -17,7 +18,7 @@ SPage {
     function hasLayout(id) { return st.layouts.indexOf(id) >= 0 }
 
     Rectangle {
-        Layout.fillWidth: true; Layout.preferredHeight: 80; Layout.bottomMargin: 8; radius: 8; color: Theme.card
+        Layout.fillWidth: true; Layout.preferredHeight: 80; Layout.bottomMargin: 8; radius: 8; color: Theme.card; border.width: 1; border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.035) : "#E6E7EB"
         RowLayout { anchors.fill: parent; anchors.margins: 18; spacing: 16
             Image { Layout.preferredWidth: 36; Layout.preferredHeight: 36; sourceSize: Qt.size(72, 72); source: win.navIcon("time") }
             ColumnLayout { spacing: 2

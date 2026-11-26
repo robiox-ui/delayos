@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 앱 › 설치된 앱 (pacman + flatpak, uninstall through pkexec helper / flatpak polkit)
 SPage {

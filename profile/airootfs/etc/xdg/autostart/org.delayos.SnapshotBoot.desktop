@@ -4,7 +4,7 @@ Name=DelayOS Snapshot Boot Notice
 Name[ko]=이전 상태로 부팅 안내
 Comment[ko]=GRUB의 "이전 상태로 부팅"으로 시작했을 때 설정 › 시스템 › 복구를 엽니다
 # Started from a snapshot (rootflags=subvol=@snapshots/N/snapshot, RAM overlay): show where to keep it
-Exec=sh -c 'grep -q "subvol=@snapshots/" /proc/cmdline && exec /usr/bin/delay-settings recovery'
+Exec=sh -c 'grep -q "subvol=@snapshots/" /proc/cmdline || exit 0; exec /usr/bin/delay-settings recovery'
 Icon=delayos-settings
 NoDisplay=true
 X-KDE-autostart-phase=2

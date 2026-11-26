@@ -483,7 +483,8 @@ EOF
     set_gb GRUB_BTRFS_SUBMENUNAME '"이전 상태로 부팅"'
     set_gb GRUB_BTRFS_LIMIT '"12"'
     set_gb GRUB_BTRFS_SHOW_TOTAL_SNAPSHOTS_FOUND '"false"'
-    set_gb GRUB_BTRFS_SNAPSHOT_KERNEL_PARAMETERS '"systemd.volatile=overlay"'
+    # systemd-remount-fs would apply the btrfs options of the fstab root line to the overlay and fail
+    set_gb GRUB_BTRFS_SNAPSHOT_KERNEL_PARAMETERS '"systemd.volatile=overlay systemd.mask=systemd-remount-fs.service"'
     set_gb GRUB_BTRFS_TITLE_FORMAT '("date" "description")'
     set_gb GRUB_BTRFS_IGNORE_SPECIFIC_PATH '("@" "@factory")'
     set_gb GRUB_BTRFS_IGNORE_PREFIX_PATH '("var/lib/docker" "@var/lib/docker" "@/var/lib/docker" "@docker" "@old-" "@.new")'

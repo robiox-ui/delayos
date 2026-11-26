@@ -1,5 +1,6 @@
 import QtQuick
 import DelayUI
+import "../controls"
 
 // Live preview: wallpaper + a mini window (sidebar lines, accent toggle, accent button) + a mini dock (§8.2).
 Rectangle {
@@ -9,10 +10,11 @@ Rectangle {
     property color accent: Theme.accent
     property bool taskbar: false
     property bool showWindow: true
+    property color bg: Theme.windowBg   // colour around the thumbnail (for the rounded corners)
     width: 220; height: 134
     radius: 8
     color: dark ? "#16283C" : "#DCE8F0"
-    clip: true
+    clip: false
     Image {
         anchors.fill: parent
         source: root.wallpaper ? "file://" + root.wallpaper : ""
@@ -67,4 +69,5 @@ Rectangle {
             Repeater { model: 6; Rectangle { width: root.height * 0.045; height: width; radius: width * 0.22; color: index === 0 ? root.accent : (root.dark ? "#6B7280" : "#AEB4BE") } }
         }
     }
+    RoundCorners { r: root.radius; bg: root.bg }
 }

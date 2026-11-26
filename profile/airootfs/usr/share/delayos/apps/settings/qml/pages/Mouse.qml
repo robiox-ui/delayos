@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // Bluetooth 및 장치 › 마우스 및 터치패드 (§8.2, [W 0:45])
 SPage {
@@ -18,7 +19,7 @@ SPage {
     function f2s(f) { return Math.max(0, Math.min(1, (f - 0.2) / 2.8)) }
     function s2f(s) { return 0.2 + s * 2.8 }
 
-    SHeader { text: "마우스"; Layout.topMargin: 0 }
+    SHeader { text: "마우스" }
     SRow {
         key: "m-primary"; icon: "input-mouse"
         title: "기본 마우스 버튼"; subtitle: "선택하고 여는 데 쓰는 버튼"
@@ -67,7 +68,7 @@ SPage {
         title: "스크롤 방향"; subtitle: "두 손가락으로 스크롤"
         enabled: !!pg.st.hasTouchpad
         SDropdown {
-            implicitWidth: 200
+            implicitWidth: 236
             model: ["아래로 움직이면 아래로 스크롤", "아래로 움직이면 위로 스크롤"]
             currentIndex: pg.st.touchpad && pg.st.touchpad.natural ? 1 : 0
             onActivated: (i) => pg.set(true, "naturalScroll", i === 1)

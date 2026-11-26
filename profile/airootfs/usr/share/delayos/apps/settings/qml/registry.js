@@ -13,27 +13,27 @@ var nav = [
     { id: "update", label: "업데이트 및 드라이버" }
 ]
 
-// id -> { file, title, parent }
+// id -> { file, title, parent, icon (row glyph shown in search results; default: the category icon), tint }
 var pages = {
     system:          { file: "System", title: "시스템" },
-    display:         { file: "Display", title: "디스플레이", parent: "system" },
-    sound:           { file: "Sound", title: "소리", parent: "system" },
-    notifications:   { file: "Notifications", title: "알림", parent: "system" },
-    power:           { file: "Power", title: "전원 및 배터리", parent: "system" },
-    storage:         { file: "Storage", title: "저장소", parent: "system" },
-    recovery:        { file: "Recovery", title: "복구", parent: "system" },
-    about:           { file: "About", title: "정보", parent: "system" },
+    display:         { file: "Display", title: "디스플레이", parent: "system", icon: "g:monitor" },
+    sound:           { file: "Sound", title: "소리", parent: "system", icon: "audio-volume-high" },
+    notifications:   { file: "Notifications", title: "알림", parent: "system", icon: "notifications" },
+    power:           { file: "Power", title: "전원 및 배터리", parent: "system", icon: "g:power" },
+    storage:         { file: "Storage", title: "저장소", parent: "system", icon: "drive-harddisk" },
+    recovery:        { file: "Recovery", title: "복구", parent: "system", icon: "view-refresh" },
+    about:           { file: "About", title: "정보", parent: "system", icon: "help-about" },
     bluetooth:       { file: "Bluetooth", title: "Bluetooth 및 장치" },
-    mouse:           { file: "Mouse", title: "마우스 및 터치패드", parent: "bluetooth" },
+    mouse:           { file: "Mouse", title: "마우스 및 터치패드", parent: "bluetooth", icon: "input-mouse" },
     network:         { file: "Network", title: "네트워크 및 인터넷" },
     personalisation: { file: "Personalisation", title: "개인 설정" },
-    background:      { file: "Background", title: "배경", parent: "personalisation" },
+    background:      { file: "Background", title: "배경", parent: "personalisation", icon: "insert-image", tint: "accent" },
     colours:         { file: "Colours", title: "색", parent: "personalisation" },
     apps:            { file: "Apps", title: "앱" },
     installed:       { file: "Installed", title: "설치된 앱", parent: "apps" },
     defaultapps:     { file: "DefaultApps", title: "기본 앱", parent: "apps" },
     startup:         { file: "Startup", title: "시작 프로그램", parent: "apps" },
-    keymapping:      { file: "KeyMapping", title: "키 매핑", parent: "apps" },
+    keymapping:      { file: "KeyMapping", title: "키 매핑", parent: "apps", icon: "g:gamepad", tint: "accent" },
     accounts:        { file: "Accounts", title: "계정" },
     time:            { file: "Time", title: "시간 및 언어" },
     appsupport:      { file: "AppSupport", title: "앱 지원" },
@@ -124,7 +124,7 @@ function search(q) {
         var r = rows[i]
         if (r[0].toLowerCase().indexOf(q) >= 0 || r[3].toLowerCase().indexOf(q) >= 0) {
             var crumb = r[2] === "" ? (pages[r[1]].parent ? crumbOf(r[1]) : pages[r[1]].title) : crumbOf(r[1])
-            res.push({ title: r[0], page: r[1], key: r[2], crumb: crumb, icon: iconOf(r[1]) })
+            res.push({ title: r[0], page: r[1], key: r[2], crumb: crumb, icon: iconOf(r[1]), glyph: pages[r[1]].icon || "", tint: pages[r[1]].tint || "" })
         }
         if (res.length >= 12) break
     }

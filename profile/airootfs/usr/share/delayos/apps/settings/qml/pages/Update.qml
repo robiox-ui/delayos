@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 업데이트 및 드라이버: pacman -Syu + flatpak update with progress; GPU/Wi-Fi driver detection (lspci).
 SPage {
@@ -70,7 +71,7 @@ SPage {
     Rectangle {
         Layout.fillWidth: true
         Layout.preferredHeight: col.implicitHeight + 36
-        radius: 8; color: Theme.card
+        radius: 8; color: Theme.card; border.width: 1; border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.035) : "#E6E7EB"
         ColumnLayout {
             id: col
             x: 18; y: 18; width: parent.width - 36
@@ -114,7 +115,7 @@ SPage {
         Repeater {
             model: pg.upd ? pg.upd.pacman.concat(pg.upd.flatpak) : []
             RowLayout {
-                Layout.fillWidth: true
+                Layout.fillWidth: true; Layout.leftMargin: 48
                 SText { text: modelData.name; Layout.fillWidth: true; font.pixelSize: 12 }
                 SText { text: (modelData.from ? modelData.from + " → " : "") + (modelData.to || ""); role: "sub"; font.pixelSize: 12 }
             }
@@ -124,7 +125,7 @@ SPage {
 
     // ---- drivers ------------------------------------------------------------
     RowLayout {
-        Layout.fillWidth: true; Layout.topMargin: 16; Layout.bottomMargin: 4
+        Layout.fillWidth: true; Layout.topMargin: 28; Layout.bottomMargin: 8
         SText { role: "header"; text: "드라이버"; Layout.fillWidth: true; property string key: "drivers"; function highlight() {} }
         SButton { text: "드라이버 앱 열기"; kind: "link"; onClicked: sys.detach(["delay-drivers"]) }
     }

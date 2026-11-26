@@ -20,6 +20,16 @@ done
 cp /tmp/delay-boot/*-ucode.img /boot/ 2>/dev/null || true
 : "$BOOTMNT"
 
+# Removing packages below (calamares, mkinitcpio-archiso, unused GPU drivers) would rebuild all four
+# initramfs images each time (90-mkinitcpio-install.hook, about 30 to 60 s per run). Calamares builds
+# them once after this script (initcpio module), so the hook is switched off until the package
+# upgrade of delay-cpu-opt, which may bring a new kernel and needs the hook to copy it to /boot.
+MKINITCPIO_HOOK_OFF=/etc/pacman.d/hooks/90-mkinitcpio-install.hook
+initcpio_hook_off() { mkdir -p /etc/pacman.d/hooks; [[ -e $MKINITCPIO_HOOK_OFF || -L $MKINITCPIO_HOOK_OFF ]] || ln -s /dev/null "$MKINITCPIO_HOOK_OFF"; }
+initcpio_hook_on()  { [[ -L $MKINITCPIO_HOOK_OFF && $(readlink "$MKINITCPIO_HOOK_OFF") == /dev/null ]] && rm -f "$MKINITCPIO_HOOK_OFF"; return 0; }
+trap initcpio_hook_on EXIT
+initcpio_hook_off
+
 # Remove live-only bits
 rm -f /etc/mkinitcpio.conf.d/archiso.conf
 rm -f /etc/sddm.conf.d/00-live-autologin.conf
@@ -36,6 +46,14 @@ rm -f "$S"/multi-user.target.wants/{pacman-init,choose-mirror,livecd-talk,sshd}.
       "$S"/etc-pacman.d-gnupg.mount /etc/ssh/sshd_config.d/10-archiso.conf \
       /root/.automated_script.sh /root/.zlogin
 rm -rf "$S"/pacman-init.service.d
+# archiso settings that must not reach an installed PC: the journal only in RAM (no logs of the
+# previous start), lid switch / suspend key / hibernate key ignored, the "install Arch Linux" login
+# text, live helper scripts, and the configuration of the removed installer
+rm -f /etc/systemd/journald.conf.d/volatile-storage.conf /etc/systemd/logind.conf.d/do-not-suspend.conf \
+      /etc/systemd/resolved.conf.d/archiso.conf /etc/systemd/networkd.conf.d/ipv6-privacy-extensions.conf \
+      /etc/motd /usr/local/bin/Installation_guide /usr/local/bin/choose-mirror /usr/local/bin/livecd-sound
+rm -rf /usr/local/share/livecd-sound /etc/calamares
+rmdir /etc/systemd/logind.conf.d /etc/systemd/resolved.conf.d /etc/systemd/networkd.conf.d 2>/dev/null || true
 # pacman keyring: on the live medium it is a tmpfs rebuilt on every boot; make a real one
 rm -rf /etc/pacman.d/gnupg
 pacman-key --init >/dev/null 2>&1 && pacman-key --populate >/dev/null 2>&1 || true
@@ -62,6 +80,10 @@ if [[ ${DELAYOS_WINGAMES:-0} != 1 ]] && os-prober 2>/dev/null | grep -q .; then
 else
   grub_set GRUB_TIMEOUT 1; grub_set GRUB_TIMEOUT_STYLE hidden
 fi
+# grub 2.16's 31_efi_bootnext adds one menu entry per firmware boot entry ("EFI Floppy (EFI BootNext)",
+# "DelayOS (EFI BootNext)", ...): seven useless lines between DelayOS and "DelayOS 복구". The firmware
+# setup entry and the firmware's own boot menu already cover that.
+grub_set GRUB_DISABLE_BOOTNEXT true
 sed -i 's/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
 grep -q '^GRUB_DISABLE_OS_PROBER' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 # Hidden Windows for anti-cheat games (delay-winsetup): it is started by "Windows 전환", never from the
@@ -101,6 +123,8 @@ fi
 
 # ---- Graphics drivers that match this PC (the image carries every vendor's) ----
 /usr/local/bin/delay-gpu-setup --install-time --quiet || true
+
+initcpio_hook_on   # from here on a kernel upgrade must reach /boot
 
 # ---- CPU-optimized packages (docs/gaming-performance.md) ----
 # On a CPU with x86-64-v3 / v4 / Zen 4-5 the DelayOS repository built for that level is enabled

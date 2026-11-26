@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 시스템 › 복구: 이 PC 초기화, 고급 시작 옵션, 복구 파티션, 시스템 스냅샷 (docs/recovery.md).
 // Reads through sb.recovery.status (pkexec delay-recovery-info, no password); every change is
@@ -56,7 +57,7 @@ SPage {
     Rectangle {
         visible: !!pg.st.pendingReboot
         Layout.fillWidth: true; Layout.bottomMargin: 6
-        implicitHeight: 56; radius: 8; color: Theme.card
+        implicitHeight: 56; radius: 8; color: Theme.card; border.width: 1; border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.035) : "#E6E7EB"
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
             SText { Layout.fillWidth: true; text: "되돌리기가 준비되었습니다. 다시 시작하면 적용됩니다." }
@@ -105,7 +106,7 @@ SPage {
 
     // ---- snapshots ----------------------------------------------------------------
     RowLayout {
-        Layout.fillWidth: true; Layout.topMargin: 16; Layout.bottomMargin: 4
+        Layout.fillWidth: true; Layout.topMargin: 28; Layout.bottomMargin: 8
         SText { role: "header"; text: "시스템 스냅샷"; Layout.fillWidth: true; property string key: "snapshots"; function highlight() {} }
         SButton { visible: !!pg.st.enabled; text: "스냅샷 만들기"; enabled: pg.job === ""; busy: pg.job === "create"; onClicked: { descField.text = ""; createDlg.open() } }
     }

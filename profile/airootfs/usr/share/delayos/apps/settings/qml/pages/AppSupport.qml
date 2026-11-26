@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import DelayUI
 import DelaySys
 import "../components"
+import "../controls"
 
 // 앱 지원 (Windows 프로그램 및 Android): Windows Engine, Android, Mac (preview), Linux containers, anti-cheat.
 SPage {
@@ -28,7 +29,7 @@ SPage {
     }
 
     // ---- Windows -----------------------------------------------------------
-    SHeader { text: "Windows 프로그램"; Layout.topMargin: 0; property string key: "windows"; function highlight() {} }
+    SHeader { text: "Windows 프로그램"; property string key: "windows"; function highlight() {} }
     SRow {
         icon: "window-duplicate"; iconColor: "#2BC48A"
         title: "Windows Engine"
@@ -71,10 +72,10 @@ SPage {
                 : pg.eac.ready ? "준비됨 · 안티치트가 필요한 게임을 실행할 수 있습니다"
                 : "안티치트를 쓰는 게임은 아래 요구 사항 8개가 모두 충족되어야 합니다" + (pg.eac.mock ? " (delay-eac 없음: 추정값)" : "")
         expanded: !pg.eac.playable
-        SText { visible: (pg.eac.next_step || pg.eac.epic || "") !== ""; text: pg.eac.next_step || pg.eac.epic || ""; Layout.fillWidth: true; Layout.leftMargin: 40; wrapMode: Text.Wrap; font.pixelSize: 13 }
+        SText { visible: (pg.eac.next_step || pg.eac.epic || "") !== ""; text: pg.eac.next_step || pg.eac.epic || ""; Layout.fillWidth: true; Layout.leftMargin: 48; wrapMode: Text.Wrap; font.pixelSize: 13 }
         Grid {
             Layout.fillWidth: true
-            Layout.leftMargin: 40
+            Layout.leftMargin: 48
             columns: 2
             columnSpacing: 40
             rowSpacing: 10
@@ -101,7 +102,7 @@ SPage {
             }
         }
         RowLayout {
-            Layout.fillWidth: true; Layout.leftMargin: 40; Layout.topMargin: 6
+            Layout.fillWidth: true; Layout.leftMargin: 48; Layout.topMargin: 6
             visible: ["unsupported", "ready", "ready_waiting_epic"].indexOf(pg.eac.state) < 0
             SText {
                 role: "sub"; Layout.fillWidth: true; wrapMode: Text.Wrap

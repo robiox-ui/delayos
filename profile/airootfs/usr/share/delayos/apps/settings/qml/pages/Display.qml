@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 시스템 › 디스플레이 (kscreen-doctor, KWin night light, PowerDevil brightness)
 SPage {
@@ -40,7 +41,7 @@ SPage {
         }
     }
 
-    SHeader { text: pg.o ? "화면 " + (pg.sel + 1) + " · " + pg.o.name : "화면"; Layout.topMargin: 0 }
+    SHeader { text: pg.o ? "화면 " + (pg.sel + 1) + " · " + pg.o.name : "화면" }
     SRow {
         key: "d-bright"; icon: "g:sun"; title: "밝기"; subtitle: pg.bright.available ? "기본 제공 디스플레이의 밝기" : "이 디스플레이는 밝기 조절을 지원하지 않습니다"
         enabled: pg.bright.available

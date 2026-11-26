@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import DelayUI
 import DelaySys
+import "../controls"
 
 // 앱 › 시작 프로그램 (~/.config/autostart overrides of /etc/xdg/autostart)
 SPage {
