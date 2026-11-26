@@ -37,7 +37,8 @@ if software_render():
 def light_platform_theme():
     """Use Qt's built-in platform theme instead of the KDE one (plasma-integration) for this process.
 
-    For apps that draw everything themselves (DelayUI) and open no native file/colour dialog: the KDE theme
+    For apps that draw everything themselves (DelayUI, icons through image://icon) and open no native
+    file/colour dialog (계산기, 작업 관리자; not the syskit apps, whose Kirigami icons need the KDE theme): the KDE theme
     plugin loads about 130 KDE Frameworks mappings and reads the Plasma configuration before the first
     window, which measured 18-20 ms of every start and 14 MB RSS / 5 MB PSS per app. Fonts (Inter is set
     explicitly), colours (Theme tokens), icons (own lookup) and the mouse cursor (drawn by KWin through the

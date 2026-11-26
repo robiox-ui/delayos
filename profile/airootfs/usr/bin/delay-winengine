@@ -38,4 +38,4 @@ def ctx():
 
 # QGuiApplication must not quit when the (hidden) dialog closes before the app maps
 sys.exit(run_app("org.delayos.WinEngine", "Windows Engine", "/usr/share/delayos/apps/winengine/qml/main.qml",
-                 icon="delayos-winengine", extra_ctx=ctx, light_theme=True))
+                 icon="delayos-winengine", extra_ctx=ctx))

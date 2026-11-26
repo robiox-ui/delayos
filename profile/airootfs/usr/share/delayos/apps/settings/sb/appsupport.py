@@ -26,9 +26,9 @@ def _which(b):
 
 def _boxes():
     """Names of the user's distrobox containers.
-    `distrobox list` is only run when a container can exist: asking podman on a machine that never used it
-    leaves its pause process (catatonit) running for the rest of the session, and asking docker starts the
-    Docker daemon through its socket; both just because this page was opened."""
+    `distrobox list` is only run when a container can exist (podman has a container record, or Docker is
+    already running): asking podman on a machine that never used it leaves its pause process
+    (`catatonit -P`) running for the rest of the session, just because this page was opened."""
     if not _which("distrobox"):
         return []
     import glob
