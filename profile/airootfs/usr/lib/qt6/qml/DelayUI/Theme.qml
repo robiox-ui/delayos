@@ -92,11 +92,9 @@ QtObject {
     readonly property int fsGreeting: 30
 
     // motion
-    // (software rendering: popups, menus and toasts appear in one frame; an animation the CPU cannot hold at
-    // 60 fps looks worse than none)
-    readonly property int popMs: softwareRender ? 0 : 120
-    readonly property int closeMs: softwareRender ? 0 : 90
-    readonly property int islandMs: softwareRender ? 0 : 280
-    readonly property int toastMs: softwareRender ? 0 : 130
+    readonly property int popMs: 120
+    readonly property int closeMs: 90
+    readonly property int islandMs: 280
+    readonly property int toastMs: 130
     readonly property var easeOut: [0.2, 0.8, 0.2, 1, 1, 1]
 }

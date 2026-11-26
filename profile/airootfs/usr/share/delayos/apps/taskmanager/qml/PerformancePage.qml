@@ -27,11 +27,14 @@ Item {
         height: parent.height - y - 8
         clip: true
         spacing: 4
-        model: page.items
+        // the model is the item count and each delegate looks its item up: backend.perf is a new array at every
+        // refresh, and using it as the model rebuilt every delegate (and its graph canvas) once a second
+        model: page.items.length
         T.ScrollBar.vertical: TScrollBar {}
         delegate: Rectangle {
             id: d
-            required property var modelData
+            required property int index
+            readonly property var modelData: page.items[index] || ({ key: "", title: "", sub: "", hist: [], max: 100 })
             readonly property bool sel: page.cur === modelData.key || (!page.item && false)
             width: ListView.view.width - 6
             height: 66
@@ -107,9 +110,10 @@ Item {
             columnSpacing: 36
             rowSpacing: 10
             Repeater {
-                model: page.item ? page.item.kv : []
+                model: page.item ? page.item.kv.length : 0
                 delegate: Column {
-                    required property var modelData
+                    required property int index
+                    readonly property var modelData: (page.item && page.item.kv[index]) || ["", ""]
                     Text { text: modelData[0]; font.family: Theme.font; font.pixelSize: 11; color: Theme.text2 }
                     Text { text: modelData[1]; font.family: Theme.font; font.pixelSize: 17; font.weight: Font.DemiBold; color: Theme.text1 }
                 }

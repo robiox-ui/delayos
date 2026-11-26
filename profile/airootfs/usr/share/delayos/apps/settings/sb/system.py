@@ -49,13 +49,37 @@ def _qt():
         return ""
 
 
-def summary():
-    host = out(["hostname"]) or _read("/etc/hostname", "delayos")
+_STATIC = {}      # values that cannot change while Settings runs (GPU list, Plasma version): asked once
+
+
+def _once(key, fn):
+    if key not in _STATIC:
+        _STATIC[key] = fn()
+    return _STATIC[key]
+
+
+def _secure_boot():
+    """True when the firmware reports Secure Boot on (the EFI variable itself: no bootctl process)."""
+    try:
+        with open("/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c", "rb") as f:
+            return f.read()[4:5] == b"\x01"      # 4 attribute bytes, then the value
+    except OSError:
+        return False
+
+
+def device():
+    """PC name and model for the 시스템 page header: file reads only (the page opens with every Settings start)."""
     vendor = _read("/sys/class/dmi/id/sys_vendor")
     product = _read("/sys/class/dmi/id/product_name")
     model = (vendor + " " + product).strip()
     if "VMware" in model or "QEMU" in model or "VirtualBox" in model:
         model = model + " (가상 머신)"
+    return {"hostname": os.uname().nodename or _read("/etc/hostname", "delayos"), "model": model or "PC"}
+
+
+def summary():
+    dev = device()
+    host, model = dev["hostname"], dev["model"]
     cpu = ""
     for l in _read("/proc/cpuinfo").splitlines():
         if l.startswith("model name"):
@@ -66,19 +90,19 @@ def summary():
         if l.startswith("MemTotal"):
             mem = int(l.split()[1]) * 1024
     o = osrel()
-    plasma = out(["plasmashell", "--version"]).replace("plasmashell", "").strip()
+    plasma = _once("plasma", lambda: out(["plasmashell", "--version"]).replace("plasmashell", "").strip())
     kernel = os.uname().release
     st = shutil.disk_usage("/")
     up = float(_read("/proc/uptime", "0").split()[0] or 0)
     return {
         "hostname": host, "model": model or "PC", "cpu": cpu, "cores": os.cpu_count(),
-        "ram": _human(mem), "ramBytes": mem, "gpus": gpus(),
+        "ram": _human(mem), "ramBytes": mem, "gpus": _once("gpus", gpus),
         "os": o.get("PRETTY_NAME", "DelayOS"), "osVersion": o.get("VERSION_ID", o.get("BUILD_ID", "")),
         "kernel": kernel, "plasma": plasma, "qt": _qt(),
         "disk": _human(st.total), "diskUsed": _human(st.used), "diskFrac": st.used / st.total if st.total else 0,
         "uptime": "%d시간 %d분" % (up // 3600, (up % 3600) // 60),
         "arch": os.uname().machine,
-        "secureBoot": "켬" if "enabled" in out(["sh", "-c", "bootctl status 2>/dev/null | grep -i 'secure boot'"]) else "끔",
+        "secureBoot": "켬" if _secure_boot() else "끔",
     }
 
 

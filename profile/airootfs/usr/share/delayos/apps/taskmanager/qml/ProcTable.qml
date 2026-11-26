@@ -6,7 +6,10 @@ import DelayUI
 // expandable groups, heat-tinted usage cells (accent 0–35 % alpha by value), selection = accent-soft.
 Item {
     id: tbl
-    property var columns: []          // [{ title, role, w (0 = fill), align: "left"|"right", heat: role, total: string, sort: key }]
+    property var columns: []          // [{ title, role, w (0 = fill), align: "left"|"right", heat: role, sort: key }]; keep it constant
+    // header totals by role, e.g. { cpu: "1.9%" }. Not part of `columns` on purpose: a new columns array
+    // rebuilds every cell of every row (the per-row Repeater), and the totals change at every refresh.
+    property var totals: ({})
     property alias model: list.model
     property string selectedKey: ""
     property string sortKey: ""
@@ -31,6 +34,7 @@ Item {
                     id: hc
                     required property var modelData
                     required property int index
+                    readonly property string total: (modelData.role && tbl.totals[modelData.role]) || ""
                     width: tbl.colW(modelData)
                     height: head.height
                     color: hma.containsMouse ? Theme.hover : "transparent"
@@ -43,8 +47,8 @@ Item {
                         anchors.rightMargin: 10
                         Text {
                             anchors.right: hc.modelData.align === "right" ? parent.right : undefined
-                            visible: (hc.modelData.total || "") !== ""
-                            text: hc.modelData.total || ""
+                            visible: hc.total !== ""
+                            text: hc.total
                             font.family: Theme.font; font.pixelSize: 13; font.weight: Font.DemiBold
                             color: Theme.text1
                         }

@@ -92,7 +92,7 @@ Item {
                     Chip { height: 28; label: "DelayOS에서 바로"; sel: page.plat === "native"; onPicked: page.plat = "native" }
                     Chip { height: 28; label: "Windows로 전환"; sel: page.plat === "windows"; onPicked: page.plat = "windows" }
                 }
-                SText { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; role: "sub"; font.pixelSize: 12
+                SText { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; role: "sub"; font.pixelSize: 12
                     text: page.d ? "게임 " + page.shown.length + "개 · 전체 " + page.d.games.length + "개 (바로 " + page.d.counts.native + " · Windows " + page.d.counts.windows + ")" : "" }
             }
             SSpinner { visible: !page.d; size: 28; anchors.horizontalCenter: parent.horizontalCenter }

@@ -36,11 +36,17 @@ Rectangle {
         Rectangle {
             id: tile
             anchors.fill: parent
-            readonly property string c0: (card.game.cats || [])[card.game.cats && card.game.cats[0] === "popular" && card.game.cats.length > 1 ? 1 : 0] || ""
+            // generic tile (no third-party artwork is shipped): genre colour + the first letter of the name
+            readonly property string c0: {
+                var c = card.game.cats || [], g = ["fps", "moba", "rpg", "racing", "indie"]
+                for (var i = 0; i < c.length; i++) if (g.indexOf(c[i]) >= 0) return c[i]
+                return c.length ? c[c.length - 1] : ""
+            }
             readonly property var pal: ({ fps: ["#7A2E2E", "#3A1B24"], moba: ["#4B3A8C", "#221C44"], rpg: ["#1F6F6B", "#12303A"], racing: ["#8A5A1E", "#3A2416"],
                                           indie: ["#2F7A45", "#163324"], korea: ["#2C5AA0", "#182A4A"], free: ["#3D6A8A", "#1B2E3E"] })[c0] || ["#3A4152", "#1E222C"]
             gradient: Gradient { GradientStop { position: 0; color: tile.pal[0] } GradientStop { position: 1; color: tile.pal[1] } }
-            SIcon { anchors.centerIn: parent; name: "g:gamepad"; size: 34; tint: Qt.rgba(1, 1, 1, 0.75) }
+            SIcon { x: 10; y: 10; name: "g:gamepad"; size: 18; tint: Qt.rgba(1, 1, 1, 0.6) }
+            SText { anchors.centerIn: parent; visible: !pic.visible; text: (card.game.nameKo || "").substr(0, 1); color: Qt.rgba(1, 1, 1, 0.92); font.pixelSize: 40; font.weight: Font.Bold }
         }
         Image {
             id: pic
@@ -58,8 +64,8 @@ Rectangle {
     Column {
         x: 14; y: head.y + head.height + 10; width: parent.width - 28
         spacing: 3
-        SText { width: parent.width; text: card.game.nameKo || ""; font.pixelSize: 14; font.weight: Font.DemiBold }
-        SText { width: parent.width; text: (card.game.pub || "") + (card.game.free ? " · 무료" : ""); role: "sub"; font.pixelSize: 11 }
+        SText { width: parent.width; height: 20; text: card.game.nameKo || ""; font.pixelSize: 14; font.weight: Font.DemiBold }
+        SText { width: parent.width; height: 16; text: (card.game.pub || "") + (card.game.free ? " · 무료" : ""); role: "sub"; font.pixelSize: 11 }
         Item { width: 1; height: 3 }
         Row {
             spacing: 6

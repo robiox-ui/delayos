@@ -25,6 +25,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CONF = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "delayos-taskmanager.json")
 NCPU = psutil.cpu_count() or 1
 MYUID = os.getuid()
+HZ = os.sysconf("SC_CLK_TCK")
+PAGE = os.sysconf("SC_PAGE_SIZE")
+# /proc/<pid>/stat state letter -> the names psutil uses
+PROC_STATE = {b"R": "running", b"S": "sleeping", b"D": "disk-sleep", b"T": "stopped", b"t": "tracing-stop",
+              b"Z": "zombie", b"X": "dead", b"x": "dead", b"I": "idle", b"P": "parked", b"W": "waking", b"K": "wake-kill"}
 import re  # noqa: E402
 DISK_RE = re.compile(r"^(sd[a-z]+|vd[a-z]+|hd[a-z]+|xvd[a-z]+|nvme\d+n\d+|mmcblk\d+)$")
 
@@ -52,13 +57,28 @@ class RowModel(QAbstractListModel):
         r = self._rows[index.row()]
         return r.get(ROLES[role - Qt.UserRole])
 
+    def _emit_changed(self, before, rows):
+        """dataChanged only for the runs of rows whose content differs (same keys, same order). On an idle
+        system most rows read the same from one second to the next; telling the view that everything
+        changed made it re-read every role of every visible row through Python at each refresh."""
+        start = -1
+        for i, r in enumerate(rows):
+            b = before[i]
+            if r is not b and any(r.get(k) != b.get(k) for k in ROLES):
+                if start < 0:
+                    start = i
+            elif start >= 0:
+                self.dataChanged.emit(self.index(start), self.index(i - 1))
+                start = -1
+        if start >= 0:
+            self.dataChanged.emit(self.index(start), self.index(len(rows) - 1))
+
     def update(self, rows):
         old = [r["key"] for r in self._rows]
         new = [r["key"] for r in rows]
         if old == new:
-            self._rows = rows
-            if rows:
-                self.dataChanged.emit(self.index(0), self.index(len(rows) - 1))
+            before, self._rows = self._rows, rows
+            self._emit_changed(before, rows)
             return
         sm = difflib.SequenceMatcher(a=old, b=new, autojunk=False)
         ops = sm.get_opcodes()
@@ -79,8 +99,10 @@ class RowModel(QAbstractListModel):
                 self._rows = cur
                 self.endInsertRows()
             offset += (j2 - j1) - (i2 - i1)
-        self._rows = rows
-        if rows:
+        before, self._rows = cur, rows       # cur now has the new keys in the new order
+        if len(before) == len(rows):
+            self._emit_changed(before, rows)
+        elif rows:
             self.dataChanged.emit(self.index(0), self.index(len(rows) - 1))
 
 
@@ -119,7 +141,7 @@ workspace.windowRemoved.connect(function (w) {
 
 
 class Sampler:
-    """One psutil sweep; keeps the previous counters to compute rates."""
+    """One sweep over /proc; keeps the previous counters to compute rates."""
 
     def __init__(self):
         self.prev = {}            # pid -> (cpu_time, io_bytes)
@@ -127,24 +149,41 @@ class Sampler:
         self.prev_disk = None
         self.prev_net = None
         self.efficiency = set()
-        self.static = {}          # pid -> (create_time, name, user, exe, cmd, is_mine, times_read): cached per process
+        self.static = {}          # pid -> (start time, name, user, exe, cmd, is_mine, times_read): cached per process
 
     def sweep(self):
         now = time.monotonic()
         dt = (now - self.prev_t) if self.prev_t else None
         procs = []
         cur = {}
-        # only the changing fields are read every tick; name/user/exe/cmdline are cached per process
-        attrs = ["pid", "ppid", "status", "cpu_times", "memory_info", "num_threads", "nice", "create_time"]
+        # The changing fields come straight from /proc/<pid>/stat and statm (two small reads per process, plus
+        # io for our own processes): building psutil's per-process objects for the same numbers cost several
+        # times as much at every refresh. psutil still supplies what is cached per process (name, user, exe,
+        # command line) and the system totals.
         static = {}
-        for p in psutil.process_iter(attrs, ad_value=None):
-            info = p.info
-            pid = info["pid"]
-            if pid in (0, 2) or info["ppid"] == 2:      # kernel threads
+        for ent in os.listdir("/proc"):
+            if not ent.isdigit():
+                continue
+            base = "/proc/" + ent
+            try:
+                with open(base + "/stat", "rb") as f:
+                    raw = f.read()
+                fs = raw[raw.rindex(b")") + 2:].split()      # fs[0] = state, the field after "(comm)"
+                pid, ppid = int(ent), int(fs[1])
+                if pid == 2 or ppid == 2:                   # kernel threads
+                    continue
+                with open(base + "/statm", "rb") as f:
+                    sm = f.read().split()
+                start = fs[19]                              # start time: tells a reused pid from the old process
+                cpu_t = (int(fs[11]) + int(fs[12])) / HZ
+                mem = max(0, (int(sm[1]) - int(sm[2])) * PAGE)
+                nice, threads = int(fs[16]), int(fs[17])
+            except (OSError, ValueError, IndexError):
                 continue
             st = self.static.get(pid)
-            if st is None or st[0] != info["create_time"] or st[6] < 2:     # re-read once: a fresh fork may exec()
+            if st is None or st[0] != start or st[6] < 2:     # re-read once: a fresh fork may exec()
                 try:
+                    p = psutil.Process(pid)
                     with p.oneshot():
                         name = p.name()
                         try:
@@ -165,18 +204,17 @@ class Sampler:
                             mine = False
                 except psutil.Error:
                     continue
-                seen = st[6] + 1 if (st and st[0] == info["create_time"]) else 1
-                st = (info["create_time"], name or "?", user, exe or "", " ".join(cmdl)[:400], mine, seen)
+                seen = st[6] + 1 if (st and st[0] == start) else 1
+                st = (start, name or "?", user, exe or "", " ".join(cmdl)[:400], mine, seen)
             static[pid] = st
-            info["name"], info["username"], info["exe"] = st[1], st[2], st[3]
-            ct = info["cpu_times"]
-            cpu_t = (ct.user + ct.system) if ct else 0.0
             io_b = 0
             if st[5]:
                 try:
-                    io = p.io_counters()
-                    io_b = io.read_bytes + io.write_bytes
-                except (psutil.Error, OSError):
+                    with open(base + "/io", "rb") as f:
+                        for line in f:
+                            if line.startswith((b"read_bytes", b"write_bytes")):
+                                io_b += int(line.split()[1])
+                except (OSError, ValueError, IndexError):
                     io_b = 0
             cur[pid] = (cpu_t, io_b)
             cpu = disk = 0.0
@@ -184,13 +222,9 @@ class Sampler:
                 pc, pio = self.prev[pid]
                 cpu = max(0.0, (cpu_t - pc) / dt / NCPU * 100.0)
                 disk = max(0.0, (io_b - pio) / dt)
-            mi = info["memory_info"]
-            mem = 0
-            if mi:
-                mem = max(0, mi.rss - getattr(mi, "shared", 0))
-            procs.append({"pid": pid, "ppid": info["ppid"], "name": info["name"] or "?", "user": info["username"] or "",
-                          "status": info["status"], "cpu": cpu, "mem": mem, "disk": disk, "threads": info["num_threads"] or 0,
-                          "nice": info["nice"], "exe": info["exe"] or "", "cmd": st[4],
+            procs.append({"pid": pid, "ppid": ppid, "name": st[1], "user": st[2] or "",
+                          "status": PROC_STATE.get(fs[0], "sleeping"), "cpu": cpu, "mem": mem, "disk": disk,
+                          "threads": threads, "nice": nice, "exe": st[3], "cmd": st[4],
                           "cputime": cpu_t})
         self.prev = cur
         self.prev_t = now
@@ -450,7 +484,8 @@ class Backend(QObject):
                 "pid": procs[0]["pid"] if len(procs) == 1 else 0, "user": procs[0]["user"] if procs else "",
                 "cmd": procs[0]["cmd"] if len(procs) == 1 else "", "threads": sum(p["threads"] for p in procs),
                 "_cpu": cpu, "_mem": mem, "_disk": disk, "_pids": [p["pid"] for p in procs],
-                "hcpu": min(1.0, cpu / 30.0), "hmem": min(1.0, mem / (1024 ** 3)), "hdisk": min(1.0, disk / (20 * 1048576))}
+                "hcpu": round(min(1.0, cpu / 30.0), 2), "hmem": round(min(1.0, mem / (1024 ** 3)), 2),
+                "hdisk": round(min(1.0, disk / (20 * 1048576)), 2)}
 
     def _build_processes(self):
         procs = self._procs

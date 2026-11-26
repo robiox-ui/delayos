@@ -290,6 +290,7 @@ Window {
             SText { text: "“" + win.query + "” 검색 결과"; font.pixelSize: 22; font.weight: Font.DemiBold }
             // games first: 발로란트, 배그, 롤 ... are not in AppStream (storegames.search)
             GameResults { id: gres; width: content.width; query: win.query }
+            SText { visible: gres.count > 0 && sp.res.length > 0; text: "앱"; font.pixelSize: 17; font.weight: Font.DemiBold }
             SText { visible: sp.loading; text: "불러오는 중…"; role: "sub"; font.pixelSize: 13 }
             SText { visible: !sp.loading && sp.res.length === 0 && gres.count === 0; text: "찾는 앱이 없습니다. 다른 이름으로 검색해 보세요."; role: "sub"; font.pixelSize: 13 }
             CardGrid { width: content.width; showDev: true; apps: sp.res }

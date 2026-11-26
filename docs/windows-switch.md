@@ -83,7 +83,8 @@ DelayOS에서 클릭 한 번으로 **이 PC에 설치된 실제 Windows**에서 
    - Ubisoft Connect: 레지스트리 `Ubisoft\Launcher\Installs` → `uplay://launch/<id>/0`
    - Battle.net, EA app, Nexon 등은 자동 감지하지 않습니다. 아래 "직접 추가"를 쓰세요.
 2. **기본 목록** `/usr/share/delayos/winboot/games.json`: 발로란트, 리그 오브 레전드, 포트나이트, 배틀그라운드, 에이펙스 레전드,
-   레인보우 식스 시즈. 한국어 이름, 종료 감지용 프로세스 이름, 안티치트 설명이 들어 있고, 자동 감지된 게임과 `aliases`로 합쳐집니다.
+   레인보우 식스 시즈, 그리고 Steam으로 설치하는 콜 오브 듀티, 배틀필드 6, EA SPORTS FC 26, F1 25, 데스티니 가디언즈,
+   이스케이프 프롬 타르코프, 델타 포스, 러스트, GTA 5(종료 감지는 설치 폴더 기준). 한국어 이름, 종료 감지용 프로세스 이름, 안티치트 설명이 들어 있고, 자동 감지된 게임과 `aliases`로 합쳐집니다.
    도우미를 설치하기 전에는 발로란트·리그 오브 레전드·포트나이트만 미리 보이고, 설치 후에는 **실제로 설치된 게임만** 보입니다.
    관리자는 `/etc/delayos/winboot/games.d/*.json` 에 같은 형식으로 추가할 수 있습니다.
 3. **직접 추가**: 설정 › 앱 지원 › Windows 전환 › "Windows 게임 추가" (또는 `delay-winboot --add`).

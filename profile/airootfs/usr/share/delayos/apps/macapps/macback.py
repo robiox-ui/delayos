@@ -124,8 +124,8 @@ def _cand(c, inst, build=False, default=""):
     src, pkg = c["source"], c["pkg"]
     a = _index_app(pkg, build) if src != "aur" else None
     r = {"id": pkg, "source": src, "pkg": pkg, "name": c.get("name") or (a["name"] if a else (default or pkg)),
-         "icon": (a["icon"] if a else "") or (pkg if src == "flathub" else ""),
-         "summary": a["summary"] if a else ""}
+         "icon": (a["icon"] if a else "") or pkg,          # else a theme icon of that name (google-chrome, steam ...)
+         "summary": a["summary"] if a else "", "nogui": bool(c.get("nogui"))}
     if src == "flathub":
         r["installed"] = pkg.lower() in inst["flatpak"]
     else:
@@ -186,7 +186,11 @@ def store_search(name):
     for a in res:
         c = {"id": a["id"], "source": a["source"], "pkg": a["pkg"], "name": a["name"], "icon": a.get("icon") or "",
              "summary": a.get("summary") or "", "installed": bool(a.get("installed")), "verified": bool(a.get("verified"))}
-        (exact if norm(a["name"]) == want else similar).append(c)
+        n = norm(a["name"])
+        if n == want:
+            exact.append(c)
+        elif want in n:            # the name contains it; keyword and description hits are too far off to show
+            similar.append(c)
     exact.sort(key=lambda c: (not c["verified"], c["source"] != "flathub"))
     return {"exact": exact[:2], "similar": similar[:3]}
 

@@ -12,7 +12,7 @@ SPage {
     property string updText: "아직 확인하지 않음"
     Appearance { id: ap }
     Component.onCompleted: {
-        win.call("sb.system.summary", [], function(r) { if (r && !r.error) pg.info = r })
+        win.call("sb.system.device", [], function(r) { if (r && !r.error) pg.info = r })
         ap.load()
         var last = sys.kread("delayosrc", "Updates", "LastResult")
         if (last) pg.updText = last

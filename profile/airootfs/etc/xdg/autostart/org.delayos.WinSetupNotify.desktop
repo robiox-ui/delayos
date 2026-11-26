@@ -2,7 +2,9 @@
 Type=Application
 Name=DelayOS Windows game support status
 Name[ko]=Windows 게임 지원 상태 알림
-Exec=/usr/local/bin/delay-winsetup session-notify
+# only when a hidden-Windows setup was ever requested: without its conf the script has nothing to report, and
+# starting it (a large Python script) at every login cost about 90 ms of the login for nothing
+Exec=sh -c '[ -e /etc/delayos/winsetup.conf ] || exit 0; exec /usr/local/bin/delay-winsetup session-notify'
 NoDisplay=true
 X-KDE-autostart-phase=2
 OnlyShowIn=KDE;

@@ -56,17 +56,19 @@ Flickable {
         id: act
         property var c: null
         property bool accent: true
+        property string label: "설치"
         readonly property var job: c ? store.jobs[c.id] : undefined
         readonly property bool inst: !!c && store.isInstalled(c)
         width: 150; height: 32
         SButton {
             anchors.fill: parent; radius: 8
-            visible: !act.job
+            visible: !act.job && !(act.inst && act.c && act.c.nogui)
             kind: act.accent && !act.inst ? "accent" : "ghost"
             icon: act.inst ? "window-new" : "download"
-            text: act.inst ? "열기" : (act.c && act.c.source === "aur") ? "터미널에서 설치" : "설치"
+            text: act.inst ? "열기" : (act.c && act.c.source === "aur") ? "터미널에서 설치" : act.label
             onClicked: act.inst ? store.launch(act.c) : page.installCand(act.c)
         }
+        SText { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; visible: !act.job && act.inst && !!act.c && !!act.c.nogui; text: "설치됨 · 터미널용"; role: "sub"; font.pixelSize: 12 }
         Column {
             visible: !!act.job
             anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 5
@@ -124,7 +126,7 @@ Flickable {
                             SText { width: parent.width; role: "sub"; font.pixelSize: 12; text: page.summary(row.a) } }
                         Item {
                             anchors.right: parent.right; anchors.rightMargin: 16; y: 16; width: 150; height: 32
-                            Act { visible: !!row.p; c: row.p; accent: row.a.verdict === "linux" }
+                            Act { visible: !!row.p; c: row.p; accent: row.a.verdict === "linux"; label: row.a.verdict !== "linux" && row.p && row.p.name.length <= 12 ? row.p.name + " 설치" : "설치" }
                             SButton { anchors.fill: parent; radius: 8; visible: !row.p && row.a.verdict === "builtin" && !!row.a.builtin.label; text: visible ? row.a.builtin.label : ""; onClicked: sys.detach(row.a.builtin.argv) }
                             SText { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; visible: !row.p && row.a.verdict === "builtin" && !row.a.builtin.label; text: "기본 기능"; role: "sub"; font.pixelSize: 12 }
                             SButton { anchors.fill: parent; radius: 8; visible: !row.p && row.a.verdict === "link"; icon: "g:web"; text: "공식 페이지"; onClicked: sys.openUrl(row.a.link) }

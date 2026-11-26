@@ -23,5 +23,4 @@ Column {
         Repeater { model: gr.res; GameCard { game: modelData; width: Math.floor((gr.width - 36 - 6) / 4); onOpen: gstore.open(modelData) } }
     }
     Item { width: 1; height: 4 }
-    SText { text: "앱"; font.pixelSize: 17; font.weight: Font.DemiBold }
 }

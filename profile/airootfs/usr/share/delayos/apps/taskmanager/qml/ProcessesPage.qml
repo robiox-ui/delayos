@@ -42,11 +42,13 @@ Item {
         columns: [
             { title: "이름", w: 0, sort: "name" },
             { title: "상태", role: "status", w: 130 },
-            { title: "CPU", role: "cpu", w: 80, align: "right", heat: "hcpu", total: Math.round(backend.totals.cpu * 10) / 10 + "%", sort: "cpu" },
-            { title: "메모리", role: "mem", w: 96, align: "right", heat: "hmem", total: Math.round(backend.totals.mem) + "%", sort: "mem" },
-            { title: "디스크", role: "disk", w: 90, align: "right", heat: "hdisk", total: Math.round(backend.totals.disk) + "%", sort: "disk" },
-            { title: "네트워크", role: "net", w: 84, align: "right", total: Math.round(backend.totals.net) + "%" }
+            { title: "CPU", role: "cpu", w: 80, align: "right", heat: "hcpu", sort: "cpu" },
+            { title: "메모리", role: "mem", w: 96, align: "right", heat: "hmem", sort: "mem" },
+            { title: "디스크", role: "disk", w: 90, align: "right", heat: "hdisk", sort: "disk" },
+            { title: "네트워크", role: "net", w: 84, align: "right" }
         ]
+        totals: ({ cpu: Math.round(backend.totals.cpu * 10) / 10 + "%", mem: Math.round(backend.totals.mem) + "%",
+                   disk: Math.round(backend.totals.disk) + "%", net: Math.round(backend.totals.net) + "%" })
         onSortRequested: (k) => { backend.sortBy(k); sortKey = backend.sortKey() }
         onContextMenu: (key, x, y) => ctx.popup()
     }

@@ -95,14 +95,14 @@ Window {
             SText { width: parent.width; text: cr.c.name || ""; font.weight: Font.DemiBold }
             SText { width: parent.width; role: "sub"; font.pixelSize: 12
                 text: cr.job ? (cr.job.frac > 0 ? "설치 중 " + Math.round(cr.job.frac * 100) + "%" : cr.job.text)
-                             : cr.inst ? "설치됨 · " + win.sourceLabel(cr.c) : win.sourceLabel(cr.c) }
+                             : cr.inst ? "설치됨 · " + (cr.c.nogui ? "터미널에서 쓰는 프로그램입니다" : win.sourceLabel(cr.c)) : win.sourceLabel(cr.c) }
             SProgress { visible: !!cr.job; width: parent.width; thickness: 2; value: cr.job ? cr.job.frac : 0; indeterminate: !cr.job || cr.job.frac <= 0 }
         }
         SButton {
             id: act
             anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
             implicitHeight: 32; radius: 8
-            visible: !cr.job
+            visible: !cr.job && !(cr.inst && cr.c.nogui)
             kind: cr.primary || cr.inst ? "accent" : "ghost"
             icon: cr.inst ? "window-new" : "download"
             text: cr.inst ? "열기" : cr.c.source === "aur" ? "터미널에서 설치" : cr.primary ? "Linux용 " + cr.c.name + " 설치" : "설치"

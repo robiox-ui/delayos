@@ -458,7 +458,8 @@
     {
      "source": "repo",
      "pkg": "docker",
-     "name": "Docker 엔진"
+     "name": "Docker 엔진",
+     "nogui": true
     }
    ],
    "alt": [
@@ -637,7 +638,8 @@
    "linux": [
     {
      "source": "repo",
-     "pkg": "ollama"
+     "pkg": "ollama",
+     "nogui": true
     }
    ]
   },
@@ -1331,7 +1333,8 @@
    "linux": [
     {
      "source": "repo",
-     "pkg": "tailscale"
+     "pkg": "tailscale",
+     "nogui": true
     }
    ]
   },
