@@ -1,0 +1,5 @@
+# DelayOS: start ModemManager when a modem shows up (it no longer runs on PCs without one, see
+# /usr/lib/systemd/system/ModemManager.service.d/10-delay-ondemand.conf).
+SUBSYSTEM=="wwan", TAG+="systemd", ENV{SYSTEMD_WANTS}+="ModemManager.service"
+SUBSYSTEM=="usbmisc", KERNEL=="cdc-wdm*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="ModemManager.service"
+SUBSYSTEM=="tty", KERNEL=="ttyUSB*|ttyACM*|rfcomm*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="ModemManager.service"

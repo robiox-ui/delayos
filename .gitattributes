@@ -2,3 +2,4 @@
 *.png binary
 *.jpg binary
 *.ico binary
+docs/assets/windows/autorun.inf -text

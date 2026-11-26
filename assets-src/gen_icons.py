@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Generate the DelayOS logo and the whole DelayOS icon set (original artwork, style guide: docs/icon-style.md).
+"""Generate the whole DelayOS icon set, with the icon-theme copies of the logo (original artwork, style guide: docs/icon-style.md).
 
-Usage: python3 gen_icons.py <out-root> [--preview=<file.html>] [--logo] [--keep]
+Usage: python3 gen_icons.py <out-root> [--preview=<file.html>] [--keep]
 <out-root> mirrors profile/airootfs. Written: usr/share/icons/DelayOS (rebuilt from scratch), the hicolor copies of
 the delayos-* app icons, and the in-app glyph folders (shell/icons, syskit glyphs, settings/icons, files/qml/folder.svg).
---preview writes the contact sheet (docs/reports/icons-preview.html); --logo also rewrites the logo masters and their
-PNG renditions (needs rsvg-convert); --keep does not empty the generated folders first.
+--preview writes the contact sheet (docs/reports/icons-preview.html); --keep does not empty the generated folders first.
+The logo shape lives in brand_mark.py; the logo masters, wordmark, lockups and exports are built by gen_brand.py.
 Line glyphs are defined in icon_glyphs.py.
 """
 import math, os, shutil, subprocess, sys
@@ -57,94 +57,18 @@ def gear(cx, cy, r_out, r_in, teeth=8, tooth=0.42, bevel=0.10):
 
 
 # --------------------------------------------------------------------------
-# LOGO: a disc cut into three bands by two wave-shaped gaps ("tide" mark)
-def logo_paths(cx=32, cy=32, R=28, gap=3.4):
-    """Return 3 band paths (top, middle, bottom) of a disc split by 2 wavy gaps."""
-    def wave(k, x):
-        # boundary k (0 upper, 1 lower): gentle sine, phase offset
-        base = cy + (-9.0 if k == 0 else 7.5)
-        return base + 3.2 * math.sin((x - cx) / R * math.pi * 1.0 + (0.6 if k == 0 else 2.4))
-
-    def inside_x(yfun):
-        # find x range where curve is inside the circle (bisection on both sides)
-        def f(x):
-            return (x - cx) ** 2 + (yfun(x) - cy) ** 2 - R * R
-        lo, hi = cx - R - 1, cx
-        for _ in range(60):
-            m = (lo + hi) / 2
-            if f(m) > 0: lo = m
-            else: hi = m
-        xl = hi
-        lo, hi = cx, cx + R + 1
-        for _ in range(60):
-            m = (lo + hi) / 2
-            if f(m) > 0: hi = m
-            else: lo = m
-        return xl, lo
-
-    def curve(yfun, x0, x1, n=48):
-        return [(x0 + (x1 - x0) * i / n, yfun(x0 + (x1 - x0) * i / n)) for i in range(n + 1)]
-
-    def arc(p0, p1, cw, n=40):
-        a0 = math.atan2(p0[1] - cy, p0[0] - cx)
-        a1 = math.atan2(p1[1] - cy, p1[0] - cx)
-        if cw:   # increasing angle (screen coords => clockwise)
-            while a1 <= a0: a1 += 2 * math.pi
-        else:
-            while a1 >= a0: a1 -= 2 * math.pi
-        return [(cx + R * math.cos(a0 + (a1 - a0) * i / n), cy + R * math.sin(a0 + (a1 - a0) * i / n)) for i in range(1, n)]
-
-    bounds = []
-    for k in (0, 1):
-        for s in (-1, 1):
-            yf = (lambda kk, ss: (lambda x: wave(kk, x) + ss * gap / 2))(k, s)
-            bounds.append(yf)
-    up0, dn0, up1, dn1 = bounds  # up0 = upper edge of gap0, dn0 lower edge of gap0 ...
-
-    def poly(points):
-        return 'M' + ' L'.join('%s %s' % (f2(a), f2(b)) for a, b in points) + 'Z'
-
-    # top band: above up0
-    xl, xr = inside_x(up0)
-    c = curve(up0, xl, xr)
-    top = c + arc(c[-1], c[0], cw=False)
-    # middle: between dn0 and up1
-    xl0, xr0 = inside_x(dn0)
-    xl1, xr1 = inside_x(up1)
-    c0 = curve(dn0, xl0, xr0)
-    c1 = curve(up1, xl1, xr1)[::-1]
-    mid = c0 + arc(c0[-1], c1[0], cw=True) + c1 + arc(c1[-1], c0[0], cw=True)
-    # bottom: below dn1
-    xl, xr = inside_x(dn1)
-    c = curve(dn1, xl, xr)
-    bot = c + arc(c[-1], c[0], cw=True)
-    return poly(top), poly(mid), poly(bot)
+# LOGO: a disc cut into three bands by two wave-shaped gaps ("tide" mark). The shape is defined once, in
+# brand_mark.py; gen_brand.py builds the rest of the brand kit (wordmark, lockups, PNG/ICO exports) from it.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import brand_mark as BM  # noqa: E402
 
 
 def logo_svg(size=64):
-    t, m, b = logo_paths()
-    return f'''<svg {SVGNS} viewBox="0 0 64 64" width="{size}" height="{size}">
-  <defs>
-    <linearGradient id="lt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A9B8FF"/><stop offset="1" stop-color="#7C93FF"/></linearGradient>
-    <linearGradient id="lm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6480FF"/><stop offset="1" stop-color="#4D6BFE"/></linearGradient>
-    <linearGradient id="lb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3350D8"/><stop offset="1" stop-color="#1F2F94"/></linearGradient>
-  </defs>
-  <path d="{t}" fill="url(#lt)"/>
-  <path d="{m}" fill="url(#lm)"/>
-  <path d="{b}" fill="url(#lb)"/>
-</svg>
-'''
+    return BM.mark_svg('color', size)
 
 
 def logo_symbolic():
-    t, m, b = logo_paths()
-    return f'''<svg {SVGNS} viewBox="0 0 64 64" width="16" height="16">
-  <style id="current-color-scheme" type="text/css">.ColorScheme-Text {{ color:#f2f3f5; }}</style>
-  <path class="ColorScheme-Text" d="{t}" fill="currentColor" fill-opacity="0.55"/>
-  <path class="ColorScheme-Text" d="{m}" fill="currentColor" fill-opacity="0.8"/>
-  <path class="ColorScheme-Text" d="{b}" fill="currentColor"/>
-</svg>
-'''
+    return BM.mark_symbolic()
 
 
 # ==========================================================================
@@ -683,13 +607,7 @@ def main():
             shutil.rmtree(d)
     for rel, text in files.items():
         w(os.path.join(OUT, rel), text)
-    if '--logo' in args:      # logo masters + PNG renditions (needs rsvg-convert); not touched by default
-        w(os.path.join(LOGO, 'delayos.svg'), logo_svg())
-        w(os.path.join(LOGO, 'delayos-symbolic.svg'), logo_symbolic())
-        if shutil.which('rsvg-convert'):
-            for s in (16, 22, 24, 32, 48, 64, 96, 128, 256, 512):
-                subprocess.run(['rsvg-convert', '-w', str(s), '-h', str(s), os.path.join(LOGO, 'delayos.svg'),
-                                '-o', os.path.join(LOGO, 'delayos-%d.png' % s)], check=True)
+    # the logo masters in usr/share/delayos/logo and every other brand file come from gen_brand.py
     by = {}
     for sec, *_ in cat:
         by[sec] = by.get(sec, 0) + 1

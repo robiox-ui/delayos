@@ -1,0 +1,11 @@
+[Unit]
+Description=DelayOS: refresh the GRUB snapshot menu when a snapshot is created or removed
+Documentation=file:///usr/lib/systemd/system/grub-btrfsd.service.d/10-delay-ondemand.conf
+ConditionPathIsDirectory=/.snapshots
+# the original daemon was asked for: leave the work to it
+ConditionPathExists=!/etc/delayos/always-on/grub-btrfsd
+After=local-fs.target delay-snapshot-boot.service
+
+[Path]
+PathChanged=/.snapshots
+Unit=delay-grub-btrfs.service

@@ -1,0 +1,17 @@
+[Unit]
+Description=DelayOS: regenerate the GRUB snapshot menu (grub-btrfs)
+Documentation=file:///usr/lib/systemd/system/grub-btrfsd.service.d/10-delay-ondemand.conf
+ConditionPathExists=/etc/grub.d/41_snapshots-btrfs
+After=delay-snapshot-boot.service
+
+[Service]
+Type=oneshot
+Environment="PATH=/sbin:/bin:/usr/sbin:/usr/bin"
+EnvironmentFile=-/etc/default/grub-btrfs/config
+# what grub-btrfsd does after an event: let snapper finish writing, then rewrite only the snapshot
+# submenu when grub.cfg already includes it, the whole menu otherwise
+ExecStartPre=/usr/bin/sleep 5
+ExecStart=/bin/sh -c 'd="$${GRUB_BTRFS_GRUB_DIRNAME:-/boot/grub}"; if grep -q snapshots-btrfs "$$d/grub.cfg" 2>/dev/null; then /etc/grub.d/41_snapshots-btrfs; else "$${GRUB_BTRFS_MKCONFIG:-grub-mkconfig}" -o "$$d/grub.cfg"; fi'
+LogLevelMax=notice
+Nice=10
+IOSchedulingClass=idle

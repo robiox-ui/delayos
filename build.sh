@@ -226,6 +226,8 @@ rm -rf "$PROFILE"
 cp -a /usr/share/archiso/configs/releng "$PROFILE"
 rm -f "$PROFILE/packages.x86_64" "$PROFILE/airootfs/etc/mkinitcpio.d/linux.preset"
 cp -a "$HERE/profile/." "$PROFILE/"
+# BIOS boot menu splash: DelayOS instead of Arch
+[[ -f $HERE/docs/assets/boot/syslinux-splash.png ]] && cp "$HERE/docs/assets/boot/syslinux-splash.png" "$PROFILE/syslinux/splash.png"
 
 sed -i "s|@LOCALREPO@|$LOCALREPO|" "$PROFILE/pacman.conf"
 

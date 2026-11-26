@@ -24,6 +24,25 @@ def _which(b):
     return shutil.which(b) is not None
 
 
+def _boxes():
+    """Names of the user's distrobox containers.
+    `distrobox list` is only run when a container can exist: asking podman on a machine that never used it
+    leaves its pause process (catatonit) running for the rest of the session, and asking docker starts the
+    Docker daemon through its socket; both just because this page was opened."""
+    if not _which("distrobox"):
+        return []
+    import glob
+    has_podman = False                  # rootless podman: <driver>-containers/containers.json, "[]" when empty
+    for f in glob.glob(os.path.expanduser("~/.local/share/containers/storage/*-containers/containers.json")):
+        try:
+            has_podman = has_podman or os.path.getsize(f) > 4
+        except OSError:
+            pass
+    if not has_podman and not os.path.exists("/run/docker.pid"):
+        return []
+    return [l.split("|")[1].strip() for l in out(["distrobox", "list", "--no-color"], 10).splitlines()[1:] if "|" in l]
+
+
 def status():
     wine = out(["wine", "--version"]) if _which("wine") else ""
     prefix = os.path.expanduser("~/.local/share/delay/windows")
@@ -36,8 +55,7 @@ def status():
         "android": {"installed": _which("waydroid"), "initialized": wd_img,
                     "running": "RUNNING" in wd_state},
         "mac": {"installed": _which("darling")},
-        "linux": {"distrobox": _which("distrobox"),
-                  "boxes": [l.split("|")[1].strip() for l in out(["distrobox", "list", "--no-color"], 10).splitlines()[1:] if "|" in l] if _which("distrobox") else []},
+        "linux": {"distrobox": _which("distrobox"), "boxes": _boxes()},
     }
 
 

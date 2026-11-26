@@ -163,9 +163,30 @@ def clean(what):
 
 
 # ---- power ------------------------------------------------------------------
+def _power_profiles():
+    """(active profile, [profiles]) from power-profiles-daemon.
+    One D-Bus property read through busctl (2 ms); `powerprofilesctl get` + `list` are two Python programs
+    of 64 ms each, which was most of the time the 전원 page needed before it could show anything.
+    Same order as `powerprofilesctl list` (fastest first). Falls back to that tool when the call fails."""
+    for name, path in (("net.hadess.PowerProfiles", "/net/hadess/PowerProfiles"),
+                       ("org.freedesktop.UPower.PowerProfiles", "/org/freedesktop/UPower/PowerProfiles")):
+        rc, o = sh(["busctl", "--system", "--json=short", "call", name, path,
+                    "org.freedesktop.DBus.Properties", "GetAll", "s", name], 5)
+        if rc != 0:
+            continue
+        try:
+            import json
+            d = json.loads(o)["data"][0]
+            profiles = [p["Profile"]["data"] for p in d["Profiles"]["data"]]
+            return d["ActiveProfile"]["data"], profiles[::-1]
+        except Exception:
+            continue
+    return (out(["powerprofilesctl", "get"]),
+            re.findall(r"^\*?\s*([\w-]+):", out(["powerprofilesctl", "list"]), re.M))
+
+
 def power():
-    prof = out(["powerprofilesctl", "get"])
-    profiles = re.findall(r"^\*?\s*([\w-]+):", out(["powerprofilesctl", "list"]), re.M)
+    prof, profiles = _power_profiles()
     bat = None
     for d in sorted(os.listdir("/sys/class/power_supply")) if os.path.isdir("/sys/class/power_supply") else []:
         base = "/sys/class/power_supply/" + d

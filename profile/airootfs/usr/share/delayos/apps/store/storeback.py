@@ -284,13 +284,27 @@ def _get(app_id):
 
 
 # ---- installed state ------------------------------------------------------------------
+_inst_lock = threading.Lock()
+_inst_last = {"started": 0.0, "value": None}
+
+
 def installed_set():
-    fl = set()
-    for l in out(["flatpak", "list", "--app", "--columns=application"], 20).splitlines():
-        if l.strip():
-            fl.add(l.strip().lower())
-    pk = set(l.strip() for l in out(["pacman", "-Qq"], 20).splitlines())
-    return {"flatpak": fl, "repo": pk}
+    # When the Store opens, home() and installed_ids() ask at the same moment from two worker threads; each
+    # ran `flatpak list` and `pacman -Qq` (40-60 ms together). The second caller now waits for the first
+    # and takes its answer. Only an answer whose query started under 0.25 s ago is shared, so a refresh
+    # after an install or removal always asks again.
+    with _inst_lock:
+        if _inst_last["value"] is not None and time.monotonic() - _inst_last["started"] < 0.25:
+            return _inst_last["value"]
+        started = time.monotonic()
+        fl = set()
+        for l in out(["flatpak", "list", "--app", "--columns=application"], 20).splitlines():
+            if l.strip():
+                fl.add(l.strip().lower())
+        pk = set(l.strip() for l in out(["pacman", "-Qq"], 20).splitlines())
+        res = {"flatpak": fl, "repo": pk}
+        _inst_last.update(started=started, value=res)
+        return res
 
 
 def _is_installed(a, inst):

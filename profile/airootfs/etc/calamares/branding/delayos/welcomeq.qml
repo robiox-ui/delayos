@@ -19,7 +19,7 @@ Rectangle {
 
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            source: "file:///usr/share/delayos/logo/delayos.svg"
+            source: "file:///usr/share/delayos/logo/delayos-on-dark.svg"
             width: 84; height: 84
             sourceSize: Qt.size(168, 168)
         }

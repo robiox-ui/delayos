@@ -63,7 +63,7 @@ Presentation {
                     Image {
                         anchors.centerIn: parent
                         width: 40; height: 40; sourceSize: Qt.size(80, 80)
-                        source: "file:///usr/share/delayos/logo/delayos.svg"
+                        source: "file:///usr/share/delayos/logo/delayos-on-dark.svg"
                     }
                 }
                 Item { width: 1; height: 18 }

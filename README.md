@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.png">
+    <img alt="DelayOS: Arch 기반 게이밍 데스크톱" src="docs/assets/banner-dark.png" width="100%">
+  </picture>
+</p>
+
 # DelayOS: Arch 기반 게이밍 데스크톱
 
 DelayOS는 Arch Linux와 KDE Plasma 6(Wayland) 위에 만든 게이밍 중심 배포판입니다. 상단바와 독, 한국어 기본 설정, 자체 앱(메모장, 계산기, 작업 관리자, 캡처 도구, 파일 탐색기, 설정, 스토어 등), CachyOS 기반 커널 `linux-delayos`를 기본으로 제공합니다.

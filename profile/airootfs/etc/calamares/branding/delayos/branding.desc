@@ -28,9 +28,9 @@ strings:
     donateUrl:           ""
 
 images:
-    productLogo:         "/usr/share/delayos/logo/delayos.svg"
+    productLogo:         "/usr/share/delayos/logo/delayos-on-dark.svg"
     productIcon:         "/usr/share/delayos/logo/delayos.svg"
-    productWelcome:      "/usr/share/delayos/logo/delayos.svg"
+    productWelcome:      "/usr/share/delayos/logo/delayos-lockup-h-on-dark.svg"
 
 style:
     SidebarBackground:        "#0E0F13"

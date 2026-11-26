@@ -85,11 +85,15 @@ class Backend(QObject):
         self._proc = p
 
     def _grabbed(self, path, code):
-        img = QImage(path)
-        if img.isNull():
+        # only the size is needed here (the overlay loads the picture itself): reading the header instead of
+        # decoding the whole screenshot keeps a full-screen PNG decode off the GUI thread before the overlay shows
+        from PySide6.QtGui import QImageReader
+        reader = QImageReader(path)
+        size = reader.size() if reader.canRead() else None
+        if size is None or not size.isValid():
             self.captureFailed.emit("화면을 캡처하지 못했어요")
             return
-        self.captured.emit(QUrl.fromLocalFile(path).toString(), img.width(), img.height())
+        self.captured.emit(QUrl.fromLocalFile(path).toString(), size.width(), size.height())
 
     @Slot()
     def requestWindows(self):

@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 root = sys.argv[1]
 T = os.path.join(root, 'usr/share/plymouth/themes/delayos')
 os.makedirs(T, exist_ok=True)
-LOGO = os.path.join(root, 'usr/share/delayos/logo/delayos.svg')
+LOGO = os.path.join(root, 'usr/share/delayos/logo/delayos-on-dark.svg')   # brand kit: the variant for dark backgrounds
 
 # background: #0B0B10 + accent-blue radial glow at 18 %, centred 50 % / 0 %
 W, H = 1920, 1080

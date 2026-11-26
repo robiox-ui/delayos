@@ -14,7 +14,8 @@ generator and re-run it. Preview: `docs/reports/icons-preview.html`.
 | Category tile | 64 | `scalable/categories` | `delayos-settings-*` (a line glyph on an ink tile) |
 
 The logo (`delayos-logo`, `start-here*`, `distributor-logo`) is the brand mark and is not part of the set's
-tile system: it is never placed on a tile.
+tile system: it is never placed on a tile. Its shape is defined in `assets-src/brand_mark.py`; the wordmark,
+lockups, exports and usage rules are in `docs/brand.md` (generator: `assets-src/gen_brand.py`).
 
 ## 2. Palette
 

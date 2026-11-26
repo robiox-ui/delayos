@@ -53,6 +53,34 @@ def _chain():
     return out
 
 
+def _icon_dirs(root, out):
+    """Append every directory under `root` that holds icons, in os.walk order (top-down, no symlinked
+    directories), where "holds icons" means an icon among its first 50 files.
+
+    Same result as walking with os.walk, without its stat() per symbolic link: Breeze and hicolor are
+    mostly links (icon aliases), and classifying ~25 000 of them took 0.6-0.8 s on the first lookup,
+    during which the app's icons stayed empty. A name with an icon extension is a file whatever it
+    links to, so only the few other links are looked at."""
+    files, has, subs = 0, False, []
+    try:
+        with os.scandir(root) as it:
+            for e in it:
+                if e.name.endswith(EXTS):
+                    if files < 50:
+                        has = True
+                    files += 1
+                elif e.is_dir(follow_symlinks=False):
+                    subs.append(e.path)
+                elif not (e.is_symlink() and e.is_dir()):      # a link to a directory is not descended into
+                    files += 1
+    except OSError:
+        return
+    if has:
+        out.append(root)
+    for s in subs:
+        _icon_dirs(s, out)
+
+
 @functools.lru_cache(maxsize=64)
 def _theme_dirs(theme):
     dirs = []
@@ -60,9 +88,7 @@ def _theme_dirs(theme):
         root = os.path.join(base, theme)
         if not os.path.isdir(root):
             continue
-        for dp, dns, fns in os.walk(root):
-            if any(f.endswith(EXTS) for f in fns[:50]):
-                dirs.append(dp)
+        _icon_dirs(root, dirs)
     # prefer scalable and bigger sizes
     def rank(d):
         s = d.lower()
