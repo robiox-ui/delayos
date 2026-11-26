@@ -55,12 +55,12 @@ def run():
             line = line.strip()
             if line.startswith("PROGRESS "):
                 parts = line.split(" ", 2)
+                if len(parts) > 2:
+                    _status = parts[2]      # read by pretty_status_message() when the progress is set
                 try:
                     libcalamares.job.setprogress(float(parts[1]))
                 except (ValueError, IndexError):
                     pass
-                if len(parts) > 2:
-                    _status = parts[2]
             elif line.startswith("{"):
                 last = line
         p.wait()

@@ -59,7 +59,7 @@ MIN_WIN_GB = 64
 MIN_ROOT_GB = 20
 GIB = 1024 ** 3
 MIB = 1024 ** 2
-TRIES = "xxxxxx"
+MAX_HOPS = 6
 GENERIC_KEYS = {"home": "YTMG3-N6DKC-DKB77-7M9GH-8HVX7", "pro": "VK7JG-NPHTM-C97JM-9MPGT-3V66T"}
 EDITION_IDS = {"home": "Core", "pro": "Professional"}
 KEY_RE = re.compile(r"^[A-Z0-9]{5}(-[A-Z0-9]{5}){4}$")
@@ -187,7 +187,7 @@ def remove_file(path):
         pass
 
 
-# ---- configuration (shell style KEY='value', also sourced by /etc/grub.d/05_delayos-winsetup) -------
+# ---- configuration (shell style KEY='value') -------
 def load_conf(root="/"):
     conf = {}
     for line in read_text(os.path.join(root, CONF.lstrip("/"))).splitlines():
@@ -713,6 +713,30 @@ def delayos_entry(entries):
     return cands[0] if cands else None
 
 
+def windows_entry(conf, create=False):
+    """Firmware entry of the hidden Windows (its boot manager on our ESP). "bcdboot /s" does not
+    create one, so DelayOS adds it, last in the boot order; Windows keeps it up to date later."""
+    esp_pu = conf.get("ESP_PARTUUID", "")
+    find = lambda: next((e for e in efi_entries()[2] if "bootmgfw" in e["path"].lower() and esp_pu and esp_pu in e["path"].lower()), None)
+    e = find()
+    if e or not create:
+        return e
+    try:
+        esp, esp_dev = find_esp("/")
+    except Fail:
+        return None
+    if not find_ci(esp, "EFI/Microsoft/Boot/bootmgfw.efi"):
+        return None
+    info = next((d for d in lsblk(esp_dev) if d.get("path") == esp_dev), {})
+    order_before = efi_entries()[0]
+    run(["efibootmgr", "-q", "-c", "-d", "/dev/" + info.get("pkname", ""), "-p", str(partnum(esp_dev)),
+         "-L", "Windows Boot Manager", "-l", r"\EFI\Microsoft\Boot\bootmgfw.efi"], mutate=True)
+    e = find()
+    if e:
+        run(["efibootmgr", "-q", "-o", ",".join([n for n in order_before if n != e["num"]] + [e["num"]])], mutate=True)
+    return e
+
+
 def remove_setup_entries():
     for e in efi_entries()[2]:
         if e["label"] == SETUP_LABEL:
@@ -734,7 +758,7 @@ def create_setup_entry(disk, n_stg):
     run(["efibootmgr", "-q", "-o", ",".join([n for n in order_before if n != num] + [num])], mutate=True)
     rc, _ = run(["efibootmgr", "-q", "-n", num], mutate=True)
     if rc != 0:
-        log("BootNext could not be set; GRUB starts the Windows setup instead")
+        log("BootNext could not be set now; the DelayOS boot service sets it at the next start")
     return num
 
 
@@ -1020,10 +1044,6 @@ def arm_esp(esp, st):
     write_file(os.path.join(d, "esp.tag"), st["nonce"] + "\r\n")
     write_file(os.path.join(d, "pending"), "1\r\n")
     write_file(os.path.join(d, "pe-pending"), "1\r\n")
-    env = os.path.join(d, "grubenv")
-    remove_file(env)
-    run(["grub-editenv", env, "create"], mutate=True)
-    run(["grub-editenv", env, "set", "winsetup_tries=" + TRIES], mutate=True)
     # the Windows helper installer, same place delay-winboot uses
     hd = os.path.join(os.path.dirname(d), "winboot")
     os.makedirs(hd, exist_ok=True)
@@ -1045,7 +1065,7 @@ def copy_log(esp_dir):
 
 
 def do_stage(root, st, edition, key, iso_arg, win_gb):
-    need_tools("wimlib-imagex", "mkfs.vfat", "grub-editenv", "efibootmgr")
+    need_tools("wimlib-imagex", "mkfs.vfat", "efibootmgr")
     disk = st["disk"]
     stg_dev = verify_part(st.get("stage_partuuid"), STG_NAME, disk)
     win_dev = verify_part(st.get("win_partuuid"), WIN_NAME, disk)
@@ -1092,8 +1112,8 @@ def do_stage(root, st, edition, key, iso_arg, win_gb):
         except Exception as e:  # noqa
             log("sb setup failed: %s" % e)
     conf["STATE"] = "pending"
+    conf["HOPS"] = "0"
     save_conf(conf, root)
-    grub_mkconfig(root)
     num = create_setup_entry(disk, st["stage_n"])
     conf["SETUP_BOOTNUM"] = num
     save_conf(conf, root)
@@ -1109,7 +1129,7 @@ def grub_mkconfig(root):
         return
     rc, out = run(cmd if root == "/" else ["chroot", root] + cmd, mutate=True, timeout=300)
     if rc != 0:
-        log("grub-mkconfig failed: the firmware BootNext entry is still used for the Windows setup")
+        log("grub-mkconfig failed")
 
 
 def mark_failed(root, e):
@@ -1177,11 +1197,7 @@ def esp_state():
     d = find_ci(esp, ESP_REL)
     if not d:
         return None, {}
-    s = {f: os.path.exists(os.path.join(d, f)) for f in ("pending", "pe-pending", "pe-done", "done.json", "grubenv")}
-    s["tries"] = ""
-    if s["grubenv"]:
-        m = re.search(r"^winsetup_tries=(.*)$", read_text(os.path.join(d, "grubenv")), re.M)
-        s["tries"] = m.group(1) if m else ""
+    s = {f: os.path.exists(os.path.join(d, f)) for f in ("pending", "pe-pending", "pe-done", "done.json", "failed")}
     s["done"] = {}
     if s["done.json"]:
         try:
@@ -1234,6 +1250,20 @@ def hide_from_loaders():
     if g and not re.search(r"^GRUB_DISABLE_OS_PROBER=true", g, re.M):
         g = re.sub(r"^#?GRUB_DISABLE_OS_PROBER=.*\n", "", g, flags=re.M).rstrip("\n") + "\nGRUB_DISABLE_OS_PROBER=true\n"
         write_file("/etc/default/grub", g)
+    # grub's 31_efi_bootnext lists every firmware entry ("Windows Boot Manager (EFI BootNext)") in
+    # the menu: switch it off (a grub package update turns it on again; finalize/remove re-check)
+    bn = "/etc/grub.d/31_efi_bootnext"
+    if os.path.isfile(bn) and os.access(bn, os.X_OK):
+        run(["chmod", "-x", bn], mutate=True)
+    # Windows adds its own firmware entry on first start: drop the plain one DelayOS made
+    conf = load_conf()
+    esp_pu = conf.get("ESP_PARTUUID", "")
+    wins = [e for e in efi_entries()[2] if "bootmgfw" in e["path"].lower() and esp_pu and esp_pu in e["path"].lower()]
+    if len(wins) > 1:
+        for e in wins:
+            if e["path"].lower().endswith("bootmgfw.efi") and len(wins) > 1:
+                run(["efibootmgr", "-q", "-b", e["num"], "-B"], mutate=True)
+                wins = [w for w in wins if w is not e]
 
 
 def cmd_finalize(a):
@@ -1259,6 +1289,7 @@ def cmd_finalize(a):
                 with open(LOG, "a", encoding="utf-8") as out:
                     out.write("---- %s (from Windows) ----\n%s\n" % (f, read_text(src)[-20000:]))
         remove_setup_entries()
+        windows_entry(conf, create=True)       # "Windows 전환" (delay-winboot) starts Windows through it
         if me:
             set_order_first([me["num"]])
         try:
@@ -1268,7 +1299,7 @@ def cmd_finalize(a):
                 grow_root(conf, st)
         except Fail as e:
             log("finalize: staging partition not removed: %s %s" % (e.code, e.detail))
-        for f in ("grubenv", "pe-done", "esp.tag", "pe-pending"):
+        for f in ("pe-done", "esp.tag", "pe-pending", "failed"):
             remove_file(os.path.join(d, f))
         hide_from_loaders()
         conf.update(STATE="done", REASON="", ACTIVATED="1" if s["done"].get("activated") else "0",
@@ -1277,25 +1308,37 @@ def cmd_finalize(a):
         grub_mkconfig("/")
         copy_log(d)
         return 0
-    # not finished: still on its way (tries left), or failed
-    if s["pending"] and s["tries"] and not ("FAIL" in s["winpe_log"]):
-        age = time.time() - int(conf.get("CREATED") or 0)
-        if s["pe-pending"] and age < 86400:
-            log("finalize: Windows setup has not started yet; it starts at the next restart")
-            if nxt == "" and conf.get("SETUP_BOOTNUM"):
-                run(["efibootmgr", "-q", "-n", conf["SETUP_BOOTNUM"]], mutate=True)
+    # Not finished. DelayOS stays first in the firmware boot order, so every restart during the
+    # Windows setup lands here first: pass the PC on to the next step with a one-time BootNext
+    # (the same mechanism "Windows 전환" uses), at most MAX_HOPS times, then give up for good.
+    hops = int(conf.get("HOPS") or 0)
+    failed = "FAIL" in s["winpe_log"] or s["failed"]
+    target = None
+    if s["pending"] and not failed and hops < MAX_HOPS:
+        if s["pe-pending"]:
+            target = next((e for e in entries if e["label"] == SETUP_LABEL), None)
+        elif s["pe-done"]:
+            target = windows_entry(conf, create=True)
+    if target:
+        conf["HOPS"] = str(hops + 1)
+        save_conf(conf)
+        log("finalize: Windows setup in progress (step %d of at most %d): restarting into '%s' (Boot%s)"
+            % (hops + 1, MAX_HOPS, target["label"], target["num"]))
+        rc, _ = run(["efibootmgr", "-q", "-n", target["num"]], mutate=True)
+        if rc == 0 and not DRY:
+            run(["plymouth", "display-message", "--text=Windows 게임 지원을 준비하는 중… 컴퓨터를 끄지 마세요"], quiet=True)
+            run(["systemctl", "--no-block", "reboot"], mutate=True)
+            time.sleep(120)         # keep the login screen from appearing while the restart starts
             return 0
-        if not s["pe-pending"] and age < 86400:
-            log("finalize: Windows is still being set up; it continues at the next restart")
+        if DRY:
             return 0
-    reason = "winpe" if "FAIL" in s["winpe_log"] else ("windows" if s["pe-done"] else "not-started")
-    log("finalize: Windows setup did not finish (reason %s, tries left '%s')\n%s" % (reason, s["tries"], s["winpe_log"][-1500:]))
-    remove_file(os.path.join(d, "pending"))        # GRUB stops starting Windows on its own
+    reason = "winpe" if failed else ("windows" if s["pe-done"] else "not-started")
+    log("finalize: Windows setup did not finish (reason %s, %d restarts used)\n%s" % (reason, hops, s["winpe_log"][-1500:]))
+    remove_file(os.path.join(d, "pending"))
     if me:
         set_order_first([me["num"]])
     conf.update(STATE="failed", REASON=reason)
     save_conf(conf)
-    grub_mkconfig("/")
     copy_log(d)
     return 0
 
@@ -1327,9 +1370,10 @@ def cmd_remove(a):
     remove_setup_entries()
     esp, _dev = find_esp("/")
     ms = find_ci(esp, "EFI/Microsoft")
-    for e in efi_entries()[2]:
-        if "bootmgfw" in e["path"].lower() and conf.get("ESP_PARTUUID") and conf["ESP_PARTUUID"] in e["path"].lower():
-            run(["efibootmgr", "-q", "-b", e["num"], "-B"], mutate=True)
+    we = windows_entry(conf)
+    while we:
+        run(["efibootmgr", "-q", "-b", we["num"], "-B"], mutate=True)
+        we = None if DRY else windows_entry(conf)
     if ms and not DRY:
         shutil.rmtree(ms, ignore_errors=True)       # only ever created by this Windows installation
     elif ms:

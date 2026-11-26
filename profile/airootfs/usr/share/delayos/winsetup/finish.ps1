@@ -113,7 +113,8 @@ if ($esp -and (Test-Path -LiteralPath "$esp\EFI\DelayOS\winsetup")) {
 }
 
 # ---- 5. back to DelayOS ------------------------------------------------------------------------
-# DelayOS stays first in the firmware boot order (bcdboot /addlast); select it explicitly as well.
+# Put DelayOS first in the firmware boot order again (Windows may have moved itself to the front)
+# and select it for the next start.
 if ($guid) {
     [void](Invoke-Quiet "bcdedit /set {fwbootmgr} displayorder $guid /addfirst")
     [void](Invoke-Quiet "bcdedit /set {fwbootmgr} bootsequence $guid")

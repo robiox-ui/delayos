@@ -23,12 +23,13 @@ echo   약 20~40분이 걸립니다. 컴퓨터를 끄지 마세요.
 echo   끝나면 자동으로 다시 시작되어 DelayOS로 돌아갑니다.
 echo.
 echo [%date% %time%] WinPE start, staging %STG%: > %LOG%
-findstr /c:"%NONCE%" %STG%:\delayos\staging.tag >nul 2>&1
+call :checktag %STG%:\delayos\staging.tag
 if errorlevel 1 (set ERR=E01 staging-id& goto fail)
 
 rem ---- EFI system partition (must carry our id)
 mountvol S: /S >nul 2>&1
-if exist S:\EFI\DelayOS\winsetup\esp.tag findstr /c:"%NONCE%" S:\EFI\DelayOS\winsetup\esp.tag >nul 2>&1 && set ESP=S
+call :checktag S:\EFI\DelayOS\winsetup\esp.tag
+if not errorlevel 1 set ESP=S
 if not defined ESP mountvol S: /D >nul 2>&1
 if not defined ESP call :scan_esp
 if not defined ESP (set ERR=E02 esp-not-found& goto fail)
@@ -36,7 +37,7 @@ echo [%time%] ESP found >> %LOG%
 if exist S:\EFI\DelayOS\winsetup\pe-pending del /f /q S:\EFI\DelayOS\winsetup\pe-pending
 
 rem ---- Windows partition (must carry our id)
-for %%d in (C D E F G H I J K L M N O P Q R T U V W Y Z) do if not defined TGT if exist %%d:\DelayOS-WinTarget.tag findstr /c:"%NONCE%" %%d:\DelayOS-WinTarget.tag >nul 2>&1 && set TGT=%%d
+for %%d in (C D E F G H I J K L M N O P Q R T U V W Y Z) do if not defined TGT call :trytgt %%d
 if not defined TGT (set ERR=E03 target-not-found& goto fail)
 if /i "%TGT%"=="%STG%" (set ERR=E03 target-is-staging& goto fail)
 echo [%time%] target %TGT%: >> %LOG%
@@ -56,7 +57,7 @@ copy /y %STG%:\delayos\unattend.xml %TGT%:\Windows\Panther\unattend.xml >nul
 if errorlevel 1 (set ERR=E06 unattend& goto fail)
 xcopy %STG%:\delayos\payload %TGT%:\ProgramData\DelayOS\winsetup\ /E /I /Y /Q >nul
 if errorlevel 1 (set ERR=E06 payload& goto fail)
-bcdboot %TGT%:\Windows /s S: /f UEFI /l ko-KR /addlast >> %LOG% 2>&1
+bcdboot %TGT%:\Windows /s S: /f UEFI /l ko-KR >> %LOG% 2>&1
 if errorlevel 1 (set ERR=E07 bcdboot& goto fail)
 bcdedit /store S:\EFI\Microsoft\Boot\BCD /set {bootmgr} timeout 0 >nul 2>&1
 echo [%time%] OK >> %LOG%
@@ -86,8 +87,23 @@ exit /b 0
 (echo select disk %1& echo select partition %2& echo assign letter=S) > X:\dp.txt
 diskpart /s X:\dp.txt >nul 2>&1
 if errorlevel 1 exit /b 0
-if exist S:\EFI\DelayOS\winsetup\esp.tag findstr /c:"%NONCE%" S:\EFI\DelayOS\winsetup\esp.tag >nul 2>&1 && set ESP=S
+call :checktag S:\EFI\DelayOS\winsetup\esp.tag
+if not errorlevel 1 set ESP=S
 if defined ESP exit /b 0
 (echo select disk %1& echo select partition %2& echo remove letter=S) > X:\dp.txt
 diskpart /s X:\dp.txt >nul 2>&1
+exit /b 0
+
+rem ---- %1 = marker file: errorlevel 0 only if its first line is this installation's id
+rem      (plain cmd on purpose: findstr does not exist in the Windows Setup boot image)
+:checktag
+set TAGVAL=
+if not exist %1 exit /b 1
+set /p TAGVAL=<%1
+if "%TAGVAL%"=="%NONCE%" exit /b 0
+exit /b 1
+
+:trytgt
+call :checktag %1:\DelayOS-WinTarget.tag
+if not errorlevel 1 set TGT=%1
 exit /b 0

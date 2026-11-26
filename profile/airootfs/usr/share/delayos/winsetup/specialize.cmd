@@ -15,6 +15,9 @@ rem BitLocker / automatic device encryption stays OFF (DelayOS shares the EFI pa
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\BitLocker" /v PreventDeviceEncryption /t REG_DWORD /d 1 /f >> %LOG% 2>&1
 rem Fast Startup off: every start is a real boot (dual boot, shared EFI partition)
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f >> %LOG% 2>&1
+rem The restart that follows this pass must come straight back into Windows (DelayOS is first in the
+rem firmware boot order and would otherwise have to pass the PC on once more)
+bcdedit /set {fwbootmgr} bootsequence {bootmgr} >> %LOG% 2>&1
 rem DelayOS keeps the hardware clock in UTC: make Windows do the same, or the clocks differ by 9 hours
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /t REG_DWORD /d 1 /f >> %LOG% 2>&1
 rem Privacy: optional diagnostics, advertising id, tailored experiences and suggested apps off

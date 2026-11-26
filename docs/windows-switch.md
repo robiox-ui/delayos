@@ -243,7 +243,8 @@ DelayOS는 KMS 에뮬레이터나 인증 우회 도구를 쓰지 않으며 앞�
    - 다음 한 번만 Windows 설치 환경으로 부팅하도록 지정합니다(펌웨어 항목 "DelayOS Windows Setup" + `BootNext`).
 3. 마지막 화면: "다시 시작하면 Windows 게임 지원을 자동으로 준비합니다 (약 20~40분, 컴퓨터를 끄지 마세요)".
 4. 다시 시작하면 검은 화면에 진행 상황이 나옵니다(Windows PE). 묻는 것은 없습니다. 이미지 적용 → 재시작 →
-   Windows가 장치를 준비하고 재시작 → `DelayOS` 계정으로 자동 로그인 → 연동 도우미 설치 → DelayOS로 재시작.
+   (DelayOS가 잠깐 켜졌다가 스스로 Windows로 넘김) → Windows가 장치를 준비하고 재시작 → `DelayOS` 계정으로 자동 로그인 →
+   연동 도우미 설치 → DelayOS로 재시작. 중간에 DelayOS 시작 화면이 한두 번 잠깐 보이는 것은 정상입니다.
 5. DelayOS가 켜질 때 `delay-winsetup-finalize.service`가 임시 파티션을 지워 DelayOS에 돌려주고, 설치용 부팅 항목을 지우고,
    GRUB/systemd-boot 메뉴에서 Windows를 숨깁니다. "Windows Boot Manager" 펌웨어 항목은 Windows 전환이 쓰므로 남깁니다.
 
@@ -254,7 +255,7 @@ DelayOS는 KMS 에뮬레이터나 인증 우회 도구를 쓰지 않으며 앞�
   암호가 없으므로 PC를 켠 사람은 누구나 그 Windows를 쓸 수 있습니다(Windows는 암호 없는 계정의 네트워크 로그온을 기본으로 막습니다).
   원하면 Windows에서 암호를 설정하세요. 그러면 전환할 때 암호를 한 번 입력해야 합니다.
 - 개인정보 관련 선택 항목은 모두 끔(선택적 진단 데이터, 광고 ID, 맞춤형 환경, 추천 앱, 위치).
-- **VBS + 메모리 무결성(HVCI) 켬.** 일부 안티치트(예: Vanguard, 최신 FACEIT/EA 계열)가 요구하거나 권장합니다. 대신 Windows 게임 성능이
+- **VBS + 메모리 무결성(HVCI) 켬.** 일부 안티치트가 요구하거나 권장합니다. 대신 Windows 게임 성능이
   조금(보통 몇 %, CPU와 게임에 따라 더) 낮아질 수 있습니다. 끄려면 Windows 보안 › 장치 보안 › 코어 격리 › 메모리 무결성.
   CPU 가상화(VT-x/AMD-V, SLAT)가 BIOS에서 꺼져 있으면 Windows가 스스로 켜지 않습니다.
 - **BitLocker/장치 암호화 끔**(`PreventDeviceEncryption`), **빠른 시작과 최대 절전 끔**. EFI 파티션과 펌웨어를 DelayOS와 같이 쓰기 때문입니다.
@@ -292,8 +293,9 @@ Linux에서 EAC v2 게임을 하려면 `sudo mokutil --delete /usr/share/delayos
   이후 단계는 파티션 GUID와 이름(`DelayOS-WinSetup`, `DelayOS-Windows`)이 모두 맞을 때만 진행합니다.
 - Windows PE 쪽 스크립트는 이번 설치의 무작위 ID가 적힌 표식 파일이 있는 볼륨 하나만 포맷하고, 같은 ID가 있는 EFI 파티션에만 부팅 파일을 씁니다.
   Windows 설치 프로그램의 디스크 선택 기능은 쓰지 않습니다(DISM으로 이미지를 적용).
-- DelayOS는 부팅 순서의 첫 번째로 남습니다(`bcdboot /addlast`). 설치 중 Windows를 몇 번 시작하는 일은 DelayOS의 GRUB이
-  EFI 파티션의 횟수 제한(6회)과 `pending` 표식을 보고 대신 해 줍니다. Windows가 끝내지 못하면 횟수가 다 되어 **DelayOS가 켜집니다.**
+- DelayOS는 부팅 순서의 첫 번째로 남습니다(Windows 부팅 항목은 DelayOS가 맨 뒤에 추가). 설치 중에 PC가 다시 시작될 때마다 DelayOS의
+  `delay-winsetup-finalize.service`가 로그인 화면이 뜨기 전에 "다음 한 번만 Windows로"(`BootNext`, Windows 전환과 같은 방식)를 지정하고
+  바로 다시 시작합니다. 이 넘겨주기는 최대 6번까지만 하므로, Windows가 끝내지 못하면 **DelayOS가 켜진 채로 멈춥니다.**
 - 실패하면 DelayOS 로그인 때 알림이 나옵니다. DelayOS는 정상입니다.
   - 다시 시도: `sudo delay-winsetup retry` (필요하면 `--iso /경로/Win11.iso`, `--edition pro`) 후 다시 시작
   - 제거하고 공간 되돌리기: `sudo delay-winsetup remove`
@@ -311,8 +313,7 @@ Linux에서 EAC v2 게임을 하려면 `sudo mokutil --delete /usr/share/delayos
 | `/etc/calamares/branding/delayos/wingames.qml`, `modules/wingames.conf` | 설치 프로그램 페이지 (`notesqml@wingames`) |
 | `/usr/lib/calamares/modules/delayos_winparts`, `delayos_winsetup` | 설치 단계(파티션 직후 / 부트로더 직후) |
 | `/usr/share/delayos/winsetup/` | Windows 쪽 파일: `install.cmd.in`(Windows PE), `unattend.xml.in`, `specialize.cmd`, `finish.ps1`, `winpeshl.ini` 등 |
-| `/etc/grub.d/05_delayos-winsetup` | 설치가 진행 중일 때만 Windows를 대신 시작하는 GRUB 조각 |
-| `/etc/systemd/system/delay-winsetup-finalize.service` | 부팅 시 마무리/실패 처리 |
+| `/etc/systemd/system/delay-winsetup-finalize.service` | 부팅 시: 설치 중이면 Windows로 넘겨주기, 끝났으면 마무리, 아니면 실패 처리 |
 | `/usr/lib/udev/rules.d/61-delayos-winsetup.rules` | Windows 파티션을 파일 탐색기에서 숨김(`UDISKS_IGNORE`) |
 | `/etc/delayos/winsetup.conf` | 상태(`STATE=pending|done|failed|removed`)와 파티션 GUID |
 | `packages/delayos-sb-general`, `tools/make-delayos-general-key.sh` | Secure Boot용 일반 키와 서명된 GRUB/커널 (빌드 쪽) |
