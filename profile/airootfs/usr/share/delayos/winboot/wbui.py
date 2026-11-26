@@ -284,7 +284,9 @@ class WinBoot(QObject):
         gid = "custom-" + hashlib.sha1((name + "\n" + target).encode("utf-8")).hexdigest()[:10]
         procs = [p.strip() for p in exit_proc.split(",") if p.strip()]
         d = {"id": gid, "name": name, "launch": launch, "exit_processes": procs}
-        if launch["type"] == "exe":
+        if launch["type"] == "exe" and not procs:
+            # no process name given: "still running" = any process started from the game folder.
+            # With a name the user said what to watch (a folder like C:\Windows\System32 never empties).
             d["install_dir"] = target.rsplit("\\", 1)[0]
         g = wb.norm_game(d, "custom")
         if not g:

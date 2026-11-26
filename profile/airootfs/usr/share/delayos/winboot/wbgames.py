@@ -76,7 +76,7 @@ def norm_launch(la):
     else:
         launch["path"] = _s(la.get("path"), 400)
         launch["args"] = _s(la.get("args"), 600)
-        if not re.match(r"^([A-Za-z]:\|%[A-Za-z0-9_()]+%\)", launch["path"]) or '"' in launch["path"]:
+        if not re.match(r"^([A-Za-z]:\\|%[A-Za-z0-9_()]+%\\)", launch["path"]) or '"' in launch["path"]:
             return None
     return launch
 

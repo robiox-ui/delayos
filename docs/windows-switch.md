@@ -235,6 +235,9 @@ Store의 Windows 게임 화면과 설치 확인 창은 이 PC의 **TPM 2.0 / Sec
 - 레거시 BIOS에서는 돌아올 때 `bcdedit` 지정이 필요 없습니다(GRUB이 MBR에 있어 재시작하면 DelayOS가 기본).
   UEFI에서 DelayOS 펌웨어 항목을 찾지 못해도 DelayOS가 부팅 순서 첫 번째면 그냥 재시작으로 돌아옵니다.
 - 일부 펌웨어는 `BootNext`를 무시하거나 Windows 업데이트 뒤 부팅 순서를 Windows 우선으로 바꿉니다. 이때는 BIOS에서 DelayOS를 첫 번째로 두세요.
+  DelayOS가 직접 설치한 Windows(아래 "Windows 게임 지원")에서는 자동으로 되돌립니다: Windows 도우미가 로그온할 때마다
+  (`config.json`의 `delayos_first`), DelayOS는 켜질 때마다(`delay-winsetup-finalize.service`) DelayOS를 부팅 순서 첫 번째로 다시 둡니다.
+  직접 설치한 일반 듀얼 부팅 PC의 부팅 순서는 건드리지 않습니다.
 - 연동 도우미는 설치한 Windows 계정으로 로그인할 때만 동작합니다.
 - 라이브 USB로 부팅한 DelayOS에서는 Windows 게임 항목을 만들지 않습니다.
 
@@ -353,10 +356,13 @@ DelayOS는 KMS 에뮬레이터나 인증 우회 도구를 쓰지 않으며 앞�
 Secure Boot는 PC 전체에 하나뿐인 펌웨어 설정입니다. 발로란트를 하려면 켜야 하고, 켜면 DelayOS도 서명된 부트로더와 커널로 부팅해야 합니다.
 
 - **Secure Boot 지원 빌드**(ISO를 만들 때 DelayOS 일반 서명 키가 있었던 경우): 설치 프로그램이 Microsoft가 서명한 shim →
-  DelayOS 일반 키로 서명한 GRUB → 서명한 `linux-delayos` 순서로 부팅되게 구성하고, DelayOS 일반 CA를 MOK로 등록 요청합니다.
-  Windows 설치가 끝나고 DelayOS가 처음 켜질 때 **파란 화면(MOK 관리, 영어)** 이 한 번 나옵니다:
+  DelayOS 일반 키로 서명한 GRUB → 서명한 `linux-delayos` 순서로 부팅되게 구성합니다. DelayOS 일반 CA의 MOK 등록은
+  **자동 Windows 설치가 모두 끝난 뒤에** 요청합니다(설치 도중에 요청하면 아무도 없는 사이에 10초짜리 화면이 지나가 버립니다).
+  Windows 준비가 끝나고 DelayOS에 로그인하면 안내 창이 나오고, **그다음에 PC를 다시 시작할 때**
+  **파란 화면(MOK 관리, 영어)** 이 한 번 나옵니다:
   `Enroll MOK` → `Continue` → `Yes` → 암호 **`delayos`** 입력 → `Reboot`. (10초 안에 아무 키나 눌러야 합니다. 놓쳤으면
-  `sudo delay-winsetup sb-setup` 후 다시 시작.) 그다음 BIOS에서 Secure Boot를 켜세요. 켠 뒤에는:
+  `sudo delay-winsetup sb-setup` 후 다시 시작.) 그다음 BIOS에서 Secure Boot를 켜세요. 등록 전에 Secure Boot를 켜면 DelayOS가
+  시작되지 않습니다. 켠 뒤에는:
   - `linux-delayos`만 부팅됩니다. 예비 커널 `linux-lts`와 직접 설치한 커널은 서명이 없어 부팅되지 않습니다.
   - 서명되지 않은 모듈(NVIDIA DKMS 등)은 그대로 로드됩니다(일반 커널은 잠금 모드를 강제하지 않음).
 - **Secure Boot 미지원 빌드**: 설치 프로그램에 "Secure Boot 미지원 빌드"라고 나옵니다. 설치는 되지만 Secure Boot를 켜면 DelayOS가

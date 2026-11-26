@@ -405,6 +405,15 @@ def _copy_installer(dst, cmd_name):
     shutil.copyfile(os.path.join(src, WIN_CMD), os.path.join(dst, cmd_name))
 
 
+def hidden_windows():
+    """Is the Windows on this PC the hidden one installed by delay-winsetup?"""
+    try:
+        with open("/etc/delayos/winsetup.conf", encoding="utf-8") as f:
+            return re.search(r"^ENABLED='?1'?$", f.read(), re.M) is not None
+    except OSError:
+        return False
+
+
 def install_helper(st):
     """Copy the Windows helper installer where Windows can reach it. Returns what worked."""
     res = {"esp": False, "ntfs": ""}
@@ -416,7 +425,9 @@ def install_helper(st):
                 # ASCII name on FAT: the ESP may be mounted with iocharset=ascii
                 _copy_installer(os.path.join(find_ci(m, "EFI") or os.path.join(m, "EFI"), "DelayOS", "winboot"), "setup.cmd")
                 res["esp"] = True
-    if not st["bitlocker"]:
+    # The Windows that DelayOS installed itself (delay-winsetup) already has the helper and is never
+    # mounted from DelayOS: updates reach it through the ESP copy only.
+    if not st["bitlocker"] and not hidden_windows():
         try:
             with WindowsDrive(st["_parts"], True) as root:
                 if root:

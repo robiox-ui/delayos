@@ -57,7 +57,13 @@ function Get-ShortcutPath {
 
 function New-TaskXml([string]$mode, [bool]$elevated, [bool]$triggers, [string]$user) {
     $e = { param($s) [System.Security.SecurityElement]::Escape([string]$s) }
-    $arguments = '--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}" -Mode {1}' -f (Join-Path $Base 'agent.ps1'), $mode
+    # full paths: at the first seconds of a logon the task must not depend on the search path
+    # (VM test: one logon in ten ended with 0x80070003 "path not found" before agent.ps1 ran)
+    $sys = Join-Path $env:SystemRoot 'System32'
+    $arguments = '--headless {0} -NoProfile -ExecutionPolicy Bypass -File "{1}" -Mode {2}' -f (Join-Path $sys 'WindowsPowerShell\v1.0\powershell.exe'), (Join-Path $Base 'agent.ps1'), $mode
+    # the logon task is started again (after a minute, up to three times) if it could not start
+    $restart = ''
+    if ($triggers) { $restart = '<RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure>' }
     $query = "<QueryList><Query Id=`"0`" Path=`"System`"><Select Path=`"System`">*[System[Provider[@Name='Microsoft-Windows-Power-Troubleshooter'] and (EventID=1)]]</Select></Query></QueryList>"
     $trig = '<Triggers />'
     if ($triggers) {
@@ -72,6 +78,7 @@ function New-TaskXml([string]$mode, [bool]$elevated, [bool]$triggers, [string]$u
         $trig
         '<Principals><Principal id="Author"><UserId>' + (& $e $user) + '</UserId><LogonType>InteractiveToken</LogonType><RunLevel>' + $level + '</RunLevel></Principal></Principals>'
         '<Settings>'
+        $restart
         '<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>'
         '<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>'
         '<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>'
@@ -87,7 +94,7 @@ function New-TaskXml([string]$mode, [bool]$elevated, [bool]$triggers, [string]$u
         '<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>'
         '<Priority>4</Priority>'
         '</Settings>'
-        '<Actions Context="Author"><Exec><Command>conhost.exe</Command><Arguments>' + (& $e $arguments) + '</Arguments></Exec></Actions>'
+        '<Actions Context="Author"><Exec><Command>' + (& $e (Join-Path $sys 'conhost.exe')) + '</Command><Arguments>' + (& $e $arguments) + '</Arguments></Exec></Actions>'
         '</Task>'
     ) -join "`n"
 }
@@ -146,6 +153,8 @@ try { $cfg = [IO.File]::ReadAllText($cfgFile, $Utf8) | ConvertFrom-Json } catch 
 if (-not $cfg) { $cfg = New-Object psobject }
 $cfg | Add-Member -NotePropertyName version -NotePropertyValue $Version -Force
 $cfg | Add-Member -NotePropertyName user -NotePropertyValue $id.Name -Force
+# hidden Windows installed by DelayOS: the agent keeps DelayOS first in the firmware boot order
+if ($Unattended) { $cfg | Add-Member -NotePropertyName delayos_first -NotePropertyValue $true -Force }
 [IO.File]::WriteAllText($cfgFile, ($cfg | ConvertTo-Json -Depth 6), $Utf8)
 
 # 2. scheduled tasks

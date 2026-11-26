@@ -355,7 +355,7 @@ def facts():
         live_src = out.strip()
     disks = []
     for d in lsblk():
-        if d.get("type") != "disk" or (d.get("path") or "").startswith(("/dev/loop", "/dev/zram", "/dev/sr", "/dev/ram")):
+        if d.get("type") != "disk" or (d.get("path") or "").startswith(("/dev/loop", "/dev/zram", "/dev/sr", "/dev/ram", "/dev/fd")):
             continue
         if live_src.startswith(d["path"]):
             continue
@@ -427,7 +427,11 @@ def cmd_parts(a):
     win_end = (old_end // al) * al - 1
     used = sorted(partnum(p["node"]) for p in table["partitions"])
     free = [n for n in range(1, 129) if n not in used]
-    n_stg, n_win = free[0], free[1]
+    # Windows gets the LOWER free entry number, the temporary staging partition the higher one (it
+    # still lies in front of Windows on the disk). Deleting the staging partition later must not
+    # leave an empty GPT entry below the Windows entry: Windows then stops with
+    # INACCESSIBLE_BOOT_DEVICE (0x7B) on every start (seen in the VM test, docs/reports/wintest.md).
+    n_win, n_stg = free[0], free[1]
     fs_uuid, fs_label = blkid(root_dev, "UUID"), blkid(root_dev, "LABEL")
     log("parts: disk=%s root=%s (#%d %s uuid=%s) start=%d size=%d -> %d sectors; staging #%d %d-%d; windows #%d %d-%d (%d GiB)"
         % (disk, root_dev, n_root, fstype, fs_uuid, start, size, new_size, n_stg, stg_start, stg_end, n_win, win_start, win_end, win_gb))
@@ -763,9 +767,12 @@ def create_setup_entry(disk, n_stg):
 
 
 # ---- Secure Boot (shim + DelayOS general key) ------------------------------------------------------
-def sb_setup(root, esp, disk, esp_n):
+def sb_setup(root, esp, disk, esp_n, enroll=True):
     """Boot DelayOS through the Microsoft-signed shim: shim -> GRUB and linux-delayos signed with the
-    DelayOS *general* key (not the anti-cheat key, see docs). The CA is queued for MOK enrollment."""
+    DelayOS *general* key (not the anti-cheat key, see docs). enroll: also queue the CA for MOK
+    enrollment now (the blue MokManager screen then appears at the very next start through shim and
+    waits only 10 seconds, so the installer passes enroll=False and "finalize" queues it when the
+    unattended Windows setup is over and the user is back at the PC)."""
     j = lambda p: os.path.join(root, p.lstrip("/"))
     if not sb_available(root):
         return False
@@ -797,20 +804,40 @@ def sb_setup(root, esp, disk, esp_n):
         if e["label"] == "DelayOS":
             run(["efibootmgr", "-q", "-b", e["num"], "-B"], mutate=True)
     run(["efibootmgr", "-q", "-c", "-d", disk, "-p", str(esp_n), "-L", "DelayOS", "-l", "\\EFI\\DelayOS\\shimx64.efi"], mutate=True)
-    cer = SB_DIR + "/delayos-general-ca.cer"
-    rc, out = run(inroot(["mokutil", "--test-key", cer]), quiet=True)
-    if "already enrolled" in out:
-        log("sb: DelayOS general CA already enrolled")
-    else:
-        rc, h = run(inroot(["mokutil", "--generate-hash=" + MOK_PASSWORD]), quiet=True)
-        hf = j("/run/delayos-mok.hash") if root != "/" else RUN + "/mok.hash"
-        os.makedirs(os.path.dirname(hf), exist_ok=True)
-        write_file(hf, h.strip() + "\n", 0o600)
-        rc, out = run(inroot(["mokutil", "--import", cer, "--hash-file", "/run/delayos-mok.hash" if root != "/" else hf]), mutate=True)
-        remove_file(hf)
-        if rc != 0:
-            log("sb: MOK import failed; run 'sudo mokutil --import %s' later" % cer)
+    if enroll:
+        sb_enroll(root)
     return True
+
+
+def sb_enrolled(root="/"):
+    """Is the DelayOS general CA an enrolled Machine Owner Key? (readable without root)"""
+    inroot = (lambda c: c) if root == "/" else (lambda c: ["chroot", root] + c)
+    rc, out = run(inroot(["mokutil", "--test-key", SB_DIR + "/delayos-general-ca.cer"]), quiet=True)
+    return "already enrolled" in out
+
+
+def sb_enroll(root="/"):
+    """Queue the DelayOS general CA for MOK enrollment (MokManager asks at the next start through shim).
+    Returns "enrolled", "queued" or "failed"."""
+    j = lambda p: os.path.join(root, p.lstrip("/"))
+    inroot = (lambda c: c) if root == "/" else (lambda c: ["chroot", root] + c)
+    cer = SB_DIR + "/delayos-general-ca.cer"
+    if sb_enrolled(root):
+        log("sb: DelayOS general CA already enrolled")
+        return "enrolled"
+    if DRY:
+        log("would queue the DelayOS general CA for MOK enrollment")
+        return "queued"
+    rc, h = run(inroot(["mokutil", "--generate-hash=" + MOK_PASSWORD]), quiet=True)
+    hf = j("/run/delayos-mok.hash") if root != "/" else RUN + "/mok.hash"
+    os.makedirs(os.path.dirname(hf), exist_ok=True)
+    write_file(hf, h.strip() + "\n", 0o600)
+    rc, out = run(inroot(["mokutil", "--import", cer, "--hash-file", "/run/delayos-mok.hash" if root != "/" else hf]), mutate=True)
+    remove_file(hf)
+    if rc != 0:
+        log("sb: MOK import failed; run 'sudo delay-winsetup sb-setup' later")
+        return "failed"
+    return "queued"
 
 
 def sb_kernel(root="/"):
@@ -850,6 +877,7 @@ def cmd_sb_setup(a):
     if ok:
         conf = load_conf()
         conf["SB"] = "1"
+        conf["SB_MOK"] = "enrolled" if sb_enrolled() else "queued"
         save_conf(conf)
         print("Secure Boot 준비가 끝났습니다. 다시 시작하면 파란 화면(MOK 관리)이 나옵니다: "
               "Enroll MOK > Continue > Yes > 암호 '%s' 입력 > Reboot. 그다음 BIOS에서 Secure Boot를 켜세요." % MOK_PASSWORD)
@@ -1107,8 +1135,10 @@ def do_stage(root, st, edition, key, iso_arg, win_gb):
     # Secure Boot chain (only when this build ships the signed files)
     if sb_available(root):
         try:
-            if sb_setup(root, esp, disk, partnum(esp_dev)):
+            # the MOK request is queued by "finalize" when Windows is ready (see sb_setup)
+            if sb_setup(root, esp, disk, partnum(esp_dev), enroll=False):
                 conf["SB"] = "1"
+                conf["SB_MOK"] = "wanted"
         except Exception as e:  # noqa
             log("sb setup failed: %s" % e)
     conf["STATE"] = "pending"
@@ -1205,8 +1235,77 @@ def esp_state():
                 s["done"] = json.load(f)
         except Exception:
             pass
-    s["winpe_log"] = read_text(os.path.join(d, "winpe.log"))[-4000:]
+    s["winpe_log"] = read_win_text(os.path.join(d, "winpe.log"))[-4000:]
     return d, s
+
+
+def read_win_text(path):
+    """Text written by Windows: UTF-8 (PowerShell scripts) or code page 949 (cmd.exe in Windows PE)."""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except OSError:
+        return ""
+    for enc in ("utf-8-sig", "cp949"):
+        try:
+            return raw.decode(enc).replace("\r\n", "\n")
+        except UnicodeDecodeError:
+            pass
+    return raw.decode("utf-8", "replace").replace("\r\n", "\n")
+
+
+def close_gpt_gap(disk, win_pu):
+    """Move the Windows GPT entry down into the lowest empty entry below it, if there is one.
+    Windows stops with INACCESSIBLE_BOOT_DEVICE (0x7B) on every start when a GPT entry below its own
+    is empty (VM test: entries 1, 2, 4 = stop; 1, 2, 3 = starts). Only the entry number changes;
+    the partition, its GUID and its name stay as they are."""
+    if not win_pu or not have("sgdisk"):
+        return False
+    try:
+        dev = verify_part(win_pu, WIN_NAME, disk)
+        used = set(partnum(p["node"]) for p in sfdisk_table(disk)["partitions"])
+    except Fail as e:
+        log("gap check skipped: %s %s" % (e.code, e.detail))
+        return False
+    n = partnum(dev)
+    low = next((i for i in range(1, n) if i not in used), None)
+    if low is None:
+        return False
+    if run(["findmnt", "-rno", "TARGET", "-S", dev], quiet=True)[1].strip():
+        log("gap: %s is mounted, GPT entry %d not moved to %d" % (dev, n, low))
+        return False
+    log("gap: GPT entry %d is empty below the Windows entry %d: moving the Windows entry down" % (low, n))
+    rc, _ = run(["sgdisk", "-r", "%d:%d" % (low, n), disk], mutate=True)
+    if rc != 0:
+        return False
+    run(["partx", "-d", "--nr", str(n), disk], mutate=True)
+    run(["partx", "-a", "--nr", str(low), disk], mutate=True)
+    settle()
+    return True
+
+
+def keep_delayos_first():
+    """DelayOS must stay first in the firmware boot order (a Windows update can move Windows there);
+    "Windows 전환" reaches Windows with a one-time BootNext."""
+    order, _n, entries = efi_entries()
+    me = delayos_entry(entries)
+    if me and order and order[0] != me["num"]:
+        log("boot order: DelayOS (Boot%s) was not first (%s), putting it first again" % (me["num"], ",".join(order)))
+        set_order_first([me["num"]])
+        return True
+    return False
+
+
+def maintain(conf):
+    """Every start of a finished installation: cheap checks that keep the hidden Windows usable."""
+    try:
+        keep_delayos_first()
+        st = state_from_conf(conf)
+        if st["disk"] and conf.get("WIN_PARTUUID"):
+            close_gpt_gap(st["disk"], conf["WIN_PARTUUID"])
+    except Exception as e:  # noqa
+        log("maintain: %s: %s" % (type(e).__name__, e))
+    return 0
 
 
 def grow_root(conf, st):
@@ -1268,6 +1367,8 @@ def hide_from_loaders():
 
 def cmd_finalize(a):
     conf = load_conf()
+    if conf.get("ENABLED") == "1" and conf.get("STATE") == "done":
+        return maintain(conf)
     if conf.get("ENABLED") != "1" or conf.get("STATE") not in ("pending", "preparing"):
         return 0
     if conf.get("STATE") == "preparing":
@@ -1287,7 +1388,7 @@ def cmd_finalize(a):
             src = os.path.join(d, f)
             if os.path.exists(src) and not DRY:
                 with open(LOG, "a", encoding="utf-8") as out:
-                    out.write("---- %s (from Windows) ----\n%s\n" % (f, read_text(src)[-20000:]))
+                    out.write("---- %s (from Windows) ----\n%s\n" % (f, read_win_text(src)[-20000:]))
         remove_setup_entries()
         windows_entry(conf, create=True)       # "Windows 전환" (delay-winboot) starts Windows through it
         if me:
@@ -1295,10 +1396,20 @@ def cmd_finalize(a):
         try:
             delete_part(st["disk"], conf.get("STAGE_PARTUUID", ""), STG_NAME)
             conf["STAGE_PARTUUID"] = ""
+            close_gpt_gap(st["disk"], conf.get("WIN_PARTUUID", ""))
             if conf.get("RECLAIM", "grow-root") == "grow-root":
                 grow_root(conf, st)
         except Fail as e:
             log("finalize: staging partition not removed: %s %s" % (e.code, e.detail))
+        # Secure Boot: ask for the MOK enrollment now that the unattended part is over. The blue
+        # MokManager screen appears at the NEXT start and waits 10 seconds; the login notification
+        # (session-notify) tells the user what to do there.
+        if conf.get("SB") == "1" and conf.get("SB_MOK", "wanted") in ("wanted", "failed"):
+            try:
+                conf["SB_MOK"] = sb_enroll("/")
+            except Exception as e:  # noqa
+                log("sb: MOK request failed: %s" % e)
+                conf["SB_MOK"] = "failed"
         for f in ("pe-done", "esp.tag", "pe-pending", "failed"):
             remove_file(os.path.join(d, f))
         hide_from_loaders()
@@ -1423,12 +1534,37 @@ def cmd_status(a):
 
 
 def cmd_session_notify(a):
-    """Login hook (user): one notification per failed attempt."""
+    """Login hook (user): one notification per failed attempt; after a finished installation, one
+    explanation of the Secure Boot (MOK) screen that the next restart shows."""
     st = status()
+    conf = load_conf()
+    if st["state"] == "done" and conf.get("SB") == "1" and conf.get("SB_MOK") == "queued":
+        mark = os.path.expanduser("~/.cache/delayos-winsetup-mok-notified")
+        stamp = conf.get("FINISHED", "") or conf.get("CREATED", "")
+        if read_text(mark).strip() == stamp or sb_enrolled():
+            return 0
+        try:
+            os.makedirs(os.path.dirname(mark), exist_ok=True)
+            with open(mark, "w") as f:
+                f.write(stamp)
+        except OSError:
+            pass
+        body = ("Windows 게임 지원 준비가 끝났습니다. 시작 메뉴의 Windows 게임과 DelayOS Store에서 사용할 수 있습니다.\n\n"
+                "발로란트처럼 Secure Boot가 필요한 게임을 하려면 한 번만 다음을 해 주세요.\n"
+                "1. PC를 다시 시작하면 파란 화면(Shim UEFI key management)이 나옵니다. 10초 안에 아무 키나 누르세요.\n"
+                "2. Enroll MOK → Continue → Yes → 암호 %s 입력 → Reboot\n"
+                "3. 그다음 BIOS(UEFI) 설정에서 Secure Boot를 켜세요.\n\n"
+                "파란 화면을 놓쳤으면 터미널에서 sudo delay-winsetup sb-setup 을 실행하고 다시 시작하세요.\n"
+                "이 단계를 마치기 전에 Secure Boot를 켜면 DelayOS가 시작되지 않습니다." % MOK_PASSWORD)
+        if have("kdialog"):
+            subprocess.Popen(["kdialog", "--title", "Windows 게임 지원", "--msgbox", body])
+        elif have("notify-send"):
+            subprocess.Popen(["notify-send", "-a", "DelayOS", "Windows 게임 지원", body])
+        return 0
     if st["state"] != "failed":
         return 0
     mark = os.path.expanduser("~/.cache/delayos-winsetup-notified")
-    stamp = load_conf().get("CREATED", "")
+    stamp = conf.get("CREATED", "")
     if read_text(mark).strip() == stamp:
         return 0
     try:

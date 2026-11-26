@@ -282,9 +282,9 @@ Rectangle {
         }
         c.push({ ok: true, text: "UEFI 부팅, TPM 2.0" + (f.tpm_bypass ? " (테스트: TPM 확인 생략)" : "") + " 확인됨." })
         if (f.secure_boot === true && f.sb_build)
-            c.push({ ok: true, text: "Secure Boot가 켜져 있습니다. DelayOS도 Secure Boot로 부팅되도록 준비합니다. 설치 후 처음 DelayOS가 켜질 때 파란 화면(MOK 관리)이 한 번 나옵니다: Enroll MOK → Continue → Yes → 암호 delayos 입력 → Reboot." })
+            c.push({ ok: true, text: "Secure Boot가 켜져 있습니다. DelayOS도 Secure Boot로 부팅되도록 준비합니다. Windows 준비가 끝난 뒤 DelayOS를 한 번 더 다시 시작할 때 파란 화면(MOK 관리)이 나옵니다(로그인하면 안내가 표시됩니다): Enroll MOK → Continue → Yes → 암호 delayos 입력 → Reboot." })
         else if (f.sb_build)
-            c.push({ ok: false, text: "Secure Boot가 꺼져 있습니다. 발로란트(Vanguard)는 Windows 11에서 Secure Boot가 켜져 있어야 실행됩니다. DelayOS는 Secure Boot에서도 부팅되도록 준비되므로, 설치를 마친 뒤 파란 화면(MOK 관리)에서 Enroll MOK → Continue → Yes → 암호 delayos → Reboot을 하고 BIOS에서 Secure Boot를 켜세요." })
+            c.push({ ok: false, text: "Secure Boot가 꺼져 있습니다. 발로란트(Vanguard)는 Windows 11에서 Secure Boot가 켜져 있어야 실행됩니다. DelayOS는 Secure Boot에서도 부팅되도록 준비되므로, Windows 준비가 끝난 뒤 DelayOS를 한 번 더 다시 시작할 때 나오는 파란 화면(MOK 관리)에서 Enroll MOK → Continue → Yes → 암호 delayos → Reboot을 하고 BIOS에서 Secure Boot를 켜세요." })
         else
             c.push({ ok: false, text: "Secure Boot 미지원 빌드입니다. 이 DelayOS는 Secure Boot를 켜면 부팅되지 않습니다. 그래서 Secure Boot가 필요한 발로란트(Vanguard)는 Windows 11에서 실행을 거부합니다. 리그 오브 레전드, 포트나이트, 배틀그라운드 등은 Secure Boot 없이도 대부분 실행됩니다." })
         c.push({ ok: true, text: "Windows에는 메모리 무결성(VBS/HVCI)이 켜집니다. 일부 안티치트가 요구하거나 권장하며, Windows 게임 성능이 조금(보통 몇 %) 낮아질 수 있습니다. BitLocker와 빠른 시작은 끕니다." })

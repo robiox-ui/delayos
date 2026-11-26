@@ -179,6 +179,27 @@ function Get-ReturnGuid($ret) {
     return $null
 }
 
+# Hidden Windows installed by DelayOS (config.json: delayos_first, set by "install.ps1 -Unattended"):
+# DelayOS has to stay first in the firmware boot order, or a plain power-on ends in Windows. A Windows
+# feature update can put "Windows Boot Manager" first again; put DelayOS back in front at every logon.
+# A normal dual-boot PC (helper installed by hand) keeps whatever order its owner chose.
+function Repair-BootOrder {
+    try {
+        if (-not (Get-Config).delayos_first) { return }
+        $guid = Get-ReturnGuid $null
+        if (-not $guid) { return }
+        $out = & cmd.exe /c 'bcdedit /enum {fwbootmgr} 2>nul'
+        if (-not $out) { return }
+        # same structure rule as Find-ReturnGuid: the first {..} is the identifier of {fwbootmgr},
+        # the second one is the first entry of its display order
+        $ids = @([regex]::Matches(($out -join "`n"), '\{[^}\s]+\}') | ForEach-Object { $_.Value })
+        if (($ids.Count -ge 2) -and ($ids[0] -eq '{fwbootmgr}') -and ($ids[1] -ne $guid)) {
+            $rc = Invoke-Quiet "bcdedit /set {fwbootmgr} displayorder $guid /addfirst"
+            Write-Log "boot order: $($ids[1]) was first, DelayOS $guid put first again rc=$rc"
+        }
+    } catch { Write-Log "boot order: $_" }
+}
+
 function Invoke-Return([bool]$manual) {
     $guid = Get-ReturnGuid $script:ReturnInfo
     if ($guid) {
@@ -675,6 +696,29 @@ function Get-InstallState {
     return 0
 }
 
+# Tray icon: the DelayOS sphere (blue disc, two dark waves) drawn here, so the icon in the
+# notification area is recognizable instead of the generic application icon.
+function Get-DelayIcon {
+    try {
+        $bmp = New-Object System.Drawing.Bitmap(32, 32)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $g.Clear([System.Drawing.Color]::Transparent)
+        $rect = New-Object System.Drawing.Rectangle(2, 2, 28, 28)
+        $top = [System.Drawing.Color]::FromArgb(255, 150, 170, 255)
+        $bottom = [System.Drawing.Color]::FromArgb(255, 44, 66, 196)
+        $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $top, $bottom, 90.0)
+        $g.FillEllipse($brush, $rect)
+        $clip = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $clip.AddEllipse($rect)
+        $g.SetClip($clip)
+        $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 14, 18, 44), 2.6)
+        foreach ($y in 12, 20) { $g.DrawBezier($pen, 1, $y, 10, ($y - 5), 21, ($y + 6), 31, ($y - 1)) }
+        $g.Dispose()
+        return [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
+    } catch { return [System.Drawing.SystemIcons]::Application }
+}
+
 function Show-Guide {
     try { $script:Guide.Show(); $script:Guide.Activate() } catch {}
 }
@@ -940,7 +984,7 @@ function Wait-ForInstall($req) {
     $name = [string]$req.name
 
     $tray = New-Object System.Windows.Forms.NotifyIcon
-    $tray.Icon = [System.Drawing.SystemIcons]::Application
+    $tray.Icon = Get-DelayIcon
     $tip = (T 'in_tray_tip') -f $name
     if ($tip.Length -gt 63) { $tip = $tip.Substring(0, 63) }
     $tray.Text = $tip
@@ -1145,6 +1189,16 @@ function Wait-ForGame($req) {
     $script:Req = $req
     $script:Seen = @()
     $script:Dir = [string]$req.install_dir
+    # a folder that always has running programs (Windows itself, a drive root, the Program Files
+    # root) says nothing about the game: watch the process names only
+    try {
+        $dn = $script:Dir.TrimEnd('\')
+        $shared = @($env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData) | Where-Object { $_ }
+        if ($dn -and (($dn.Length -le 2) -or ($dn -like ($env:SystemRoot + '\*')) -or ($shared -contains $dn))) {
+            Write-Log "install_dir '$dn' is a system folder: not used to detect the end of the game"
+            $script:Dir = ''
+        }
+    } catch {}
     $script:Phase = 'wait'
     $script:Ticks = 0
     $script:Gone = 0
@@ -1152,7 +1206,7 @@ function Wait-ForGame($req) {
     $name = [string]$req.name
 
     $tray = New-Object System.Windows.Forms.NotifyIcon
-    $tray.Icon = [System.Drawing.SystemIcons]::Application
+    $tray.Icon = Get-DelayIcon
     $tip = (T 'tray_tip') -f $name
     if ($tip.Length -gt 63) { $tip = $tip.Substring(0, 63) }
     $tray.Text = $tip
@@ -1211,6 +1265,7 @@ switch ($Mode) {
         Close-Esp
     }
     'Agent' {
+        Repair-BootOrder
         $req = Read-Request
         if ($req) {
             $isInstall = ([string]$req.type -eq 'install')

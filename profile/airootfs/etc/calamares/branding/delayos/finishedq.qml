@@ -58,7 +58,7 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             width: 620; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; lineHeight: 1.2
             text: "다시 시작하면 Windows 게임 지원을 자동으로 준비합니다 (약 20~40분, 컴퓨터를 끄지 마세요). 화면이 몇 번 꺼졌다 켜지고, 끝나면 DelayOS가 시작됩니다."
-                  + (page.winSb ? "\n그때 파란 화면(MOK 관리)이 나오면: Enroll MOK → Continue → Yes → 암호 delayos 입력 → Reboot." : "")
+                  + (page.winSb ? "\nSecure Boot(발로란트에 필요)는 그 뒤에 켭니다. DelayOS에 로그인하면 안내가 나오고, 그다음에 다시 시작할 때 나오는 파란 화면(MOK 관리)에서 Enroll MOK → Continue → Yes → 암호 delayos 입력 → Reboot." : "")
             color: ts.text1
             font.family: ts.font; font.pixelSize: 13
         }
