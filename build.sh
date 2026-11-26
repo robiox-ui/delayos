@@ -216,7 +216,7 @@ for n in "${CONTENT_NAMES[@]}"; do
 done
 
 log "Collecting built packages into $LOCALREPO"
-find"/home/$BUILDER/.cache/yay" "/home/$BUILDER/yay-bin" -name '*.pkg.tar.zst' ! -name '*-debug-*' -exec cp -u {} "$LOCALREPO/" \; 2>/dev/null || true
+find "/home/$BUILDER/.cache/yay" "/home/$BUILDER/yay-bin" -name '*.pkg.tar.zst' ! -name '*-debug-*' -exec cp -u {} "$LOCALREPO/" \; 2>/dev/null || true
 rm -f "$LOCALREPO"/delayos-local.db* "$LOCALREPO"/delayos-local.files*
 repo-add -q "$LOCALREPO/delayos-local.db.tar.gz" "$LOCALREPO"/*.pkg.tar.zst
 
