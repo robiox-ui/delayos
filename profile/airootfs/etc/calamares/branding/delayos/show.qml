@@ -14,8 +14,8 @@ Presentation {
         "팁: Super + Space를 누르면 앱 찾기, 간단한 계산, 웹 검색을 바로 할 수 있습니다.",
         "팁: Windows 프로그램(.exe)을 두 번 클릭하면 바로 실행됩니다. 나머지는 DelayOS가 알아서 처리합니다.",
         "팁: Super + A를 누르면 Wi-Fi, 소리, 다크 모드 등을 제어 센터에서 바로 바꿀 수 있습니다.",
-        "팁: Win + V는 클립보드 기록, Win + .은 이모지 패널을 엽니다.",
-        "팁: Win + Shift + S로 화면의 원하는 부분을 캡처할 수 있습니다.",
+        "팁: Super + V는 클립보드 기록, Super + .은 이모지 패널을 엽니다.",
+        "팁: Super + Shift + S로 화면의 원하는 부분을 캡처할 수 있습니다.",
         "팁: 상단 바의 \"게임\" 버튼을 누르면 최대 성능으로 전환됩니다."
     ]
     property int idx: 0
@@ -83,13 +83,16 @@ Presentation {
                 Item { width: 1; height: 28 }
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    width: 560; height: 44; radius: 10
+                    // long tips wrap to a second line instead of being cut off with "…"
+                    width: 560; height: Math.max(44, tipText.implicitHeight + 20); radius: 10
                     color: ts.tip
                     Text {
                         id: tipText
                         anchors.centerIn: parent
                         width: 530
                         horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
                         elide: Text.ElideRight
                         text: presentation.tips[presentation.idx]
                         color: ts.text2

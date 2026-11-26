@@ -25,7 +25,8 @@ STEAM = os.path.join(HOME, ".local/share/Steam")
 CONFIG = os.path.join(STEAM, "config/config.vdf")
 TOOL_DIRS = ["/usr/share/steam/compatibilitytools.d", os.path.join(STEAM, "compatibilitytools.d")]
 # best first; GE-Proton (ProtonUp-Qt) is matched by prefix, newest version wins
-PREFER = ["proton-cachyos-slr", "proton-cachyos"]   # then any other proton-cachyos* (native build)
+# proton-delayos: DelayOS's own build (packages/proton-delayos), when it is installed
+PREFER = ["proton-delayos", "proton-cachyos-slr", "proton-cachyos"]   # then any other proton-cachyos* (native build)
 PATH = ["InstallConfigStore", "Software", "Valve", "Steam"]
 
 

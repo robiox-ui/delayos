@@ -1,0 +1,12 @@
+# Meta package: everything that makes an Arch + Plasma system a DelayOS desktop.
+pkgname=delayos-desktop
+pkgver=${DELAYOS_PKGVER:-$(date -u +%Y.%m.%d)}
+pkgrel=${DELAYOS_PKGREL:-1}
+pkgdesc='DelayOS desktop (meta package)'
+arch=('any')
+url='https://github.com/robiox-ui/delayos'
+license=('GPL-3.0-or-later')
+depends=('delayos-keyring' 'delayos-mirrorlist' 'delayos-settings-base' 'delayos-branding'
+         'delayos-shell' 'delayos-apps' 'delayos-winboot')
+optdepends=('linux-delayos: DelayOS gaming kernel'
+            'proton-delayos: DelayOS build of Proton')

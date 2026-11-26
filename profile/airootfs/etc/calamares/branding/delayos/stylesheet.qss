@@ -96,3 +96,7 @@ QProgressBar {
 QProgressBar::chunk { background-color: #4D6BFE; border-radius: 2px; }
 
 QToolTip { background-color: #1E2129; color: #F2F3F5; border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 6px; padding: 4px 8px; }
+
+/* execution page: the log button's text is a hard-coded English string in Calamares ("Toggle log") */
+QToolBar { background: transparent; border: none; }
+QToolBar QToolButton { qproperty-text: "설치 기록"; }

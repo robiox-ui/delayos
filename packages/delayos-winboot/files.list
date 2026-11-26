@@ -1,0 +1,15 @@
+# "Windows 전환" and the hidden Windows for anti-cheat games (docs/windows-switch.md)
+etc/pacman.d/hooks/95-delay-sb-kernel.hook
+etc/systemd/system/delay-winsetup-finalize.service
+etc/xdg/autostart/org.delayos.WinBootSync.desktop
+etc/xdg/autostart/org.delayos.WinSetupNotify.desktop
+etc/xdg/menus/applications-merged/delayos-windows-games.menu
+usr/bin/delay-winboot
+usr/lib/delayos/delay-winboot-helper
+usr/lib/udev/rules.d/61-delayos-winsetup.rules
+usr/local/bin/delay-winsetup
+usr/share/applications/org.delayos.WinBoot.desktop
+usr/share/delayos/winboot/
+usr/share/delayos/winsetup/
+usr/share/desktop-directories/delayos-windows-games.directory
+usr/share/polkit-1/actions/org.delayos.winboot.policy

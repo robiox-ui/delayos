@@ -1,0 +1,73 @@
+# Builds the DelayOS content packages (delayos-settings-base, -branding, -shell, -apps, -winboot,
+# -keyring, -mirrorlist, -desktop) whenever their files change, and publishes them to the [delayos]
+# pacman repository (GitHub release "repo-delayos"). docs/packaging.md
+#
+# Only these light packages are built here: they copy files, nothing is compiled (about a minute).
+# Kernels, Mesa, Qt and Proton need hours and tens of GB and are built on the DelayOS build VM
+# (tools/repo-build.sh, tools/repo-update.sh); a free runner (4 vCPU, 16 GB, 14 GB disk, 6 h limit)
+# is not the place for them.
+#
+# Publishing needs the repository secret DELAYOS_REPO_SIGNING_KEY: the content of
+# delayos-repo-signing.asc (the signing SUBKEY from tools/make-delayos-repo-key.sh, never the master
+# key). Without the secret the workflow only builds and keeps the packages as a run artifact.
+name: packages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'profile/airootfs/**'
+      - 'profile/profiledef.sh'
+      - 'packages/delayos-*/**'
+      - 'packages/delayos-common.sh'
+      - 'packages/delayos-live-only.list'
+      - 'tools/content-pkgs.sh'
+      - 'tools/repo-*.sh'
+      - '.github/workflows/packages.yml'
+  pull_request:
+    paths:
+      - 'profile/airootfs/**'
+      - 'packages/delayos-*/**'
+      - 'tools/content-pkgs.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: delayos-repo
+  cancel-in-progress: false
+
+jobs:
+  content:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Tools
+        run: pacman -Syu --noconfirm --needed git python libarchive pacman-contrib gnupg curl sudo
+      - uses: actions/checkout@v4
+      - name: Every file belongs to one package
+        run: bash tools/content-pkgs.sh check
+      - name: Shell syntax
+        run: |
+          for f in tools/*.sh build.sh packages/*/PKGBUILD packages/*/*.sh packages/delayos-common.sh; do bash -n "$f"; done
+      - name: What is published
+        run: bash tools/repo-publish.sh --pull --level generic
+      - name: Build
+        run: bash tools/repo-build.sh --no-chroot content
+      - uses: actions/upload-artifact@v4
+        with:
+          name: delayos-content-packages
+          path: /var/lib/delayos-repo/pool/delayos/*.pkg.tar.zst
+          if-no-files-found: ignore
+      - name: Sign and publish
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          DELAYOS_REPO_KEY_DATA: ${{ secrets.DELAYOS_REPO_SIGNING_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$DELAYOS_REPO_KEY_DATA" ]; then
+            echo "::notice::No DELAYOS_REPO_SIGNING_KEY secret: built, not published."
+            exit 0
+          fi
+          bash tools/repo-publish.sh --level generic

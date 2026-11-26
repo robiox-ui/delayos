@@ -1,0 +1,12 @@
+# DelayOS content package: the files are listed in files.list and come from profile/airootfs
+# (tools/content-pkgs.sh). Build: tools/repo-build.sh content   (docs/packaging.md)
+pkgname=delayos-shell
+pkgdesc='DelayOS desktop shell: top bar, dock, Start, control center, DelayUI/DelayShell QML, themes, icons, default KDE settings'
+. "${DELAYOS_REPO_ROOT:-$(realpath "${startdir:-$PWD}/../..")}/packages/delayos-common.sh"
+depends=('delayos-branding' 'plasma-workspace' 'kwin' 'qt6-declarative' 'kirigami' 'python' 'pyside6')
+optdepends=('sway: low-memory session' 'fcitx5-hangul: Korean input' 'inter-font: UI font')
+backup=($(delayos_backup))
+
+package() {
+    delayos_package
+}

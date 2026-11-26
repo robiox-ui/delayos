@@ -182,8 +182,33 @@ else
   warn "No general Secure Boot keys in $KEYS (delayos-general-*): DelayOS will not boot with Secure Boot on (Vanguard on the hidden Windows needs it)"
 fi
 
+# ------------------- DelayOS's own system as packages (docs/packaging.md)
+# delayos-settings-base, -branding, -shell, -apps, -winboot take their files out of profile/airootfs
+# (packages/delayos-*/files.list). The ISO installs them like any other package, so an installed
+# system owns these files through pacman and receives updates from the [delayos] repository.
+# The same script builds them for the repository (tools/repo-build.sh content).
+log "Building the DelayOS content packages (delayos-shell, delayos-apps, ...)"
+CPOOL="$WORK/repo/pool/delayos"
+DELAYOS_REPO_STATE="$WORK/repo" bash "$HERE/tools/repo-build.sh" --no-chroot content \
+  || die "The DelayOS content packages failed to build"
+CONTENT_NAMES=(delayos-settings-base delayos-branding delayos-shell delayos-apps delayos-winboot delayos-mirrorlist)
+HAVE_KEYRING=0
+if ls "$CPOOL"/delayos-keyring-[0-9]*.pkg.tar.zst >/dev/null 2>&1; then
+  HAVE_KEYRING=1; CONTENT_NAMES+=(delayos-keyring delayos-desktop)
+else
+  warn "No DelayOS repository key (tools/make-delayos-repo-key.sh): the ISO is built without delayos-keyring,"
+  warn "installed systems will NOT use the [delayos] repository and will not receive DelayOS updates."
+fi
+CONTENT_FILES=()
+for n in "${CONTENT_NAMES[@]}"; do
+  rm -f "$LOCALREPO/$n"-[0-9]*.pkg.tar.zst
+  f=$(ls "$CPOOL/$n"-[0-9]*.pkg.tar.zst 2>/dev/null | head -n1)
+  [[ -f $f ]] || die "$n was not built"
+  cp "$f" "$LOCALREPO/"; CONTENT_FILES+=("$f")
+done
+
 log "Collecting built packages into $LOCALREPO"
-find "/home/$BUILDER/.cache/yay" "/home/$BUILDER/yay-bin" -name '*.pkg.tar.zst' ! -name '*-debug-*' -exec cp -u {} "$LOCALREPO/" \; 2>/dev/null || true
+find"/home/$BUILDER/.cache/yay" "/home/$BUILDER/yay-bin" -name '*.pkg.tar.zst' ! -name '*-debug-*' -exec cp -u {} "$LOCALREPO/" \; 2>/dev/null || true
 rm -f "$LOCALREPO"/delayos-local.db* "$LOCALREPO"/delayos-local.files*
 repo-add -q "$LOCALREPO/delayos-local.db.tar.gz" "$LOCALREPO"/*.pkg.tar.zst
 
@@ -195,6 +220,13 @@ rm -f "$PROFILE/packages.x86_64" "$PROFILE/airootfs/etc/mkinitcpio.d/linux.prese
 cp -a "$HERE/profile/." "$PROFILE/"
 
 sed -i "s|@LOCALREPO@|$LOCALREPO|" "$PROFILE/pacman.conf"
+
+# What the content packages ship leaves the overlay (pacstrap would stop on a file that exists
+# already) together with its file_permissions entry. What stays in airootfs is live-ISO-only:
+# installer configuration, live autologin (packages/delayos-live-only.list).
+bash "$HERE/tools/content-pkgs.sh" strip "$PROFILE/airootfs" "$PROFILE/profiledef.sh" "${CONTENT_FILES[@]}"
+# packages.x86_64 lists the content packages; the keyring and the meta package need the repository key
+(( HAVE_KEYRING )) && printf '%s\n' delayos-keyring delayos-desktop >> "$PROFILE/packages.x86_64"
 
 # Anti-cheat kernel packages ride along on the ISO; `delay-eac setup` installs them on demand
 if (( ${#EAC_FILES[@]} )); then
@@ -221,9 +253,13 @@ sed -i -e 's/^COMPRESSION=.*/COMPRESSION="zstd"/' -e 's/^COMPRESSION_OPTIONS=.*/
 # DelayOS apps: ship Python bytecode, so no app compiles its sources at start (/usr is not writable
 # for users, they could never cache it themselves). checked-hash stays valid whatever happens to
 # file times in the image; a Python upgrade re-runs this through 70-delay-pycache.hook.
-log "Precompiling DelayOS app bytecode"
-python3 -m compileall -q -s "$PROFILE/airootfs" -p / --invalidation-mode checked-hash \
-  "$PROFILE/airootfs/usr/share/delayos" || warn "bytecode precompile failed - apps will compile at start"
+# The content packages ship their own bytecode (tools/content-pkgs.sh install); this covers
+# anything under /usr/share/delayos that is still in the overlay.
+if [[ -d $PROFILE/airootfs/usr/share/delayos ]]; then
+  log "Precompiling DelayOS app bytecode"
+  python3 -m compileall -q -s "$PROFILE/airootfs" -p / --invalidation-mode checked-hash \
+    "$PROFILE/airootfs/usr/share/delayos" || warn "bytecode precompile failed - apps will compile at start"
+fi
 
 # ananicy-cpp needs a rule set: use CachyOS's (same as CachyOS ships)
 log "Adding CachyOS ananicy-cpp rules"

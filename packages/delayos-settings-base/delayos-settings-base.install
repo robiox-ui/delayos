@@ -1,0 +1,7 @@
+post_upgrade() {
+    # units under /etc/systemd/system are not covered by pacman's systemd hooks
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        sysctl -q --system >/dev/null 2>&1 || true
+    fi
+}

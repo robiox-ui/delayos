@@ -1,0 +1,8 @@
+_populate() {
+    # the live ISO populates its keyring on every boot (pacman-init.service); an installed system here
+    if [ -x /usr/bin/pacman-key ] && [ -d /etc/pacman.d/gnupg/private-keys-v1.d ]; then
+        /usr/bin/pacman-key --populate delayos >/dev/null 2>&1 || true
+    fi
+}
+post_install() { _populate; }
+post_upgrade() { _populate; }

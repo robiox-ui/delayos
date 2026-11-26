@@ -82,18 +82,28 @@ if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
   sed -i '/^#\[multilib\]/,/^#Include/ s/^#//' /etc/pacman.conf
 fi
 
+# ---- DelayOS package repository (docs/packaging.md) ----
+# [delayos] goes above the Arch repositories: linux-delayos, the delayos-* packages (shell, apps,
+# settings, branding) and proton-delayos are updated from it with every pacman -Syu. The key comes
+# from the delayos-keyring package (populated above); without it nothing is written.
+/usr/local/bin/delay-cpu-opt repo-setup || true
+
 # ---- Graphics drivers that match this PC (the image carries every vendor's) ----
 /usr/local/bin/delay-gpu-setup --install-time --quiet || true
 
 # ---- CPU-optimized packages (docs/gaming-performance.md) ----
-# On a CPU with x86-64-v3 / v4 / Zen 4-5 the CachyOS repositories built for that level are enabled
-# and the system is upgraded to those builds, plus proton-cachyos. Without a network (or when
+# On a CPU with x86-64-v3 / v4 / Zen 4-5 the DelayOS repository built for that level is enabled
+# ([delayos-v3] / -v4 / -znver4) and the system is upgraded to those builds. Without a network (or when
 # anything fails) nothing is changed here and delay-cpu-opt.service does it on the first boot that
 # has a network. Opt out: boot the installer with delayos.cpuopt=off (or DELAYOS_CPUOPT=off).
-# DELAYOS_CPUOPT_KERNEL=1 / delayos.cpuopt=kernel also installs the CPU-matched linux-cachyos.
+# DELAYOS_CPUOPT_KERNEL=1 / delayos.cpuopt=kernel also installs the CPU-matched kernel.
+# delayos.cpuopt.source=cachyos (or DELAYOS_CPUOPT_SOURCE=cachyos) uses the CachyOS repositories instead.
 cpuopt="${DELAYOS_CPUOPT:-auto}"
 for w in $(cat /proc/cmdline 2>/dev/null); do
-  case "$w" in delayos.cpuopt=*) cpuopt="${w#delayos.cpuopt=}" ;; esac
+  case "$w" in
+    delayos.cpuopt=*) cpuopt="${w#delayos.cpuopt=}" ;;
+    delayos.cpuopt.source=*) export DELAYOS_CPUOPT_SOURCE="${w#delayos.cpuopt.source=}" ;;
+  esac
 done
 case "$cpuopt" in
   off|0|no) ;;

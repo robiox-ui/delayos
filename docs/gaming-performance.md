@@ -13,6 +13,21 @@
 
 ## 1. CPU 맞춤 패키지 (`delay-cpu-opt`)
 
+**소스는 두 가지입니다.** 기본은 DelayOS 자체 저장소이고, CachyOS 저장소는 `--source cachyos`로 고르는 선택 사항입니다.
+
+| | `--source delayos` (기본) | `--source cachyos` |
+|---|---|---|
+| 저장소 | `[delayos-v3]` / `[delayos-v4]` / `[delayos-znver4]` | `[cachyos-v3]` 등 CachyOS 저장소 |
+| 범위 | 선별한 핵심 패키지(Mesa, Qt, KWin, PipeWire, FFmpeg, zstd, Python 등)와 `linux-delayos-<수준>` | Arch 패키지 대부분 |
+| 내려받는 양 | 수백 MB | 약 2GB |
+| 서명 | DelayOS 저장소 키(`delayos-keyring`) | CachyOS 키 |
+| Proton | `proton-delayos`(저장소에 있을 때) | `proton-cachyos-slr` |
+| 커널 | `linux-delayos-v3` / `-v4` / `-znver4` | `linux-cachyos` |
+
+DelayOS 소스에서는 CPU가 지원하는 수준의 저장소가 게시되어 있는지 먼저 확인하고, 없으면 한 단계씩 내려갑니다(znver4 → v4 → v3). 게시된 수준이 하나도 없으면 아무것도 바꾸지 않습니다(종료 코드 3). 저장소를 만들고 게시하는 방법, 재빌드 목록과 업데이트 정책은 [packaging.md](packaging.md)에 있습니다. 설치 프로그램에서 CachyOS 소스를 쓰려면 `delayos.cpuopt.source=cachyos` 커널 옵션으로 부팅합니다.
+
+아래 순서는 `--source cachyos`의 동작입니다. DelayOS 소스는 2~3단계가 없고(키와 미러 목록이 `delayos-keyring`, `delayos-mirrorlist` 패키지로 이미 설치되어 있음) 4단계의 블록이 `[delayos-<수준>]` 하나입니다.
+
 Arch 패키지는 모든 x86-64 CPU에서 돌도록 빌드됩니다. CachyOS는 같은 패키지를 x86-64-v3(AVX2), x86-64-v4(AVX-512), Zen 4/5(znver4)용으로 다시 빌드해 저장소로 제공합니다. `delay-cpu-opt`는 CachyOS의 `cachyos-repo.sh`와 같은 순서로 이 저장소를 켭니다.
 
 1. CPU 수준 확인: `/lib/ld-linux-x86-64.so.2 --help`가 `x86-64-v3 (supported, searched)`라고 답하는 수준만 사용합니다. AMD family 25·26이면서 v4를 지원하면 znver4입니다. v3를 지원하지 않는 CPU에서는 아무것도 바꾸지 않습니다(종료 코드 3).
@@ -53,6 +68,8 @@ Arch에 없는 패키지(예: `proton-cachyos-slr`)는 남겨 두고 이름을 �
 
 ### CPU 맞춤 커널
 
+기본 소스(DelayOS)에서는 `delay-cpu-opt kernel install`이 켜져 있는 수준의 `linux-delayos-v3` / `-v4` / `-znver4`를 그 수준 저장소에서 설치합니다. `linux-delayos`와 같은 PKGBUILD를 수준별로 컴파일한 것이고 저장소로 업데이트됩니다([packaging.md](packaging.md)). 아래 표는 `--source cachyos`와 오프라인(ISO에 실린 `linux-delayos-v3`) 경로입니다. `linux-delayos`가 이제 `[delayos]` 저장소로 업데이트되므로, 표에 적힌 "`linux-delayos`는 설치 뒤 업데이트되지 않는다"는 이유는 `delayos-keyring` 없이 만든 ISO에만 해당합니다.
+
 두 가지 길이 있고, 둘 다 `linux-delayos`(모든 x86-64용)와 `linux-lts`를 GRUB 고급 옵션에 남깁니다.
 
 | | `linux-cachyos` (기본 선택) | `linux-delayos-v3` |
@@ -75,7 +92,7 @@ sudo delay-cpu-opt kernel remove
 ## 2. Proton
 
 - CPU 맞춤 패키지를 켜면 `proton-cachyos-slr`이 설치됩니다. CachyOS 위키가 권장하는 Steam Linux Runtime 빌드로, 시스템 라이브러리 업데이트의 영향을 받지 않습니다. 켜지 않은 PC는 ProtonUp-Qt(ISO에 포함)로 GE-Proton을 설치합니다.
-- `delay-steam-compat`가 로그인할 때 `~/.local/share/Steam/config/config.vdf`의 `InstallConfigStore > Software > Valve > Steam > CompatToolMapping > "0"`에 `name`(도구 이름), `config ""`, `priority "75"`를 씁니다. `"0"`은 "다른 모든 타이틀"의 기본 도구입니다. 우선순위: `proton-cachyos-slr` → `proton-cachyos` → 가장 최신 GE-Proton. 도구 이름은 각 도구의 `compatibilitytool.vdf`에서 읽습니다.
+- `delay-steam-compat`가 로그인할 때 `~/.local/share/Steam/config/config.vdf`의 `InstallConfigStore > Software > Valve > Steam > CompatToolMapping > "0"`에 `name`(도구 이름), `config ""`, `priority "75"`를 씁니다. `"0"`은 "다른 모든 타이틀"의 기본 도구입니다. 우선순위: `proton-delayos`(DelayOS 빌드, [packaging.md](packaging.md)) → `proton-cachyos-slr` → `proton-cachyos` → 가장 최신 GE-Proton. 도구 이름은 각 도구의 `compatibilitytool.vdf`에서 읽습니다.
 - Steam을 망가뜨리지 않기 위한 규칙: Steam 실행 중에는 쓰지 않음, 이미 `"0"` 항목이 있으면 건드리지 않음(사용자 선택), 파일의 나머지는 그대로 두고 필요한 줄만 삽입, 원본은 `config.vdf.delay-bak`. 되돌리려면 Steam 설정 > 호환성에서 다른 도구를 고르면 됩니다.
 - `steam_dev.cfg`가 없으면 `unShaderBackgroundProcessingThreads`를 코어 수의 3/4로 적어 셰이더 사전 처리를 빠르게 합니다. Steam의 셰이더 사전 캐싱 설정 자체는 바꾸지 않습니다(기본값 켬). CachyOS 위키는 Proton-CachyOS에서 사전 캐싱을 끄라고 권하므로, 게임 시작 전 "Vulkan 셰이더 처리"가 길면 Steam 설정 > 다운로드에서 끄면 됩니다.
 - ntsync: 커널 모듈은 부팅 때 로드되고(`modules-load.d/ntsync.conf`) `/dev/ntsync`는 누구나 쓸 수 있습니다. Proton-CachyOS와 Proton 11은 기본으로 사용하고, GE-Proton 10을 위해 `PROTON_USE_NTSYNC=1`을 설정했습니다.

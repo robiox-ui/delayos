@@ -1,0 +1,24 @@
+# DelayOS apps (PySide6 + QML): Settings, Store, Task Manager, Files, Notepad, Calculator, ...
+etc/pacman.d/hooks/70-delay-pycache.hook
+etc/xdg/autostart/org.delayos.Welcome.desktop
+usr/bin/delay-android-apps
+usr/bin/delay-calc
+usr/bin/delay-drivers
+usr/bin/delay-files
+usr/bin/delay-gamecontrols
+usr/bin/delay-notepad
+usr/bin/delay-settings
+usr/bin/delay-snip
+usr/bin/delay-store
+usr/bin/delay-taskmanager
+usr/bin/delay-terminal
+usr/bin/delay-welcome
+usr/bin/delay-winengine
+usr/lib/delayos/delay-sys-helper
+usr/local/bin/delay-android
+usr/share/applications/delay-android.desktop
+usr/share/applications/org.delayos.*.desktop
+!usr/share/applications/org.delayos.WinBoot.desktop
+usr/share/delayos/apps/
+usr/share/delayos/gamecontrols/
+usr/share/polkit-1/actions/org.delayos.syshelper.policy

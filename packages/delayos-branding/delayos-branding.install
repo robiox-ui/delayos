@@ -1,0 +1,10 @@
+_apply() {
+    # /usr/lib/os-release belongs to Arch's "filesystem" package; 50-delay-os-release.hook puts the
+    # DelayOS identity back whenever that package changes, this covers our own changes
+    install -m644 /usr/share/delayos/os-release /usr/lib/os-release
+    if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+        plymouth-set-default-theme delayos >/dev/null 2>&1 || true
+    fi
+}
+post_install() { _apply; }
+post_upgrade() { _apply; }

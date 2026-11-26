@@ -1,0 +1,13 @@
+pkgname=delayos-mirrorlist
+pkgver=20261126
+pkgrel=1
+pkgdesc='DelayOS package repository server list'
+arch=('any')
+url='https://github.com/robiox-ui/delayos'
+license=('GPL-3.0-or-later')
+backup=('etc/pacman.d/delayos-mirrorlist')
+_dir="${DELAYOS_REPO_ROOT:-$(realpath "${startdir:-$PWD}/../..")}/packages/delayos-mirrorlist"
+
+package() {
+    install -Dm644 "$_dir/delayos-mirrorlist" "$pkgdir/etc/pacman.d/delayos-mirrorlist"
+}

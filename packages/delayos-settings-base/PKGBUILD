@@ -1,0 +1,21 @@
+# DelayOS content package: the files are listed in files.list and come from profile/airootfs
+# (tools/content-pkgs.sh). Build: tools/repo-build.sh content   (docs/packaging.md)
+pkgname=delayos-settings-base
+pkgdesc='DelayOS system tuning (sysctl, udev, zram, systemd limits) and gaming tools (delay-cpu-opt, delay-gamemode, delay-gpu-setup)'
+. "${DELAYOS_REPO_ROOT:-$(realpath "${startdir:-$PWD}/../..")}/packages/delayos-common.sh"
+depends=('bash' 'python' 'systemd' 'pacman' 'curl' 'sudo' 'delayos-mirrorlist')
+optdepends=('zram-generator: compressed swap in RAM'
+            'ananicy-cpp: process priorities'
+            'scx-scheds: sched-ext schedulers (LAVD gaming mode)'
+            'gamemode: per-game optimizations'
+            'power-profiles-daemon: power profiles used by the gaming mode'
+            'mangohud: frame-time overlay'
+            'irqbalance: IRQ distribution')
+# the tuning files were taken from CachyOS-Settings and keep their names
+conflicts=('cachyos-settings')
+install=delayos-settings-base.install
+backup=($(delayos_backup))
+
+package() {
+    delayos_package
+}

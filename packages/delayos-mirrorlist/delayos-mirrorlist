@@ -1,0 +1,3 @@
+## DelayOS package repositories: GitHub Releases of robiox-ui/delayos, one release per repository
+## ([delayos] -> tag repo-delayos, [delayos-v3] -> tag repo-delayos-v3, ...). docs/packaging.md
+Server = https://github.com/robiox-ui/delayos/releases/download/repo-$repo

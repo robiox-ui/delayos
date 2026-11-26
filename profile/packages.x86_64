@@ -241,3 +241,14 @@ desktop-file-utils
 xdg-utils
 polkit
 fastfetch
+
+## ───────── DelayOS itself, as packages (docs/packaging.md) ─────────
+## Built by build.sh from profile/airootfs (packages/delayos-*/files.list) into the delayos-local
+## repo; installed systems update them from the [delayos] repository. build.sh adds delayos-keyring
+## and delayos-desktop when the repository key exists (tools/make-delayos-repo-key.sh).
+delayos-mirrorlist
+delayos-settings-base
+delayos-branding
+delayos-shell
+delayos-apps
+delayos-winboot

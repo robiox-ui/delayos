@@ -1,0 +1,11 @@
+# Files of profile/airootfs that only the live ISO / the installer needs. They are not packaged:
+# build.sh leaves them in the ISO overlay. Same format as packages/delayos-*/files.list.
+etc/calamares/
+etc/hostname
+etc/locale.conf
+etc/mkinitcpio.d/
+etc/sddm.conf.d/00-live-autologin.conf
+etc/systemd/system/pacman-init.service.d/
+usr/lib/calamares/
+usr/local/bin/delay-postinstall
+usr/local/share/applications/calamares.desktop

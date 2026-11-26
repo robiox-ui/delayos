@@ -1,0 +1,36 @@
+# Arch packages DelayOS rebuilds for the CPU-level repositories (tools/repo-build.sh curated,
+# tools/repo-update.sh). One build VM, not a build farm: this is the hot path of a gaming desktop,
+# not all of Arch. Everything that is not listed here comes from Arch unchanged.
+#
+#   pkgbase        levels            flags (comma separated)
+#     levels: v3,v4,znver4 or all      flags: nocheck = skip check() (long or flaky test suites)
+#
+# Order matters: a package is built against what is already in the pool (qt6-declarative against
+# our qt6-base). docs/packaging.md explains why each one is here and what was left out.
+
+# compression: every package install, every btrfs/zram page, game asset loading
+zstd              v3,v4,znver4
+lz4               v3,v4,znver4
+
+# graphics: Mesa = RADV, ANV, radeonsi, iris, llvmpipe (vulkan-radeon etc. are split packages of mesa)
+mesa              v3,v4,znver4      nocheck
+lib32-mesa        v3,v4,znver4      nocheck
+
+# desktop: every frame goes through Qt Quick and KWin
+qt6-base          v3,v4,znver4      nocheck
+qt6-declarative   v3,v4,znver4      nocheck
+kwin              v3,v4,znver4      nocheck
+
+# audio / video
+pipewire          v3,v4,znver4      nocheck
+ffmpeg            v3,v4,znver4      nocheck
+
+# game libraries and tools
+sdl2-compat       v3,v4,znver4
+sdl3              v3,v4,znver4
+gamemode          v3,v4,znver4
+mangohud          v3,v4,znver4
+
+# start-up time of the DelayOS apps (PySide6). Arch's PKGBUILD already does PGO + LTO; its test
+# suite takes longer than the build.
+python            v3,v4,znver4      nocheck

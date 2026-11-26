@@ -17,7 +17,9 @@
 # Build (keys from tools/make-delayos-general-key.sh, never commit them):
 #   DELAYOS_SBG_KEY=.../delayos-general-signing.key DELAYOS_SBG_CERT=.../delayos-general-signing.crt \
 #   DELAYOS_SBG_CA=.../delayos-general-ca.crt DELAYOS_KERNEL_PKG=/path/linux-delayos-<ver>.pkg.tar.zst makepkg -f
-# Rebuild it whenever linux-delayos or grub is rebuilt (pkgver is the build date).
+# Rebuild it whenever linux-delayos or grub is rebuilt (pkgver is the build date). The package
+# depends on exactly the linux-delayos version it was made from; tools/repo-build.sh kernel builds
+# both and tools/repo-publish.sh refuses to publish a kernel without its signed image.
 
 pkgname=delayos-sb-general
 pkgver=$(date -u +%Y.%m.%d)
@@ -95,6 +97,9 @@ build() {
     bsdtar -xOf "$DELAYOS_KERNEL_PKG" "$kpath" > vmlinuz-linux-delayos
     sha256sum vmlinuz-linux-delayos | awk '{print $1}' > vmlinuz-linux-delayos.sha256
     echo "$kpath" | cut -d/ -f4 > kernel-release
+    # the signed image is this one kernel build: pacman keeps the two in step (docs/packaging.md)
+    bsdtar -xOf "$DELAYOS_KERNEL_PKG" .PKGINFO | sed -n 's/^pkgver = //p' > kernel-pkgver
+    [ -s kernel-pkgver ] || { error "Cannot read the version of $DELAYOS_KERNEL_PKG"; return 1; }
     sbsign --key "$DELAYOS_SBG_KEY" --cert "$DELAYOS_SBG_CERT" --output vmlinuz-linux-delayos.signed vmlinuz-linux-delayos
     sbverify --cert "$DELAYOS_SBG_CA" vmlinuz-linux-delayos.signed
 
@@ -103,6 +108,9 @@ build() {
 }
 
 package() {
+    # A kernel update without the matching signed image would not boot with Secure Boot on:
+    # linux-delayos can only be upgraded together with the delayos-sb-general made from it.
+    depends=("linux-delayos=$(<"$srcdir/kernel-pkgver")")
     cd "$srcdir"
     local d="$pkgdir/usr/share/delayos/secureboot/general"
     install -Dm644 grubx64.signed.efi "$d/grubx64.efi"

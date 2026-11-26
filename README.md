@@ -41,7 +41,7 @@ sudo ./build.sh
 - **GPU:** 셰이더 캐시 확대, ntsync, 전체 화면 게임 컴포지터 우회.
 - **네트워크:** BBRv3와 fq.
 - **부팅:** 부팅 메뉴 자동 선택, 불필요한 대기 서비스 제거.
-- **CPU 맞춤 패키지:** x86-64-v3/v4, Zen 4/5 CPU에서는 CachyOS 최적화 저장소로 전환(`delay-cpu-opt`, 드라이버 앱에서 켜고 끔). Proton-CachyOS를 Steam Play 기본 도구로 지정. 자세한 내용은 [docs/gaming-performance.md](docs/gaming-performance.md).
+- **자체 패키지 저장소:** 커널, DelayOS 셸·앱·설정(`delayos-*` 패키지), Proton을 `[delayos]` 저장소로 배포하므로 설치 뒤에도 `pacman -Syu`로 업데이트됩니다. x86-64-v3/v4, Zen 4/5 CPU에서는 그 수준으로 다시 빌드한 핵심 패키지(Mesa, Qt, KWin 등) 저장소를 씁니다(`delay-cpu-opt`). CachyOS 저장소는 선택 사항(`--source cachyos`). 자세한 내용은 [docs/packaging.md](docs/packaging.md), [docs/gaming-performance.md](docs/gaming-performance.md).
 - **게이밍 모드:** CPU EPP performance, LAVD gaming 모드, AMD GPU 최고 전원 상태, Ryzen X3D V-Cache 코어 우선. 끄면 켜기 전 값으로 복원.
 - **벤치마크:** `delay-bench`로 Windows(PresentMon/CapFrameX)와 DelayOS(MangoHud) 기록을 같은 식으로 비교 ([docs/benchmark.md](docs/benchmark.md)).
 
@@ -52,7 +52,9 @@ build.sh              Arch에서 ISO 빌드 (커널 → AUR → 로컬 저장소
 build-windows.ps1     Windows에서 WSL2 Arch로 build.sh 실행
 aur-packages.txt      AUR 패키지 (?로 표시한 것은 선택)
 kernel/               linux-delayos, linux-delayos-eac
-packages/             pahole, delayos-sb-signed
+packages/             pahole, delayos-sb-signed, delayos-* (airootfs를 패키지로 묶는 PKGBUILD와 files.list),
+                      proton-delayos, repo/curated.list (CPU 수준별 재빌드 목록)
+tools/                저장소 빌드·게시(repo-build.sh, repo-publish.sh, repo-update.sh), 키 생성
 profile/              archiso 프로필
   packages.x86_64     공식 저장소 패키지
   airootfs/           시스템 설정, 셸 위젯, 앱, 테마

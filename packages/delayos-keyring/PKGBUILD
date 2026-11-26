@@ -1,0 +1,26 @@
+# DelayOS repository signing key for pacman.
+# The three keyring files are written by tools/make-delayos-repo-key.sh (public key only: the
+# private key never enters the repository). docs/packaging.md
+pkgname=delayos-keyring
+pkgver=${DELAYOS_KEYRING_VER:-20261126}
+pkgrel=1
+pkgdesc='DelayOS PGP keyring (signing key of the [delayos] package repositories)'
+arch=('any')
+url='https://github.com/robiox-ui/delayos'
+license=('GPL-3.0-or-later')
+install=delayos-keyring.install
+_dir="${DELAYOS_REPO_ROOT:-$(realpath "${startdir:-$PWD}/../..")}/packages/delayos-keyring"
+
+build() {
+    local f
+    for f in delayos.gpg delayos-trusted delayos-revoked; do
+        [ -f "$_dir/$f" ] || { error "$_dir/$f is missing: run tools/make-delayos-repo-key.sh first"; return 1; }
+    done
+    [ -s "$_dir/delayos.gpg" ] && [ -s "$_dir/delayos-trusted" ] || { error "The keyring is empty"; return 1; }
+    # the public key file must really be public-only
+    if grep -q 'PRIVATE KEY' "$_dir/delayos.gpg"; then error "delayos.gpg contains a PRIVATE key"; return 1; fi
+}
+
+package() {
+    install -Dm644 -t "$pkgdir/usr/share/pacman/keyrings" "$_dir/delayos.gpg" "$_dir/delayos-trusted" "$_dir/delayos-revoked"
+}

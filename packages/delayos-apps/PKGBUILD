@@ -1,0 +1,13 @@
+# DelayOS content package: the files are listed in files.list and come from profile/airootfs
+# (tools/content-pkgs.sh). Build: tools/repo-build.sh content   (docs/packaging.md)
+pkgname=delayos-apps
+pkgdesc='DelayOS apps (PySide6 + QML): Settings, Store, Task Manager, Files, Notepad, Calculator, Snip, Terminal, Welcome, Drivers'
+. "${DELAYOS_REPO_ROOT:-$(realpath "${startdir:-$PWD}/../..")}/packages/delayos-common.sh"
+depends=('delayos-shell' 'delayos-settings-base' 'python' 'pyside6' 'python-psutil' 'kirigami' 'qt6-declarative' 'polkit')
+optdepends=('flatpak: app store' 'python-gobject: store and settings back ends' 'pacman-contrib: update checks'
+            'waydroid: Android apps' 'wine-staging: Windows app engine')
+backup=($(delayos_backup))
+
+package() {
+    delayos_package
+}
