@@ -634,11 +634,12 @@ class MsDownload:
         raise Fail("download")
 
 
-def sha256_file(path, cb=None):
-    h, done, total = hashlib.sha256(), 0, os.path.getsize(path)
+def sha256_file(path, cb=None, size=None):
+    """SHA-256 of a file, or of the first `size` bytes (an ISO image on a disc or a USB partition)."""
+    h, done, total = hashlib.sha256(), 0, size if size is not None else os.path.getsize(path)
     with open(path, "rb") as f:
-        while True:
-            b = f.read(4 * MIB)
+        while done < total:
+            b = f.read(min(4 * MIB, total - done))
             if not b:
                 break
             h.update(b)
@@ -646,6 +647,22 @@ def sha256_file(path, cb=None):
             if cb:
                 cb(done, total)
     return h.hexdigest()
+
+
+def iso_image_size(dev):
+    """Size in bytes of the ISO image written to a block device, from its ISO 9660 volume descriptor
+    (the device itself can be longer than the image), or 0."""
+    import struct
+    try:
+        with open(dev, "rb") as f:
+            f.seek(16 * 2048)
+            pvd = f.read(2048)
+        if pvd[:6] != b"\x01CD001":
+            return 0
+        blocks, bsize = struct.unpack_from("<I", pvd, 80)[0], struct.unpack_from("<H", pvd, 128)[0]
+        return blocks * bsize
+    except (OSError, struct.error):
+        return 0
 
 
 def cmd_iso_url(a):
@@ -1153,13 +1170,22 @@ def published_hashes():
 def local_iso_verified(path, p0, p1):
     """A local ISO needs no Microsoft SHA-256. It is still compared with the published list when that
     is possible: a match means "official, unmodified" (and the gaming cleanup applies by default)."""
+    size = None
+    if os.path.isdir(path):
+        return False            # folder: nothing to hash
     if not os.path.isfile(path):
-        return False            # optical drive / folder: nothing to hash
+        size = iso_image_size(path)     # disc in a drive / ISO written to a USB partition
+        if not size:
+            return False
     known = published_hashes()
     if not known:
         return False
     progress(p0, "지정한 ISO 파일을 확인하는 중 (SHA-256)…")
-    got = sha256_file(path, lambda a_, b_: progress(p0 + (p1 - p0) * a_ / b_, "지정한 ISO 파일을 확인하는 중 (SHA-256)…"))
+    try:
+        got = sha256_file(path, lambda a_, b_: progress(p0 + (p1 - p0) * a_ / b_, "지정한 ISO 파일을 확인하는 중 (SHA-256)…"), size)
+    except OSError as e:
+        log("local ISO could not be read for the check: %s" % e)
+        return False
     ok = got in known
     log("local ISO sha256 %s: %s" % (got, "matches a value Microsoft publishes" if ok else "not in Microsoft's published list"))
     return ok

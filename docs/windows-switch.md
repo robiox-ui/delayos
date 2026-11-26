@@ -373,7 +373,7 @@ Microsoft 공식 Windows 11 이미지는 게임과 상관없는 앱과 백그라
 | 시작 프로그램 | OneDrive, Edge 자동 실행, Teams 시작 항목 제거. Edge의 시작 부스트/백그라운드 실행 끔(Edge와 WebView2는 **그대로 설치되어 있음**). 시작 프로그램 지연 제거 |
 | 예약된 작업 | CEIP(Consolidator, UsbCeip), 호환성 평가(Compatibility Appraiser, ProgramDataUpdater, MareBackup), 디스크 진단 데이터 수집, 피드백(Siuf), 지도 업데이트 |
 | 서비스 (사용 안 함) | `DiagTrack`, `dmwappushservice`, `MapsBroker`, `RetailDemo`, `Fax`, `WMPNetworkSvc`. 이 여섯 개뿐입니다 |
-| 저장 공간 | 최대 절전 끔(`hiberfil.sys` 없음), 예약된 저장소(약 7GB) 만들지 않음, 배달 최적화의 다른 PC로 업로드 끔 |
+| 저장 공간 | 최대 절전 끔(`hiberfil.sys` 없음), 예약된 저장소 끔(약 6GB 확보, `DISM /Set-ReservedStorageState`), 배달 최적화의 다른 PC로 업로드 끔 |
 | Game Bar | 백그라운드 녹화/캡처 끔(`AllowGameDVR=0`). Game Bar 앱과 **게임 모드는 그대로** |
 
 건드리지 않는 것 (스크립트 맨 위에 적혀 있고, 앱 제거에는 이중 안전장치 `$AppxKeep`가 있습니다):
@@ -406,10 +406,10 @@ Microsoft 공식 Windows 11 이미지는 게임과 상관없는 앱과 백그라
 - ISO 내용을 풀어 둔 폴더 (`sources/`가 있는 폴더)
 
 직접 지정한 ISO에는 **Microsoft의 SHA-256을 요구하지 않습니다.** 대신 인터넷이 되면 Microsoft 다운로드 페이지에 공개된 SHA-256 목록(모든 언어)과
-비교해서:
+비교해서(드라이브에 든 디스크나 USB는 ISO 이미지 크기만큼만 읽어 같은 방식으로 확인합니다):
 
 - 일치하면 **공식 파일로 확인됨** → 내려받은 것과 똑같이 취급하고 게이밍 정리를 적용합니다.
-- 일치하지 않거나 비교할 수 없으면(수정된 ISO, 직접 만든 ISO, 드라이브/폴더, 오프라인) **확인 없이 그대로 사용**하고, 설치 프로그램의 마지막 화면과
+- 일치하지 않거나 비교할 수 없으면(수정된 ISO, 직접 만든 ISO, 폴더, 오프라인) **확인 없이 그대로 사용**하고, 설치 프로그램의 마지막 화면과
   `/var/log/delayos-winsetup.log`, `delay-winsetup status`에 그 사실을 경고로 남깁니다. 그 이미지가 믿을 만한지는 사용자가 판단해야 합니다.
   이런 이미지는 이미 만든 사람이 정리해 둔 것으로 보고 **게이밍 정리를 건너뜁니다**(설치 프로그램의 "확인되지 않은 ISO에도 게이밍 정리 적용" 또는 `--cleanup on`으로 켤 수 있음).
 
@@ -421,6 +421,9 @@ Microsoft 공식 Windows 11 이미지는 게임과 상관없는 앱과 백그라
 | 이미지가 하나뿐이거나 에디션 이름이 다른 ISO | 고른 에디션(Home/Pro)의 `EDITIONID`가 있으면 그것, 없고 이미지가 하나뿐이면 그 이미지, 그다음 이미지 이름으로 고릅니다. 직접 고르려면 `--index <번호>` 또는 `--image-name <이름>`. 고르지 못하면 들어 있는 이미지 목록을 보여 주고 멈춥니다 |
 | 에디션이 Home/Pro가 아닌 이미지 | 자동 설치 파일에 설치용 일반 키를 넣지 않습니다(다른 에디션의 키를 넣으면 Windows 설치가 실패하므로). 이미지에 들어 있는 키/에디션 그대로 설치됩니다 |
 | ISO에 들어 있는 `autounattend.xml`, `sources\$OEM$` | 쓰지 않습니다. DelayOS는 Windows 설치 프로그램(setup.exe)을 실행하지 않고 이미지를 직접 적용하기 때문입니다 |
+| ISO의 설치 환경(Windows PE)이 **자체 설치 프로그램**을 띄우도록 바뀐 경우 (`winpeshl.exe`를 바꿔치기했거나 레지스트리의 `Setup\CmdLine`을 바꾼 ISO) | 그대로 두면 DelayOS 스크립트 대신 그 설치 프로그램이 실행되어 디스크를 직접 나누려고 할 수 있습니다. DelayOS는 준비 단계에서 부팅 이미지를 검사해, 표준 셸(1MB 미만의 `winpeshl.exe`)이 아니면 부팅 이미지 레지스트리의 `Setup\CmdLine`을 제자리에서 `cmd /c d.cmd`(DelayOS 스크립트)로 바꿉니다. 바꿀 수 없으면 그 ISO를 **거부**합니다(디스크는 건드리지 않음) |
+| 첫 실행 화면(OOBE)을 빼거나 바꾼 이미지 | 확인되지 않은 이미지에는 응답 파일에 `SkipMachineOOBE`/`SkipUserOOBE`를 넣어 첫 실행 화면을 통째로 건너뜁니다(없으면 "왜 PC가 다시 시작되었나요?" 화면에서 멈춤). 계정은 응답 파일이 만듭니다. Microsoft 공식 이미지에는 넣지 않습니다 |
+| Windows PE에 한국어 글꼴이 없는 ISO | 설치 중 검은 화면의 진행 문구가 영어로 나옵니다(한글이 빈 네모로 보이는 것을 피함) |
 | 이미지 **안에** 들어 있는 응답 파일 (`Windows\Panther\Unattend\`, `Windows\Panther\unattend.xml`, `Windows\System32\Sysprep\unattend.xml`, `C:\unattend.xml`, 레지스트리의 `Setup\UnattendFile`) | Windows가 DelayOS의 응답 파일보다 먼저 읽을 수 있으므로 `*.iso-bak`으로 이름을 바꿔 **옆에 보관**하고 DelayOS의 응답 파일(계정 `DelayOS`, 자동 로그인, 연동 도우미)이 쓰이게 합니다 |
 | 이미지의 `SetupComplete.cmd`, `OOBE.cmd`, 레지스트리에 미리 넣어 둔 설정, 미리 설치된 프로그램 | **그대로 동작합니다.** 이미지 고유의 설정과 DelayOS의 설정이 함께 적용됩니다 |
 | PowerShell 모듈, Defender, 정품 인증 WMI 등이 빠진 이미지 | `finish.ps1`과 연동 도우미는 단계마다 따로 실패를 넘깁니다(예: 작업 등록은 `schtasks.exe`로 대체). 건너뛴 단계는 `done.json`의 `skipped`와 `delay-winsetup status`에 나옵니다. 연동 도우미만 설치되면 성공으로 봅니다 |

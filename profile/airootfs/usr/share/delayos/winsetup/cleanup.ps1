@@ -140,10 +140,9 @@ $Reg = @(
     @('M', 'SOFTWARE\Policies\Microsoft\Edge', 'HideFirstRunExperience', 1),
     @('U', 'Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize', 'StartupDelayInMSec', 0)
 )
-# Machine phase only: no 7 GB "reserved storage" (it is created at the end of setup when this is 1)
-$RegMachineOnly = @(
-    @('M', 'SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager', 'ShippedWithReserves', 0)
-)
+# "Reserved storage" (about 6 GB kept free for updates) is switched off in the User phase with
+# DISM /Set-ReservedStorageState; updates then use normal free space. (Setting ShippedWithReserves
+# during setup has no effect on this image: tried in the VM test.)
 # Services set to "disabled" (start type 4). Short on purpose: nothing a game, an anti-cheat,
 # Windows Update, Defender, the Store or the Xbox app uses.
 $ServicesOff = @('DiagTrack', 'dmwappushservice', 'MapsBroker', 'RetailDemo', 'Fax', 'WMPNetworkSvc')
@@ -166,11 +165,12 @@ $TasksOff = @(
 $RunRemove = '^(OneDrive|OneDriveSetup|MicrosoftEdgeAutoLaunch_.*|com\.squirrel\.Teams\.Teams|Teams|MSTeams)$'
 
 # ---- state -----------------------------------------------------------------------------------------
-$State = [ordered]@{ version = 1; reg = @(); services = @(); tasks = @(); appx = @(); phases = @() }
+$State = [ordered]@{ version = 1; reg = @(); services = @(); tasks = @(); appx = @(); phases = @(); reserved_off = $false }
 function Read-State {
     try {
         $s = [IO.File]::ReadAllText($StateFile, $Utf8) | ConvertFrom-Json
         foreach ($k in 'reg', 'services', 'tasks', 'appx', 'phases') { if ($s.$k) { $State[$k] = @($s.$k) } }
+        if ($s.reserved_off) { $State['reserved_off'] = $true }
     } catch {}
 }
 function Save-State {
@@ -376,7 +376,6 @@ Read-State
 
 if ($Phase -eq 'Machine') {
     Set-AllValues 'M' 'machine'
-    foreach ($r in $RegMachineOnly) { Set-Value $r[0] $r[1] $r[2] $r[3] 'machine' }
     # these two would install the new Outlook and Dev Home at the first update check
     foreach ($k in 'OutlookUpdate', 'DevHomeUpdate') {
         try { [Microsoft.Win32.Registry]::LocalMachine.DeleteSubKeyTree("SOFTWARE\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\$k", $false) } catch {}
@@ -405,10 +404,22 @@ elseif ($Phase -eq 'User') {
     Disable-Services
     Disable-Tasks
     [void](Invoke-Quiet 'powercfg.exe /hibernate off')
+    # reserved storage off (frees about 6 GB; refused by Windows while an update is being installed)
+    try {
+        $now = (& dism.exe /Online /Get-ReservedStorageState /English 2>$null) -join ' '
+        if ($now -match 'Reserved storage is enabled') {
+            $rc = Invoke-Quiet 'dism.exe /Online /Set-ReservedStorageState /State:Disabled'
+            if ($rc -eq 0) { $State['reserved_off'] = $true }
+            Write-Log "reserved storage off: rc=$rc"
+        }
+    } catch { Write-Log "reserved storage: $($_.Exception.Message)" }
 }
 elseif ($Phase -eq 'Undo') {
-    # newest change first, so a value changed in two phases ends at its original state
-    $regs = @($State.reg | Where-Object { $_.target -ne 'default-user' })
+    # Newest change first, so a value changed in two phases ends at its original state. The values
+    # written to the default profile during setup are what this account started with: they are put
+    # back in this account (HKCU). The default profile itself keeps them (accounts created later
+    # start clean as well).
+    $regs = @($State.reg)
     [array]::Reverse($regs)
     foreach ($r in $regs) { Undo-Value $r }
     foreach ($s in $State.services) {
@@ -416,7 +427,7 @@ elseif ($Phase -eq 'Undo') {
         if ($mode) { [void](Invoke-Quiet "sc.exe config $($s.name) start= $mode") }
     }
     foreach ($t in $State.tasks) { try { (Get-Task $t).Enabled = $true } catch {} }
-    try { [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager', $true).SetValue('ShippedWithReserves', 1, 'DWord') } catch {}
+    if ($State['reserved_off']) { [void](Invoke-Quiet 'dism.exe /Online /Set-ReservedStorageState /State:Enabled') }
     Write-Log ("undo: {0} registry value(s), {1} service(s), {2} task(s) restored" -f $regs.Count, @($State.services).Count, @($State.tasks).Count)
     Write-Host ''
     Write-Host 'DelayOS: the gaming cleanup settings were put back. Restart Windows to apply them.'
