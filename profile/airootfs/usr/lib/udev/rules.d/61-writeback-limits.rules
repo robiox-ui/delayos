@@ -8,8 +8,9 @@
 # reached. max_bytes is converted to a fraction of the global dirty limit when
 # written.
 
-# Removable disks
-ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ATTR{removable}=="1", \
+# Removable disks (not optical or floppy drives: nothing is written back to them, and the
+# write fails with EINVAL there on machines with little RAM)
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", KERNEL!="sr[0-9]*|fd[0-9]*", ATTR{removable}=="1", \
     ATTR{bdi/strict_limit}="1", ATTR{bdi/max_bytes}="268435456"
 
 # HDDs

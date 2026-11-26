@@ -20,33 +20,34 @@ PlasmoidItem {
 
     Item { id: geo; readonly property rect r: Qt.rect(Screen.virtualX, Screen.virtualY, Screen.width, Screen.height) }
     function place() {
-        const g = geo.r
+        const g = geo.r, panel = lazy.get()
         panel.posX = Math.round(g.x + g.width - Metrics.edgeMargin - panel.panelWidth)
         panel.posY = Math.round(g.y + g.height - Metrics.edgeMargin - panel.panelHeight)
+        return panel
     }
     function toggleTab(tab) {
+        const panel = lazy.get()
         if (panel.shown && panel.tab === tab) {
             panel.close()
             return
         }
-        panel.tab = tab
-        place()
-        panel.open()
+        showTab(tab)
     }
+    function showTab(tab) { const panel = lazy.get(); panel.tab = tab; place(); panel.open() }
 
     Connections { target: Plasmoid; function onActivated() { root.toggleTab("clipboard") } }
     ShellListener {
         name: "clipboard"
         onToggleRequested: root.toggleTab("clipboard")
-        onShowRequested: { panel.tab = "clipboard"; root.place(); panel.open() }
-        onHideRequested: panel.close()
+        onShowRequested: root.showTab("clipboard")
+        onHideRequested: if (lazy.item) lazy.item.close()
     }
     ShellListener {
         name: "emoji"
         onToggleRequested: root.toggleTab("emoji")
-        onShowRequested: { panel.tab = "emoji"; root.place(); panel.open() }
-        onHideRequested: panel.close()
+        onShowRequested: root.showTab("emoji")
+        onHideRequested: if (lazy.item) lazy.item.close()
     }
 
-    ClipEmojiPanel { id: panel }
+    LazyPopup { id: lazy; sourceComponent: ClipEmojiPanel {} }   // built on first use
 }

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Directory
+Name=Windows games
+Name[ko]=Windows 게임
+Comment=Games that start in the installed Windows
+Comment[ko]=설치된 Windows로 전환해서 실행하는 게임
+Icon=delayos-winboot-game

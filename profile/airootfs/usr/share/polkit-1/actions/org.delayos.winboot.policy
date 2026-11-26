@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- DelayOS: pkexec /usr/lib/delayos/delay-winboot-helper status|arm|disarm|install-helper
+     ("Windows 전환": one-time boot into the installed Windows for anti-cheat games).
+     The active local user needs no password: the helper only selects the Windows boot entry for the
+     next boot and writes a launch request built from validated data; it cannot run commands. -->
+<policyconfig>
+  <vendor>DelayOS</vendor>
+  <action id="org.delayos.winboot">
+    <description>Switch to the installed Windows for a game</description>
+    <description xml:lang="ko">게임 실행을 위해 설치된 Windows로 전환</description>
+    <message>Authentication is required to select Windows for the next start</message>
+    <message xml:lang="ko">다음 시작을 Windows로 지정하려면 인증이 필요합니다</message>
+    <icon_name>computer</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-winboot-helper</annotate>
+  </action>
+</policyconfig>

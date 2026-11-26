@@ -242,5 +242,10 @@ class Engine(QObject):
         self.closeRequested.emit()
 
     @Slot()
+    def addToWindows(self):
+        """Error dialog: add this program as a "Windows 게임" that starts in the real Windows (delay-winboot)."""
+        QProcess.startDetached("delay-winboot", ["--add", "--file", self._path])
+
+    @Slot()
     def openSettings(self):
         QProcess.startDetached("delay-settings", ["appsupport#windows"])

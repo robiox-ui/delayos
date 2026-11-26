@@ -1,0 +1,587 @@
+#!/usr/bin/python3
+# DelayOS "Windows 전환": privileged half of delay-winboot. Started through
+#   pkexec /usr/lib/delayos/delay-winboot-helper <command>
+# (polkit action org.delayos.winboot: no password for the active local user), so it accepts only
+# fixed commands and validated ids, and never launches or reboots anything itself.
+#
+#   status [--no-refresh]      JSON: Windows found? method, blockers/warnings, Windows helper state.
+#                              Also copies the Windows game inventory + icons from the ESP to
+#                              /var/cache/delayos/winboot (world readable).
+#   arm ID [--delay N]         write the launch request and select Windows for the NEXT boot only
+#   arm --setup                copy the Windows helper installer and select Windows (no request)
+#   install-helper             copy the Windows helper installer to the ESP (and C:\ if safe)
+#   disarm                     drop a pending request / one-time boot selection
+#
+# Where the request goes: UEFI -> <Windows ESP>/EFI/DelayOS/winboot/request.json (FAT, never kept
+# open by a hibernated Windows). Legacy BIOS -> <Windows NTFS>/ProgramData/DelayOS/winboot/.
+import json
+import os
+import pwd
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, "/usr/share/delayos/winboot")
+import wbgames as wb  # noqa: E402
+
+os.environ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin"
+os.environ["LC_ALL"] = "C"
+os.umask(0o022)
+
+REL = "EFI/DelayOS/winboot"
+NTFS_REL = "ProgramData/DelayOS/winboot"
+RUN = "/run/delayos-winboot"
+CONF = "/etc/delayos/winboot.conf"
+GRUB_CFG = "/boot/grub/grub.cfg"
+ESP_TYPE = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+WIN_FILES = ("install.ps1", "agent.ps1", "messages.ko.json")
+WIN_CMD = "DelayOS-Windows-연동.cmd"
+ICON_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,80}\.png$")
+
+MSG = {
+    "no_windows": "Windows를 찾지 못했습니다. 이 PC에 Windows가 설치되어 있고 부팅 항목 'Windows Boot Manager'가 있는지 확인하세요.",
+    "no_windows_grub": "GRUB 메뉴에 Windows 항목이 없습니다. 터미널에서 'sudo grub-mkconfig -o /boot/grub/grub.cfg'를 실행해 Windows를 다시 찾아 주세요.",
+    "no_tool": "부팅 항목을 바꾸는 도구(efibootmgr)가 설치되어 있지 않습니다.",
+    "bootnext_failed": "다음 부팅을 Windows로 지정하지 못했습니다. 이 PC의 펌웨어(UEFI)가 일회성 부팅 지정을 거부했습니다.",
+    "bitlocker_chain": "Windows 드라이브가 BitLocker로 암호화되어 있고 이 PC에서는 GRUB/systemd-boot를 거쳐야만 Windows를 시작할 수 있습니다. 이 경우 Windows가 복구 키를 요구하므로 전환을 막았습니다. Windows에서 BitLocker를 일시 중지하거나 끄세요.",
+    "bitlocker": "Windows 드라이브가 BitLocker로 암호화되어 있습니다. DelayOS는 Windows 부팅 관리자를 직접 시작하므로 보통은 문제가 없지만, 펌웨어 설정이 바뀐 경우 Windows가 복구 키를 물어볼 수 있습니다. 복구 키(Microsoft 계정)를 미리 확인해 두세요.",
+    "hibernated": "Windows가 최대 절전 모드 또는 '빠른 시작' 상태로 꺼져 있습니다. 전환은 되지만, 최대 절전에서 깨어나는 경우 게임이 자동으로 시작되지 않을 수 있습니다.",
+    "ntfs_hibernated": "Windows가 최대 절전 모드 또는 '빠른 시작' 상태로 꺼져 있어 Windows 드라이브에 안전하게 쓸 수 없습니다. Windows에서 '다시 시작'으로 종료하거나 빠른 시작을 끈 뒤 다시 시도하세요.",
+    "ntfs_bitlocker": "Windows 드라이브가 BitLocker로 암호화되어 있어 실행 요청을 전달할 수 없습니다 (레거시 BIOS 부팅).",
+    "grub_env": "GRUB이 /boot에 일회성 부팅 정보를 저장할 수 없는 구성(Btrfs/LVM/RAID)입니다. 이 PC에서는 자동 전환을 사용할 수 없습니다.",
+    "esp": "EFI 시스템 파티션에 접근하지 못했습니다.",
+    "esp_full": "EFI 시스템 파티션에 남은 공간이 부족합니다.",
+    "unknown_game": "알 수 없는 게임입니다.",
+    "usage": "잘못된 명령입니다.",
+}
+
+
+class Fail(Exception):
+    def __init__(self, code, detail=""):
+        super().__init__(code)
+        self.code, self.detail = code, detail
+
+
+def run(cmd, timeout=20):
+    try:
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+        return p.returncode, p.stdout
+    except Exception as e:  # noqa
+        return 127, str(e)
+
+
+def have(b):
+    return shutil.which(b) is not None
+
+
+def read_conf():
+    conf = {"method": "auto"}
+    try:
+        with open(CONF, encoding="utf-8") as f:
+            for line in f:
+                k, sep, v = line.partition("=")
+                if sep and not k.strip().startswith("#"):
+                    conf[k.strip().lower()] = v.strip().lower()
+    except Exception:
+        pass
+    return conf
+
+
+def lsblk():
+    rc, out = run(["lsblk", "-J", "-l", "-b", "-o", "PATH,FSTYPE,PARTTYPE,PARTUUID,SIZE"])
+    try:
+        return [d for d in json.loads(out)["blockdevices"] if d.get("path")]
+    except Exception:
+        return []
+
+
+# ---- mounting -----------------------------------------------------------------------------------
+class Mounted:
+    """Use an existing mount of dev when it gives the access we need, else mount it privately."""
+
+    def __init__(self, dev, fstype, rw):
+        self.dev, self.fstype, self.rw, self.tmp, self.path = os.path.realpath(dev), fstype, rw, None, None
+
+    def __enter__(self):
+        rc, out = run(["findmnt", "-rno", "TARGET,OPTIONS", "-S", self.dev])
+        for line in out.splitlines() if rc == 0 else []:
+            tgt, _, opts = line.partition(" ")
+            if not self.rw or "rw" in opts.split(","):
+                self.path = tgt.encode().decode("unicode_escape") if "\\x" in tgt else tgt
+                return self.path
+        os.makedirs(RUN, 0o700, exist_ok=True)
+        self.tmp = tempfile.mkdtemp(dir=RUN)
+        opts = "rw,noatime" if self.rw else "ro"
+        if self.fstype == "vfat":
+            opts += ",utf8,umask=0077"
+        rc, out = run(["mount", "-t", self.fstype, "-o", opts, self.dev, self.tmp], 40)
+        if rc != 0:
+            os.rmdir(self.tmp)
+            self.tmp = None
+            raise Fail("esp" if self.fstype == "vfat" else "ntfs_hibernated", out.strip()[-200:])
+        self.path = self.tmp
+        return self.path
+
+    def __exit__(self, *a):
+        if self.tmp:
+            run(["sync", "-f", self.tmp])
+            for _ in range(5):
+                if run(["umount", self.tmp])[0] == 0:
+                    break
+                time.sleep(0.4)
+            try:
+                os.rmdir(self.tmp)
+            except OSError:
+                pass
+        elif self.rw and self.path:
+            run(["sync", "-f", self.path])
+        return False
+
+
+def find_ci(root, rel):
+    """Case-insensitive lookup of rel below root (NTFS through ntfs-3g is case sensitive)."""
+    cur = root
+    for part in rel.split("/"):
+        try:
+            hit = next((n for n in os.listdir(cur) if n.lower() == part.lower()), None)
+        except OSError:
+            return None
+        if hit is None:
+            return None
+        cur = os.path.join(cur, hit)
+    return cur
+
+
+def esp_device(win, parts):
+    """Block device of the ESP that holds the Windows boot manager."""
+    if win and win.get("partuuid"):
+        p = "/dev/disk/by-partuuid/" + win["partuuid"].lower()
+        if os.path.exists(p):
+            return os.path.realpath(p)
+    for d in parts:
+        if (d.get("parttype") or "").lower() == ESP_TYPE and d.get("fstype") == "vfat":
+            try:
+                with Mounted(d["path"], "vfat", False) as m:
+                    if find_ci(m, "EFI/Microsoft/Boot/bootmgfw.efi"):
+                        return d["path"]
+            except Fail:
+                pass
+    return None
+
+
+def ntfs_state(parts):
+    """(bitlocker?, hibernated?, [ntfs devices that are safe to write])."""
+    bitlocker = any(d.get("fstype") == "BitLocker" for d in parts)
+    hib, clean = False, []
+    for d in parts:
+        if d.get("fstype") == "ntfs" and int(d.get("size") or 0) >= 16 * 1024 ** 3:
+            if have("ntfs-3g.probe"):
+                rc, _ = run(["ntfs-3g.probe", "--readwrite", d["path"]], 30)
+                if rc in (14, 15):
+                    hib = True
+                    continue
+                if rc != 0:
+                    continue
+            clean.append(d["path"])
+    return bitlocker, hib, clean
+
+
+class WindowsDrive:
+    """Mount the NTFS volume that contains \\Windows (rw only when it was shut down cleanly)."""
+
+    def __init__(self, parts, rw):
+        self.parts, self.rw, self.m = parts, rw, None
+
+    def __enter__(self):
+        if self.rw:
+            devs = ntfs_state(self.parts)[2]
+        else:
+            devs = [d["path"] for d in self.parts if d.get("fstype") == "ntfs" and int(d.get("size") or 0) >= 16 * 1024 ** 3]
+        for dev in devs:
+            m = Mounted(dev, "ntfs-3g" if have("ntfs-3g") else "ntfs3", self.rw)
+            try:
+                root = m.__enter__()
+            except Fail:
+                continue
+            if find_ci(root, "Windows/System32"):
+                self.m = m
+                return root
+            m.__exit__()
+        return None
+
+    def __exit__(self, *a):
+        if self.m:
+            self.m.__exit__()
+        return False
+
+
+# ---- boot method ---------------------------------------------------------------------------------
+def grub_windows_entry():
+    try:
+        with open(GRUB_CFG, encoding="utf-8", errors="replace") as f:
+            cfg = f.read()
+    except Exception:
+        return None
+    for m in re.finditer(r"^\s*menuentry\s+(['\"])(.*?)\1([^{\n]*)\{", cfg, re.M):
+        if "windows" in m.group(2).lower():
+            i = re.search(r"(?:\$menuentry_id_option|--id)\s+(['\"])(.*?)\1", m.group(3))
+            return i.group(2) if i else m.group(2)
+    return None
+
+
+def grub_env_ok():
+    rc, out = run(["findmnt", "-no", "FSTYPE,SOURCE", "-T", "/boot/grub"])
+    f = out.split()
+    if rc != 0 or len(f) < 2:
+        return True
+    return f[0] not in ("btrfs", "zfs", "f2fs") and not f[1].startswith(("/dev/mapper/", "/dev/md", "/dev/dm-"))
+
+
+def gather(refresh=True):
+    conf = read_conf()
+    parts = lsblk()
+    uefi = wb.is_uefi()
+    entries = wb.efi_entries() if uefi else []
+    win = wb.find_windows_efi(entries) if uefi else None
+    bitlocker, hib, _clean = ntfs_state(parts)
+    st = {"ok": True, "uefi": uefi, "method": "", "windows": {"found": False, "label": "", "bootnum": ""},
+          "bitlocker": bitlocker, "hibernated": hib, "blockers": [], "warnings": [],
+          "helper": {"installed": False}, "games": 0, "_parts": parts, "_win": win, "_entries": entries}
+
+    def block(code):
+        st["blockers"].append({"code": code, "message": MSG[code]})
+
+    def warn(code):
+        st["warnings"].append({"code": code, "message": MSG[code]})
+
+    want = conf.get("method", "auto")
+    grub_entry = grub_windows_entry() if have("grub-reboot") else None
+    sdboot = uefi and wb.loader_is_systemd_boot() and have("bootctl")
+    order = []
+    if uefi and win and have("efibootmgr"):
+        order.append("efi")
+    if sdboot:
+        order.append("systemd-boot")
+    if grub_entry:
+        order.append("grub")
+    if want in order:
+        order.remove(want)
+        order.insert(0, want)
+    st["methods"], st["_grub_entry"] = order, grub_entry
+    st["method"] = order[0] if order else ""
+    st["windows"]["found"] = bool(order) and (bool(win) or bool(grub_entry) or sdboot)
+    if win:
+        st["windows"].update(label=win["label"], bootnum=win["num"])
+    if not order:
+        if uefi and win and not have("efibootmgr"):
+            block("no_tool")
+        elif not uefi and have("grub-reboot"):
+            block("no_windows_grub" if any(d.get("fstype") in ("ntfs", "BitLocker") for d in parts) else "no_windows")
+        else:
+            block("no_windows")
+    else:
+        if st["method"] == "grub" and not grub_env_ok():
+            block("grub_env")
+        if bitlocker:
+            if not uefi:
+                block("ntfs_bitlocker")
+            elif st["method"] != "efi":
+                block("bitlocker_chain")
+            else:
+                warn("bitlocker")
+        if hib:
+            if uefi:
+                warn("hibernated")
+            else:
+                block("ntfs_hibernated")
+    if refresh and st["windows"]["found"]:
+        try:
+            refresh_cache(st)
+        except Fail:
+            pass
+    inv = wb.load_inventory()
+    if inv["helper"]:
+        h = inv["helper"]
+        st["helper"] = {"installed": True, "version": str(h.get("version", ""))[:20],
+                        "autologon": bool(h.get("autologon")), "bootux": bool(h.get("bootux")),
+                        "returnEntry": bool(h.get("return_entry")), "updated": str(h.get("updated", ""))[:40]}
+    st["games"] = len(inv["games"])
+    return st
+
+
+# ---- inventory cache -----------------------------------------------------------------------------
+def _copy_inventory(src_dir):
+    """src_dir: .../winboot on the ESP (or ProgramData). Copies inventory.json + icons to the cache."""
+    os.makedirs(wb.ICON_CACHE, 0o755, exist_ok=True)
+    inv = os.path.join(src_dir, "inventory.json") if src_dir else None
+    if not inv or not os.path.isfile(inv) or os.path.getsize(inv) > 4 * 1024 * 1024:
+        if os.path.exists(wb.INVENTORY_CACHE) and src_dir is not None:
+            os.unlink(wb.INVENTORY_CACHE)        # helper was uninstalled in Windows
+        return
+    with open(inv, "rb") as f:
+        data = f.read()
+    json.loads(data.decode("utf-8-sig"))         # must parse; raises otherwise
+    tmp = wb.INVENTORY_CACHE + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, wb.INVENTORY_CACHE)
+    idir = find_ci(src_dir, "icons")
+    names = sorted(n for n in (os.listdir(idir) if idir else []) if ICON_RE.match(n.lower()))[:400]
+    keep = set()
+    for n in names:
+        s, d = os.path.join(idir, n), os.path.join(wb.ICON_CACHE, n.lower())
+        try:
+            sst = os.stat(s)
+            if sst.st_size > 512 * 1024:
+                continue
+            keep.add(n.lower())
+            if not os.path.exists(d) or os.stat(d).st_size != sst.st_size or os.stat(d).st_mtime < sst.st_mtime:
+                shutil.copyfile(s, d)
+                os.chmod(d, 0o644)
+        except OSError:
+            pass
+    for n in os.listdir(wb.ICON_CACHE):
+        if n not in keep:
+            try:
+                os.unlink(os.path.join(wb.ICON_CACHE, n))
+            except OSError:
+                pass
+
+
+def refresh_cache(st):
+    parts = st["_parts"]
+    if st["uefi"]:
+        dev = esp_device(st["_win"], parts)
+        if not dev:
+            raise Fail("esp")
+        with Mounted(dev, "vfat", False) as m:
+            try:
+                _copy_inventory(find_ci(m, REL) or "")
+            except Exception:
+                pass
+    else:
+        with WindowsDrive(parts, False) as root:
+            if root:
+                try:
+                    _copy_inventory(find_ci(root, NTFS_REL) or "")
+                except Exception:
+                    pass
+
+
+# ---- request ---------------------------------------------------------------------------------------
+def _write_atomic(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def _need_space(path, need=2 * 1024 * 1024):
+    s = os.statvfs(path)
+    if s.f_bavail * s.f_frsize < need:
+        raise Fail("esp_full")
+
+
+def _copy_installer(dst, cmd_name):
+    src = wb.SHARE + "/windows"
+    os.makedirs(dst, exist_ok=True)
+    for n in WIN_FILES:
+        shutil.copyfile(os.path.join(src, n), os.path.join(dst, n))
+    shutil.copyfile(os.path.join(src, WIN_CMD), os.path.join(dst, cmd_name))
+
+
+def install_helper(st):
+    """Copy the Windows helper installer where Windows can reach it. Returns what worked."""
+    res = {"esp": False, "ntfs": ""}
+    if st["uefi"]:
+        dev = esp_device(st["_win"], st["_parts"])
+        if dev:
+            with Mounted(dev, "vfat", True) as m:
+                _need_space(m)
+                # ASCII name on FAT: the ESP may be mounted with iocharset=ascii
+                _copy_installer(os.path.join(find_ci(m, "EFI") or os.path.join(m, "EFI"), "DelayOS", "winboot"), "setup.cmd")
+                res["esp"] = True
+    if not st["bitlocker"]:
+        try:
+            with WindowsDrive(st["_parts"], True) as root:
+                if root:
+                    _copy_installer(os.path.join(root, "DelayOS-연동"), WIN_CMD)
+                    res["ntfs"] = "C:\\DelayOS-연동\\" + WIN_CMD
+        except Exception:
+            pass
+    return res
+
+
+def build_request(game, delay, st):
+    cur = wb.current_efi(st["_entries"]) if st["uefi"] else None
+    return {
+        "version": 1, "id": game["id"], "name": game["name"], "launch": game["launch"],
+        "exit_processes": game["exit_processes"], "install_dir": game["install_dir"],
+        "return_delay": delay, "created": int(time.time()), "nonce": os.urandom(8).hex(),
+        "return": {"label": cur["label"] if cur else "DelayOS", "path": cur["path"] if cur else "",
+                   "bootnum": cur["num"] if cur else ""},
+    }
+
+
+def place_request(st, req):
+    data = (json.dumps(req, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
+    if st["uefi"]:
+        dev = esp_device(st["_win"], st["_parts"])
+        if not dev:
+            raise Fail("esp")
+        with Mounted(dev, "vfat", True) as m:
+            _need_space(m, 256 * 1024)
+            d = os.path.join(find_ci(m, "EFI") or os.path.join(m, "EFI"), "DelayOS", "winboot")
+            os.makedirs(d, exist_ok=True)
+            _write_atomic(os.path.join(d, "request.json"), data)
+    else:
+        with WindowsDrive(st["_parts"], True) as root:
+            if not root:
+                raise Fail("ntfs_hibernated")
+            d = os.path.join(find_ci(root, "ProgramData") or os.path.join(root, "ProgramData"), "DelayOS", "winboot")
+            os.makedirs(d, exist_ok=True)
+            _write_atomic(os.path.join(d, "request.json"), data)
+
+
+def remove_request(st):
+    try:
+        if st["uefi"]:
+            dev = esp_device(st["_win"], st["_parts"])
+            if dev:
+                with Mounted(dev, "vfat", True) as m:
+                    p = find_ci(m, REL + "/request.json")
+                    if p:
+                        os.unlink(p)
+        else:
+            with WindowsDrive(st["_parts"], True) as root:
+                p = find_ci(root, NTFS_REL + "/request.json") if root else None
+                if p:
+                    os.unlink(p)
+    except Exception:
+        pass
+
+
+def select_windows(st):
+    """One-time boot selection; tries the available methods in order. Returns the one that worked."""
+    for method in st["methods"]:
+        if method == "efi":
+            rc, _ = run(["efibootmgr", "-q", "--bootnext", st["_win"]["num"]])
+            ok = rc == 0 and wb.boot_next() == st["_win"]["num"]
+        elif method == "systemd-boot":
+            if st["bitlocker"]:
+                continue
+            ok = run(["bootctl", "set-oneshot", "auto-windows"])[0] == 0
+        else:
+            if st["bitlocker"] or not grub_env_ok():
+                continue
+            ok = run(["grub-reboot", st["_grub_entry"]])[0] == 0
+        if ok:
+            return method
+    raise Fail("bootnext_failed")
+
+
+def unselect(method, st):
+    if method == "efi":
+        win = st["_win"]
+        if win and wb.boot_next() == win["num"]:
+            run(["efibootmgr", "-q", "--delete-bootnext"])
+    elif method == "systemd-boot":
+        run(["bootctl", "set-oneshot", ""])
+    elif method == "grub":
+        run(["grub-editenv", "-", "unset", "next_entry"])
+
+
+def caller_home():
+    try:
+        return pwd.getpwuid(int(os.environ["PKEXEC_UID"])).pw_dir
+    except Exception:
+        return None
+
+
+def public(st):
+    return {k: v for k, v in st.items() if not k.startswith("_")}
+
+
+def main(argv):
+    if os.geteuid() != 0:
+        print(json.dumps({"ok": False, "code": "root", "error": "pkexec로 실행해야 합니다."}, ensure_ascii=False))
+        return 1
+    cmd = argv[0] if argv else ""
+    try:
+        if cmd == "status":
+            print(json.dumps(public(gather("--no-refresh" not in argv)), ensure_ascii=False))
+            return 0
+        if cmd == "install-helper":
+            st = gather(False)
+            if st["blockers"] and not st["windows"]["found"]:
+                raise Fail(st["blockers"][0]["code"])
+            print(json.dumps(dict(install_helper(st), ok=True), ensure_ascii=False))
+            return 0
+        if cmd == "arm":
+            setup = "--setup" in argv
+            delay = 10
+            if "--delay" in argv:
+                try:
+                    delay = max(0, min(120, int(argv[argv.index("--delay") + 1])))
+                except (ValueError, IndexError):
+                    raise Fail("usage")
+            ids = [a for i, a in enumerate(argv[1:], 1) if not a.startswith("--") and argv[i - 1] != "--delay"]
+            st = gather(False)
+            if st["blockers"]:
+                raise Fail(st["blockers"][0]["code"])
+            out = {"ok": True}
+            if setup:
+                out.update(install_helper(st))
+                remove_request(st)
+            else:
+                if len(ids) != 1 or not wb.ID_RE.match(ids[0]):
+                    raise Fail("usage")
+                game = wb.resolve(ids[0], caller_home())
+                if not game:
+                    raise Fail("unknown_game")
+                place_request(st, build_request(game, delay, st))
+            try:
+                method = select_windows(st)
+            except Fail:
+                remove_request(st)
+                raise
+            os.makedirs(os.path.dirname(wb.ARMED_MARK), 0o755, exist_ok=True)
+            with open(wb.ARMED_MARK, "w", encoding="utf-8") as f:
+                json.dump({"method": method, "time": int(time.time())}, f)
+            out["method"] = method
+            print(json.dumps(out, ensure_ascii=False))
+            return 0
+        if cmd == "disarm":
+            method = ""
+            try:
+                with open(wb.ARMED_MARK, encoding="utf-8") as f:
+                    method = str(json.load(f).get("method", ""))
+            except Exception:
+                pass
+            st = gather(False)
+            remove_request(st)
+            unselect(method or st["method"], st)
+            try:
+                os.unlink(wb.ARMED_MARK)
+            except OSError:
+                pass
+            print(json.dumps({"ok": True}))
+            return 0
+        raise Fail("usage")
+    except Fail as e:
+        print(json.dumps({"ok": False, "code": e.code, "error": MSG.get(e.code, e.code), "detail": e.detail}, ensure_ascii=False))
+        return 1
+    except Exception as e:  # noqa
+        print(json.dumps({"ok": False, "code": "internal", "error": "전환을 준비하는 중 오류가 발생했습니다.", "detail": "%s: %s" % (type(e).__name__, e)}, ensure_ascii=False))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

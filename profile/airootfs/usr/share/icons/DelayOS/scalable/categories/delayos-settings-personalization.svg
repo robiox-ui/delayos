@@ -1,5 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28">
-  <rect x="0" y="0" width="28" height="28" rx="7" fill="#2A2C33"/>
-  <rect x="0.5" y="0.5" width="27" height="27" rx="6.5" fill="none" stroke="#ffffff" stroke-opacity="0.06"/>
-  <path d="M14 6.5a7.5 7.5 0 0 0 0 15c1.2 0 1.8-.8 1.8-1.7 0-.9-.6-1.2-.6-2 0-.9.7-1.5 1.6-1.5h1.6a3.3 3.3 0 0 0 3.3-3.3C21.7 9.4 18.2 6.5 14 6.5z" fill="#F06292"/><circle cx="10.4" cy="12.6" r="1.25" fill="#2A2C33"/><circle cx="13.2" cy="9.8" r="1.25" fill="#2A2C33"/><circle cx="17" cy="10.6" r="1.25" fill="#2A2C33"/><circle cx="10.8" cy="16.4" r="1.25" fill="#2A2C33"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".5"/><stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2D3657"/><stop offset="1" stop-color="#141A2E"/></linearGradient></defs>
+<path d="M4 32C4 9 9 4 32 4s28 5 28 28-5 28-28 28S4 55 4 32Z" transform="translate(0 1.2)" fill="#0A1030" opacity=".18"/>
+<path d="M4 32C4 9 9 4 32 4s28 5 28 28-5 28-28 28S4 55 4 32Z" fill="url(#k)"/>
+<path d="M4.5 32C4.5 9.4 9.4 4.5 32 4.5s27.5 4.9 27.5 27.5-4.9 27.5-27.5 27.5S4.5 54.6 4.5 32Z" fill="none" stroke="url(#h)"/>
+<g transform="translate(14 14) scale(1.5)" fill="none" stroke="#C5CEFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 3.5a1.8 1.8 0 0 1 1 3L12 15l-3-3 8.5-8a1.8 1.8 0 0 1 2-.5Z"/><path d="M9 12c-2.5 0-4.5 1.5-4.5 4.5 0 1.5-.5 2.5-1.5 3.5 4.5 1 9-.5 9-5"/></g>
 </svg>

@@ -8,7 +8,9 @@
 popups: start commandbar controlcenter calendar clipboard emoji winx allapps
         ("hide all" closes every popup)
 
-Briefly owns the session-bus name org.delayos.Shell and emits the signal
+Inside plasmashell the dock/top bar use the in-process DelayShell.ShellBus instead; this script
+is for global shortcuts and other programs. It briefly owns the session-bus name
+org.delayos.Shell and emits the signal
 org.delayos.Shell.<Toggle|Show|Hide>(s popup) on /org/delayos/Shell. Every popup
 plasmoid listens for it (DelayShell/ShellListener.qml, a Plasma SignalWatcher,
 which only accepts signals from that well-known name).
@@ -59,25 +61,176 @@ def main():
     if not query and (len(sys.argv) != 3 or sys.argv[1] not in ("toggle", "show", "hide")) or sys.argv[2:3] == [] or sys.argv[2] not in NAMES:
         sys.stderr.write("usage: delay-shell toggle|show|hide <%s>\n" % "|".join(NAMES))
         return 2
-    from PySide6.QtDBus import QDBusConnection, QDBusMessage, QDBusConnectionInterface
-    bus = QDBusConnection.sessionBus()
-    if not bus.isConnected():
+    return emit(sys.argv[1].capitalize(), sys.argv[2:4] if query else [sys.argv[2]])
+
+
+# ---------------------------------------------------------------------------------------------
+# Minimal D-Bus client (stdlib only). Importing PySide6 just to send one signal cost ~60 ms on a
+# fast PC and several hundred ms on an old one, on every hotkey / script call that goes through
+# this file; this takes about as long as starting Python itself.
+_BUS = ("/org/freedesktop/DBus", "org.freedesktop.DBus")
+
+
+def _pad(buf, n):
+    buf += b"\0" * (-len(buf) % n)
+
+
+def _put_string(buf, s):
+    import struct
+    raw = s.encode("utf-8")
+    _pad(buf, 4)
+    buf += struct.pack("<I", len(raw)) + raw + b"\0"
+
+
+def _put_signature(buf, s):
+    raw = s.encode("ascii")
+    buf += bytes((len(raw),)) + raw + b"\0"
+
+
+def _message(mtype, serial, path, iface, member, dest=None, signature="", body=b""):
+    """mtype 1 = method call, 4 = signal. Little endian, protocol version 1."""
+    import struct
+    fields = bytearray()
+    for code, sig, val in ((1, "o", path), (2, "s", iface), (3, "s", member), (6, "s", dest), (8, "g", signature)):
+        if not val:
+            continue
+        _pad(fields, 8)
+        fields.append(code)
+        _put_signature(fields, sig)
+        if sig == "g":
+            _put_signature(fields, val)
+        else:
+            _put_string(fields, val)
+    flags = 1 if mtype == 4 else 0          # NO_REPLY_EXPECTED for signals
+    msg = bytearray(struct.pack("<cBBBIII", b"l", mtype, flags, 1, len(body), serial, len(fields)))
+    msg += fields
+    _pad(msg, 8)
+    return bytes(msg) + bytes(body)
+
+
+def _strings(*values):
+    body = bytearray()
+    for v in values:
+        _put_string(body, v)
+    return body
+
+
+def _recv_exact(sock, n):
+    data = b""
+    while len(data) < n:
+        chunk = sock.recv(n - len(data))
+        if not chunk:
+            raise OSError("the bus closed the connection")
+        data += chunk
+    return data
+
+
+def _read(sock):
+    """Next message -> (type, {header field code: value}, body). Only the field types the bus uses."""
+    import struct
+    head = _recv_exact(sock, 16)
+    if head[:1] != b"l":
+        raise OSError("unexpected byte order")
+    body_len, _serial, fields_len = struct.unpack("<III", head[4:16])
+    raw = _recv_exact(sock, fields_len + (-fields_len % 8))
+    body = _recv_exact(sock, body_len)
+    fields, pos = {}, 0
+    while pos < fields_len:
+        pos += -pos % 8
+        code, siglen = raw[pos], raw[pos + 1]
+        sig = raw[pos + 2:pos + 2 + siglen].decode("ascii")
+        pos += 3 + siglen
+        if sig == "u":
+            pos += -pos % 4
+            fields[code] = struct.unpack("<I", raw[pos:pos + 4])[0]
+            pos += 4
+        elif sig in ("s", "o"):
+            pos += -pos % 4
+            n = struct.unpack("<I", raw[pos:pos + 4])[0]
+            fields[code] = raw[pos + 4:pos + 4 + n].decode("utf-8", "replace")
+            pos += 4 + n + 1
+        elif sig == "g":
+            n = raw[pos]
+            fields[code] = raw[pos + 1:pos + 1 + n].decode("ascii")
+            pos += 1 + n + 1
+        else:
+            break                            # unknown field type: the rest is not needed
+    return head[1], fields, body
+
+
+def _reply(sock, serial):
+    """Body of the reply to `serial` (field 5 = REPLY_SERIAL); other messages are skipped."""
+    while True:
+        mtype, fields, body = _read(sock)
+        if mtype in (2, 3) and fields.get(5) == serial:
+            if mtype == 3:
+                raise OSError("bus error %s" % fields.get(4, ""))
+            return body
+
+
+def _connect():
+    import os
+    import socket
+    addr = os.environ.get("DBUS_SESSION_BUS_ADDRESS") or \
+        "unix:path=%s/bus" % os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
+    for part in addr.split(";"):
+        if not part.startswith("unix:"):
+            continue
+        opts = dict(kv.split("=", 1) for kv in part[5:].split(",") if "=" in kv)
+        target = opts.get("path") or ("\0" + opts["abstract"] if "abstract" in opts else None)
+        if not target:
+            continue
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            sock.settimeout(5)
+            sock.connect(target)
+            sock.sendall(b"\0AUTH EXTERNAL " + str(os.getuid()).encode().hex().encode() + b"\r\n")
+            line = b""
+            while not line.endswith(b"\r\n"):
+                line += _recv_exact(sock, 1)
+            if not line.startswith(b"OK"):
+                raise OSError("authentication rejected")
+            sock.sendall(b"BEGIN\r\n")
+            return sock
+        except OSError:
+            sock.close()
+    return None
+
+
+def emit(member, args):
+    """Own org.delayos.Shell for a moment and emit org.delayos.Shell.<member>(args...) on /org/delayos/Shell."""
+    import struct
+    sock = _connect()
+    if sock is None:
         sys.stderr.write("delay-shell: no session bus\n")
         return 1
-    # wait in the queue if another delay-shell holds the name right now
-    reply = bus.interface().registerService("org.delayos.Shell",
-                                            QDBusConnectionInterface.QueueService,
-                                            QDBusConnectionInterface.AllowReplacement)
-    member = sys.argv[1].capitalize()
-    sig = QDBusMessage.createSignal("/org/delayos/Shell", "org.delayos.Shell", member)
-    sig.setArguments(sys.argv[2:4] if query else [sys.argv[2]])
-    bus.send(sig)
-    # a blocking round trip flushes the signal before we exit and drop the name
-    bus.call(QDBusMessage.createMethodCall("org.freedesktop.DBus", "/org/freedesktop/DBus",
-                                           "org.freedesktop.DBus", "GetId"))
-    bus.unregisterService("org.delayos.Shell")
-    return 0
-
+    try:
+        sock.sendall(_message(1, 1, _BUS[0], _BUS[1], "Hello", _BUS[1]))
+        _reply(sock, 1)
+        # RequestName(s name, u flags = 1 ALLOW_REPLACEMENT): no DO_NOT_QUEUE, so we wait in the
+        # queue while another delay-shell holds the name. Reply 1 = primary owner, 2 = in queue.
+        body = _strings("org.delayos.Shell")
+        _pad(body, 4)
+        body += struct.pack("<I", 1)
+        sock.sendall(_message(1, 2, _BUS[0], _BUS[1], "RequestName", _BUS[1], "su", body))
+        state = struct.unpack("<I", _reply(sock, 2)[:4])[0]
+        while state == 2:                    # queued: the bus sends NameAcquired(s) when it is our turn
+            mtype, fields, sbody = _read(sock)
+            if mtype == 4 and fields.get(3) == "NameAcquired" and b"org.delayos.Shell\0" in sbody:
+                state = 1
+        if state not in (1, 4):
+            raise OSError("could not own org.delayos.Shell")
+        sock.sendall(_message(4, 3, "/org/delayos/Shell", "org.delayos.Shell", member,
+                              None, "s" * len(args), _strings(*args)))
+        # a blocking round trip: the bus has routed the signal before we drop the name
+        sock.sendall(_message(1, 4, _BUS[0], _BUS[1], "GetId", _BUS[1]))
+        _reply(sock, 4)
+        return 0
+    except (OSError, ValueError, IndexError, struct.error) as e:
+        sys.stderr.write("delay-shell: %s\n" % e)
+        return 1
+    finally:
+        sock.close()
 
 if __name__ == "__main__":
     sys.exit(main())

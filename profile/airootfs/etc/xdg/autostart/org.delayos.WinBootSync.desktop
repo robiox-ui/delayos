@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=DelayOS Windows game list
+Name[ko]=DelayOS Windows 게임 목록
+Comment=Show Windows games in the Start menu when a Windows install is present
+Comment[ko]=Windows가 설치되어 있으면 Windows 게임을 시작 메뉴에 표시합니다
+Exec=delay-winboot --session-start
+Icon=delayos-winboot-game
+Terminal=false
+NoDisplay=true
+StartupNotify=false
+X-KDE-autostart-phase=2

@@ -59,6 +59,7 @@ SPage {
         subtitle: pg.st.windows.winboat ? "설정됨 · 일반 프로그램은 진짜 Windows에서 실행됩니다" : "Wine으로 실행되지 않는 프로그램을 위해 Windows를 설정합니다"
         chevron: true; onClicked: sys.detach(["winboat"])
     }
+    WinSwitch { }   // Windows 전환 (dual-boot switch for kernel anti-cheat games, docs/windows-switch.md)
 
     // ---- Anti-cheat --------------------------------------------------------
     Item { height: 8; Layout.fillWidth: true }

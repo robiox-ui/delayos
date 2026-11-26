@@ -29,6 +29,7 @@ which
 ## ───────── Filesystems / storage ─────────
 btrfs-progs
 dosfstools
+squashfs-tools
 exfatprogs
 ntfs-3g
 e2fsprogs
@@ -191,7 +192,7 @@ qemu-desktop
 libnotify
 
 ## ───────── Everyday apps ─────────
-firefox
+google-chrome
 vlc
 libreoffice-fresh
 libreoffice-fresh-ko

@@ -26,7 +26,12 @@ Presentation {
         onTriggered: presentation.idx = (presentation.idx + 1) % presentation.tips.length
     }
 
+    // Calamares' Slide covers only 90% x 70% of the slideshow area by default, which left a
+    // white frame around the dark card: paint the whole area and let the slide fill it.
+    Rectangle { anchors.fill: parent; color: ts.bg; z: -1 }
+
     Slide {
+        anchors.fill: parent
         Rectangle {
             anchors.fill: parent
             color: ts.bg

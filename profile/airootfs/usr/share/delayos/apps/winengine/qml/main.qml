@@ -53,6 +53,7 @@ import DelaySys
             visible: engine.state === "error"
             anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 16
             spacing: 8
+            SButton { text: "실제 Windows에서 실행…"; onClicked: { engine.addToWindows(); Qt.quit() } }
             SButton { text: "설정"; onClicked: { engine.openSettings(); Qt.quit() } }
             SButton { text: "닫기"; kind: "accent"; onClicked: Qt.quit() }
         }

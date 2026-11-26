@@ -1,0 +1,14 @@
+<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
+ "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
+<!-- DelayOS: "Windows 게임" Start menu category for the entries delay-winboot generates
+     (~/.local/share/applications/delayos-wingame-*.desktop, Categories=Game;X-DelayOS-WindowsGame;). -->
+<Menu>
+  <Name>Applications</Name>
+  <Menu>
+    <Name>DelayOS-WindowsGames</Name>
+    <Directory>delayos-windows-games.directory</Directory>
+    <Include>
+      <Category>X-DelayOS-WindowsGame</Category>
+    </Include>
+  </Menu>
+</Menu>

@@ -18,20 +18,22 @@ PlasmoidItem {
 
     Item { id: geo; readonly property rect r: Qt.rect(Screen.virtualX, Screen.virtualY, Screen.width, Screen.height) }
     function place() {
-        const g = geo.r
+        const g = geo.r, bar = lazy.get()
         bar.posX = Math.round(g.x + (g.width - bar.panelWidth) / 2)
         bar.posY = Math.round(g.y + g.height * 225 / 1080)   // top edge at y=225 on 1080p
+        return bar
     }
-    function toggle() { place(); bar.toggle() }
+    function toggle() { place().toggle() }
 
     Connections { target: Plasmoid; function onActivated() { root.toggle() } }
     ShellListener {
         name: "commandbar"
         onToggleRequested: root.toggle()
-        onShowRequested: { root.place(); bar.open() }
-        onHideRequested: bar.close()
-        onQueryRequested: text => { root.place(); bar.open(); bar.setQuery(text) }
+        onShowRequested: root.place().open()
+        onHideRequested: if (lazy.item) lazy.item.close()
+        onQueryRequested: text => { const b = root.place(); b.open(); b.setQuery(text) }
     }
 
-    CommandBar { id: bar }
+    // built on first use; pre-built a few seconds after login when there is RAM to spare
+    LazyPopup { id: lazy; warm: true; sourceComponent: CommandBar {} }
 }

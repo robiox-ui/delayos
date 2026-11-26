@@ -105,6 +105,7 @@ var rows = [
     ["Windows 앱", "appsupport", "windows", "windows exe wine proton 윈도우"],
     ["Android 앱", "appsupport", "android", "android apk waydroid 안드로이드"],
     ["안티치트", "appsupport", "eac", "anti-cheat eac easy anti cheat 안티치트"],
+    ["Windows 전환", "appsupport", "winswitch", "windows switch dual boot valorant league 발로란트 롤 포트나이트 듀얼 부팅 전환 윈도우 게임"],
     ["업데이트 확인", "update", "check", "update upgrade 업데이트"],
     ["드라이버", "update", "drivers", "drivers nvidia amd intel gpu 그래픽 드라이버"]
 ]

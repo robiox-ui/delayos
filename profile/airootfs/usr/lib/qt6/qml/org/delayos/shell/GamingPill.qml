@@ -6,9 +6,11 @@ import "apps.js" as Apps
 
 // "게이밍" pill (ui-spec 3.1.1): 77x23 capsule in the accent colour (blue #4D6BFE) with a filled gamepad and white text.
 // Shown while Steam runs or Gaming mode is on. Click toggles /usr/local/bin/delay-gamemode.
-// The state is re-read on click, at start, when the power profile changes, when `refreshToken`
-// changes (delay-shell-activate gaming-changed, called by delay-gamemode) and, as a fallback,
-// together with a cheap Steam check every 10 s (one small shell command; no faster polling).
+// Event driven: the state is re-read on click, at start, when the power profile changes, when
+// `refreshToken` changes (delay-shell-activate gaming-changed, called by delay-gamemode) and
+// when a window opens or closes (Steam starting / quitting). Nothing is polled while idle; only
+// while Steam sits in the tray without a window (its exit then has no window event) a cheap
+// check runs every 15 s.
 Item {
     id: pill
     property bool dark: true
@@ -43,9 +45,11 @@ Item {
     }
     Connections {
         target: allTasks
-        function onCountChanged() { pill.recountSteam() }
+        function onCountChanged() { pill.recountSteam(); settle.restart() }
         function onDataChanged() { pill.recountSteam() }
     }
+    // a window appeared or went away: Steam may have started or quit (re-checked once things settled)
+    Timer { id: settle; interval: 3000; onTriggered: pill.refresh() }
 
     Exec {
         id: sh
@@ -69,9 +73,9 @@ Item {
         onProfileChanged: pill.refresh()
     }
     Timer {
-        interval: 10000
+        interval: 15000
         repeat: true
-        running: true
+        running: pill.steamProcess && !pill.steamWindow
         onTriggered: pill.refresh()
     }
     Component.onCompleted: { refresh(); recountSteam() }

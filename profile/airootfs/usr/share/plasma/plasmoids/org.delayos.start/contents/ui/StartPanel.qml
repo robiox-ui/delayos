@@ -141,7 +141,7 @@ PopupWindow {
                     id: chipMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: panel.launchCmd("delay-shell show allapps")
+                    onClicked: { panel.close(); ShellBus.show("allapps") }
                 }
             }
 

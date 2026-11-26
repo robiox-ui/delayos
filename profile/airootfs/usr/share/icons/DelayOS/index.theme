@@ -18,7 +18,7 @@ PanelSizes=16,22,32,48,64,128,256
 DialogDefault=32
 DialogSizes=16,22,32,48,64,128,256
 
-Directories=scalable/apps,scalable/places,scalable/categories,symbolic/actions,symbolic/status
+Directories=scalable/apps,scalable/places,scalable/mimetypes,scalable/devices,scalable/categories,symbolic/actions,symbolic/status,symbolic/devices,symbolic/places,symbolic/apps
 
 [scalable/apps]
 Size=64
@@ -34,8 +34,22 @@ MaxSize=512
 Context=Places
 Type=Scalable
 
+[scalable/mimetypes]
+Size=64
+MinSize=8
+MaxSize=512
+Context=MimeTypes
+Type=Scalable
+
+[scalable/devices]
+Size=64
+MinSize=8
+MaxSize=512
+Context=Devices
+Type=Scalable
+
 [scalable/categories]
-Size=28
+Size=64
 MinSize=8
 MaxSize=512
 Context=Categories
@@ -53,4 +67,25 @@ Size=24
 MinSize=8
 MaxSize=512
 Context=Status
+Type=Scalable
+
+[symbolic/devices]
+Size=24
+MinSize=8
+MaxSize=512
+Context=Devices
+Type=Scalable
+
+[symbolic/places]
+Size=24
+MinSize=8
+MaxSize=512
+Context=Places
+Type=Scalable
+
+[symbolic/apps]
+Size=24
+MinSize=8
+MaxSize=512
+Context=Applications
 Type=Scalable

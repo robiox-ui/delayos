@@ -16,6 +16,17 @@ if path.startswith("file://"):
     path = unquote(path[7:])
 if path.lower().endswith(".dmg"):
     mac = True
+# Games that need the real Windows (kernel anti-cheat list in /usr/share/delayos/winboot/games.json):
+# offer "실제 Windows에서 실행" through delay-winboot instead of Wine. "--force" skips the check.
+if not mac and "--force" not in args:
+    try:
+        sys.path.append("/usr/share/delayos/winboot")
+        import wbgames
+        _gid = wbgames.match_exe(path)
+        if _gid:
+            os.execv("/usr/bin/delay-winboot", ["delay-winboot", "--offer", _gid, "--file", path])
+    except Exception:
+        pass
 from syskit import run_app
 
 

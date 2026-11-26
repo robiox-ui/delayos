@@ -12,8 +12,12 @@ if grep -q archisobasedir /proc/cmdline && ! id live >/dev/null 2>&1; then
   echo 'live ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/10-live
   chmod 440 /etc/sudoers.d/10-live
   install -d -o live -g live /home/live/Desktop
-  cp /usr/share/applications/calamares.desktop /home/live/Desktop/install-delayos.desktop 2>/dev/null &&
+  cp /usr/local/share/applications/calamares.desktop /home/live/Desktop/install-delayos.desktop 2>/dev/null &&
     chown live:live /home/live/Desktop/install-delayos.desktop && chmod +x /home/live/Desktop/install-delayos.desktop
+  # The live user has no password: never lock the screen (it locked after 5 idle minutes)
+  install -d -o live -g live /home/live/.config
+  printf '[Daemon]\nAutolock=false\nLockOnResume=false\n' > /home/live/.config/kscreenlockerrc
+  chown live:live /home/live/.config/kscreenlockerrc
 fi
 
 [[ -e $STAMP ]] && exit 0
@@ -23,6 +27,12 @@ mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
 if (( mem_kb < 1500000 )); then
   mkdir -p /etc/sddm.conf.d
   printf '[Autologin]\nSession=delay-lite\n' > /etc/sddm.conf.d/20-lite.conf
+  # the greeter preselects the session named in SDDM's state file
+  if [[ -d /var/lib/sddm ]]; then
+    sed -i '/^Session=/d' /var/lib/sddm/state.conf 2>/dev/null
+    grep -q '^\[Last\]' /var/lib/sddm/state.conf 2>/dev/null || echo '[Last]' >> /var/lib/sddm/state.conf
+    sed -i 's|^\[Last\]|[Last]\nSession=/usr/share/wayland-sessions/delay-lite.desktop|' /var/lib/sddm/state.conf
+  fi
   # zram up to 2x RAM on tiny machines
   mkdir -p /etc/systemd
   printf '[zram0]\ncompression-algorithm = zstd\nzram-size = ram * 2\nswap-priority = 100\nfs-type = swap\n' > /etc/systemd/zram-generator.conf

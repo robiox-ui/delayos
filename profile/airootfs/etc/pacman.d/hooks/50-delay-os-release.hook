@@ -1,0 +1,12 @@
+# The Arch "filesystem" package owns /usr/lib/os-release ("Arch Linux"): put the DelayOS
+# identity back every time that package is installed or upgraded.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = filesystem
+
+[Action]
+Description = Applying the DelayOS system identity (os-release)...
+When = PostTransaction
+Exec = /usr/bin/install -m644 /usr/share/delayos/os-release /usr/lib/os-release

@@ -1,5 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28">
-  <rect x="0" y="0" width="28" height="28" rx="7" fill="#2A2C33"/>
-  <rect x="0.5" y="0.5" width="27" height="27" rx="6.5" fill="none" stroke="#ffffff" stroke-opacity="0.06"/>
-  <g fill="none" stroke="#4FC3E8" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 12a10.5 10.5 0 0 1 15 0"/><path d="M9 14.8a7 7 0 0 1 10 0"/><path d="M11.6 17.5a3.4 3.4 0 0 1 4.8 0"/></g><circle cx="14" cy="20" r="1.2" fill="#4FC3E8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".5"/><stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2D3657"/><stop offset="1" stop-color="#141A2E"/></linearGradient></defs>
+<path d="M4 32C4 9 9 4 32 4s28 5 28 28-5 28-28 28S4 55 4 32Z" transform="translate(0 1.2)" fill="#0A1030" opacity=".18"/>
+<path d="M4 32C4 9 9 4 32 4s28 5 28 28-5 28-28 28S4 55 4 32Z" fill="url(#k)"/>
+<path d="M4.5 32C4.5 9.4 9.4 4.5 32 4.5s27.5 4.9 27.5 27.5-4.9 27.5-27.5 27.5S4.5 54.6 4.5 32Z" fill="none" stroke="url(#h)"/>
+<g transform="translate(14 14) scale(1.5)" fill="none" stroke="#C5CEFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="18.5" r="1.1" fill="#C5CEFF" stroke="none"/><path d="M8.6 15a4.8 4.8 0 0 1 6.8 0"/><path d="M5.6 11.9a9 9 0 0 1 12.8 0"/><path d="M2.6 8.8a13.3 13.3 0 0 1 18.8 0"/></g>
 </svg>

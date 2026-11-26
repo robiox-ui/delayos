@@ -1,0 +1,98 @@
+#!/usr/bin/python3
+# DelayOS "Windows 전환": run a game in the real Windows install (dual boot) and come back.
+# See docs/windows-switch.md.
+#
+#   delay-winboot --game ID [--yes] [--dry-run]   switch to Windows and start the game there
+#   delay-winboot --offer ID --file FILE.exe      asked by delay-winengine for anti-cheat games
+#   delay-winboot --setup                         explain/prepare the one-time Windows helper install
+#   delay-winboot --add [--file FILE.exe]         "Windows 게임 추가" dialog
+#   delay-winboot --remove ID                     remove a game added with --add
+#   delay-winboot --list [--json]                 known games
+#   delay-winboot --status                        JSON from the root helper (also refreshes the game list)
+#   delay-winboot --sync-menu                     regenerate the Start menu entries from the cache
+#   delay-winboot --session-start                 login hook: clean up, refresh, sync the menu (no UI)
+#
+# The privileged part is /usr/lib/delayos/delay-winboot-helper (pkexec, no password for the active user).
+import json
+import os
+import subprocess
+import sys
+
+sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/winboot"]
+import wbgames as wb  # noqa: E402
+
+HELPER = "/usr/lib/delayos/delay-winboot-helper"
+
+
+def helper(*args, timeout=90):
+    try:
+        p = subprocess.run(["pkexec", HELPER] + list(args), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                           text=True, timeout=timeout)
+        return json.loads(p.stdout.strip().splitlines()[-1])
+    except Exception:
+        return {"ok": False, "code": "helper", "error": "Windows 전환 도우미를 실행하지 못했습니다."}
+
+
+def opt(args, name):
+    return args[args.index(name) + 1] if name in args and args.index(name) + 1 < len(args) else ""
+
+
+def main(args):
+    if "--session-start" in args:
+        if wb.windows_hint():
+            if os.path.exists(wb.ARMED_MARK):
+                helper("disarm")           # a switch that never happened must not fire on a later reboot
+            helper("status")               # copies the Windows game inventory + icons to the cache
+        wb.sync_menu()
+        return 0
+    if "--sync-menu" in args:
+        print(wb.sync_menu())
+        return 0
+    if "--status" in args:
+        st = helper("status")
+        wb.sync_menu()
+        print(json.dumps(st, ensure_ascii=False))
+        return 0 if st.get("ok") else 1
+    if "--list" in args:
+        games = wb.catalog()
+        if "--json" in args:
+            print(json.dumps(games, ensure_ascii=False))
+        else:
+            for g in games:
+                print("%-28s %-8s %s" % (g["id"], g["source"], g["name"]))
+        return 0
+    if "--remove" in args:
+        gid = opt(args, "--remove")
+        wb.save_custom([{k: g[k] for k in ("id", "name", "launch", "exit_processes", "install_dir")}
+                        for g in wb.load_custom() if g["id"] != gid])
+        wb.sync_menu()
+        return 0
+
+    if "--add" in args:
+        action, gid = "add", ""
+    elif "--setup" in args:
+        action, gid = "setup", ""
+    elif "--offer" in args:
+        action, gid = "offer", opt(args, "--offer")
+    elif "--game" in args:
+        action, gid = "game", opt(args, "--game")
+    else:
+        sys.stderr.write("usage: delay-winboot --game ID | --add | --setup | --list | --status | --sync-menu\n")
+        return 2
+    file = opt(args, "--file")
+    if file.startswith("file://"):
+        from urllib.parse import unquote
+        file = unquote(file[7:])
+
+    from syskit import run_app
+
+    def ctx():
+        from wbui import WinBoot
+        return {"wb": WinBoot(action, gid, file, "--yes" in args, "--dry-run" in args)}
+
+    return run_app("org.delayos.WinBoot", "Windows 전환", "/usr/share/delayos/winboot/qml/main.qml",
+                   icon="delayos-winboot-game", extra_ctx=ctx, argv=sys.argv[:1])
+
+
+if __name__ == "__main__":
+    sys.exit(main([a for a in sys.argv[1:] if a]))

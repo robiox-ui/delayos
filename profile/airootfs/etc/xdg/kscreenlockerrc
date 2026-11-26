@@ -1,0 +1,6 @@
+[Greeter]
+WallpaperPlugin=org.kde.image
+
+[Greeter][Wallpaper][org.kde.image][General]
+Image=/usr/share/wallpapers/DelayTide/
+PreviewImage=/usr/share/wallpapers/DelayTide/

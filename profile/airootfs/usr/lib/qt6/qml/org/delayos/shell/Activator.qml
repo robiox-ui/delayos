@@ -1,9 +1,12 @@
 import QtQuick
 import org.kde.plasma.core as PlasmaCore
+import DelayShell
 
 // Opens/closes other DelayOS shell plasmoids (Start, Control Center, calendar, command bar).
 // 1) If the applet lives in the same panel, emit its activated() signal (= its global shortcut).
-// 2) Otherwise ask /usr/local/bin/delay-shell-activate, which finds it in any panel.
+// 2) Otherwise use the in-process ShellBus (DelayShell): the popup's ShellListener reacts at once,
+//    without starting a helper process.
+// 3) Otherwise ask /usr/local/bin/delay-shell-activate, which finds it in any panel.
 Item {
     id: act
     property var containment: null
@@ -28,6 +31,8 @@ Item {
                     "calendar": "org.delayos.calendar", "search": "org.delayos.commandbar" }
         var a = find(ids[what] || what)
         if (a) { a.activated(); return }
+        var popup = what === "search" ? "commandbar" : what
+        if (ShellBus.has(popup)) { ShellBus.toggle(popup); return }
         sh.run("/usr/local/bin/delay-shell-activate " + what)
     }
     function run(cmd) { sh.run(cmd) }

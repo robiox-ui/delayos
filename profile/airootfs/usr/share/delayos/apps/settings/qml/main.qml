@@ -7,8 +7,8 @@ import "registry.js" as Reg
 
 Window {
     id: win
-    width: 1091
-    height: 759
+    width: Math.min(1091, Screen.desktopAvailableWidth - 40)
+    height: Math.min(759, Screen.desktopAvailableHeight - 40)
     minimumWidth: 760
     minimumHeight: 520
     visible: true

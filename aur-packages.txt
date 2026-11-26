@@ -3,6 +3,7 @@
 calamares
 ckbcomp
 yay-bin
+google-chrome
 protonup-qt
 ?bottles
 ?game-devices-udev

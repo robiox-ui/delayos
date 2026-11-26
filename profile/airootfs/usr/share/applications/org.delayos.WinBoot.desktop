@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Add a Windows game
+Name[ko]=Windows 게임 추가
+GenericName=Switch to Windows
+GenericName[ko]=Windows 전환
+Comment=Add a game that runs in the installed Windows (dual boot) to the Start menu
+Comment[ko]=설치된 Windows에서 실행할 게임을 시작 메뉴에 추가합니다
+Icon=delayos-winboot-game
+Exec=delay-winboot --add
+Terminal=false
+NoDisplay=true
+StartupNotify=false
+Categories=Game;
+Keywords=windows;valorant;dual boot;윈도우;발로란트;듀얼 부팅;

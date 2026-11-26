@@ -9,8 +9,10 @@ Rectangle {
     id: nav
     DelayStyle { id: ts }
     color: ts.bg
-    implicitHeight: 72
-    height: 72
+    // Calamares gives a QML navigation bar a fixed height of 64 px: anything laid out for
+    // more than that is cut off at the top (the buttons and "고급 모드" were clipped).
+    implicitHeight: 64
+    height: 64
 
     readonly property int cur: ViewManager.currentStepIndex
     readonly property int summaryIndex: 6
@@ -23,7 +25,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 32
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 34
+        anchors.bottomMargin: 19
         spacing: 10
         Rectangle {
             id: tog
@@ -59,7 +61,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: 32
-        anchors.bottomMargin: 32
+        anchors.bottomMargin: 16
         spacing: 8
 
         Rectangle {   // Back (ghost)

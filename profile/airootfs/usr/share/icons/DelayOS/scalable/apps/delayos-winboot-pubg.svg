@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".5"/><stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2D3657"/><stop offset="1" stop-color="#141A2E"/></linearGradient><linearGradient id="l" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#DCE2FF"/><stop offset="1" stop-color="#8FA3FF"/></linearGradient></defs>
+<path d="M4 32C4 9 9 4 32 4s28 5 28 28-5 28-28 28S4 55 4 32Z" transform="translate(0 1.2)" fill="#0A1030" opacity=".18"/>
+<path d="M4 32C4 9 9 4 32 4s28 5 28 28-5 28-28 28S4 55 4 32Z" fill="url(#k)"/>
+<path d="M4.5 32C4.5 9.4 9.4 4.5 32 4.5s27.5 4.9 27.5 27.5-4.9 27.5-27.5 27.5S4.5 54.6 4.5 32Z" fill="none" stroke="url(#h)"/>
+<path d="M15 29.5l14.5 15.5M49 29.5 34.5 45M26.5 29.5l4 15M37.5 29.5l-4 15" fill="none" stroke="#A9B8FF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 30a18 18 0 0 1 36 0q-4.5-3.8-9 0-4.5-3.8-9 0-4.5-3.8-9 0-4.5-3.8-9 0Z" fill="url(#l)"/><rect x="26.5" y="43.5" width="11" height="8.5" rx="2.2" fill="#FFFFFF"/>
+</svg>

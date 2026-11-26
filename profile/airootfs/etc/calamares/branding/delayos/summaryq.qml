@@ -26,10 +26,19 @@ Rectangle {
         var user = gs("username", "")
         if (user !== "")
             r.push("\"" + user + "\" 계정이 만들어집니다.")
-        rows = r
+        if (JSON.stringify(r) !== JSON.stringify(rows))
+            rows = r
     }
 
-    Timer { id: t; interval: 1000; onTriggered: { page.build(); page.checking = false } }
+    Timer { id: t; interval: 1000; running: true; repeat: true; onTriggered: { page.build(); page.checking = false } }
+    // Calamares' summaryq view step never calls the QML onActivate() (its C++ onActivate only
+    // refreshes the summary model), so the spinner stayed forever. The model reset is the
+    // "page was entered" signal; the Timer above keeps running as a fallback and keeps the rows current.
+    Connections {
+        target: (typeof config !== "undefined" && config) ? config.summaryModel : null
+        ignoreUnknownSignals: true
+        function onModelReset() { page.onActivate() }
+    }
 
     Column {
         anchors.horizontalCenter: parent.horizontalCenter

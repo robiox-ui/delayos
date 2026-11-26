@@ -1,0 +1,8 @@
+NAME="DelayOS"
+PRETTY_NAME="DelayOS"
+ID=delayos
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;77;107;254"
+DOCUMENTATION_URL="https://wiki.archlinux.org/"
+LOGO=delayos-logo

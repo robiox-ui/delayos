@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Generate the DelayOS logo and the DelayOS icon theme (original artwork).
+"""Generate the DelayOS logo and the whole DelayOS icon set (original artwork, style guide: docs/icon-style.md).
 
-Usage: python3 gen_icons.py <out-root>
-<out-root> mirrors profile/airootfs (usr/share/icons/DelayOS, usr/share/delayos/logo).
-PNG renditions need rsvg-convert.
+Usage: python3 gen_icons.py <out-root> [--preview=<file.html>] [--logo] [--keep]
+<out-root> mirrors profile/airootfs. Written: usr/share/icons/DelayOS (rebuilt from scratch), the hicolor copies of
+the delayos-* app icons, and the in-app glyph folders (shell/icons, syskit glyphs, settings/icons, files/qml/folder.svg).
+--preview writes the contact sheet (docs/reports/icons-preview.html); --logo also rewrites the logo masters and their
+PNG renditions (needs rsvg-convert); --keep does not empty the generated folders first.
+Line glyphs are defined in icon_glyphs.py.
 """
 import math, os, shutil, subprocess, sys
 
@@ -144,366 +147,348 @@ def logo_symbolic():
 '''
 
 
-# --------------------------------------------------------------------------
-# APP ICONS: glossy squircles
-SQ = squircle(4, 4, 56)
-SQ_RIM = squircle(4.5, 4.5, 55)
+# ==========================================================================
+# ICON SET v2 (docs/icon-style.md). Line glyphs live in icon_glyphs.py.
+# ==========================================================================
+import re  # noqa: E402
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import icon_glyphs as IG  # noqa: E402
+
+HICOLOR = os.path.join(OUT, 'usr/share/icons/hicolor/scalable/apps')
+SHELL_DIR = os.path.join(OUT, 'usr/share/delayos/shell/icons')
+SYSKIT_DIR = os.path.join(OUT, 'usr/share/delayos/apps/syskit/qml/DelaySys/glyphs')
+SETTINGS_DIR = os.path.join(OUT, 'usr/share/delayos/apps/settings/icons')
+FILES_FOLDER = os.path.join(OUT, 'usr/share/delayos/apps/files/qml/folder.svg')
+
+# palette (blue family around Theme.accent #4D6BFE)
+B100, B200, B300, B400, B500 = '#E4E9FF', '#C5CEFF', '#A9B8FF', '#7C93FF', '#6480FF'
+B600, B700, B800, B900 = '#4D6BFE', '#3350D8', '#2640B4', '#1F2F94'
+INK, WHITE = '#141A2E', '#FFFFFF'
+GREEN, AMBER, CORAL = '#3DD68C', '#FFB547', '#FF6B6B'
+EDGE = '#B4BFEA'      # hairline around paper-coloured shapes so they hold on a white background
 
 
-def app_icon(top, bottom, glyph, shadow=True):
-    """glyph(col) -> svg string; col(c) returns c, or black for the shadow pass."""
-    body = glyph(lambda c: c)
-    sh = ''
-    if shadow:
-        sh = '<g transform="translate(0 1.2)" opacity="0.28">%s</g>' % glyph(lambda c: '#000000')
-    return f'''<svg {SVGNS} viewBox="0 0 64 64" width="64" height="64">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{top}"/><stop offset="1" stop-color="{bottom}"/></linearGradient>
-    <linearGradient id="hl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/><stop offset="0.45" stop-color="#ffffff" stop-opacity="0.04"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
-    <linearGradient id="bs" x1="0" y1="0" x2="0" y2="1"><stop offset="0.6" stop-color="#000000" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity="0.18"/></linearGradient>
-  </defs>
-  <path d="{SQ}" fill="url(#bg)"/>
-  <path d="{SQ}" fill="url(#bs)"/>
-  <path d="{SQ}" fill="url(#hl)"/>
-  <path d="{SQ_RIM}" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="1"/>
-  {sh}
-  {body}
-</svg>
-'''
+def _lin(i, c0, c1, x2=0, y2=1, extra0='', extra1='', off1='1'):
+    return ('<linearGradient id="%s" x1="0" y1="0" x2="%s" y2="%s"><stop offset="0" stop-color="%s"%s/>'
+            '<stop offset="%s" stop-color="%s"%s/></linearGradient>' % (i, x2, y2, c0, extra0, off1, c1, extra1))
 
 
-def g_files(c):
-    return (f'<path d="M14 21a3 3 0 0 1 3-3h9.2a3 3 0 0 1 2.1.9l3.2 3.1H47a3 3 0 0 1 3 3v19a3 3 0 0 1-3 3H17a3 3 0 0 1-3-3z" fill="{c("#F28AB0")}"/>'
-            f'<path d="M14 29a3 3 0 0 1 3-3h30a3 3 0 0 1 3 3v15a3 3 0 0 1-3 3H17a3 3 0 0 1-3-3z" fill="{c("#F9B4CD")}"/>')
-
-
-def g_notepad(c):
-    lines = ''.join(f'<path d="M23.5 {y}h17" stroke="{c("#E6C890")}" stroke-width="1.7" stroke-linecap="round"/>' for y in (28, 33, 38, 43))
-    return (f'<rect x="18" y="13" width="28" height="38" rx="3.2" fill="{c("#FFF3D6")}"/>'
-            f'<path d="M18 16.2a3.2 3.2 0 0 1 3.2-3.2h21.6a3.2 3.2 0 0 1 3.2 3.2V21H18z" fill="{c("#F6CF8E")}"/>' + lines)
-
-
-def g_calc(c):
-    keys = ''
-    for r in range(3):
-        for k in range(3):
-            keys += f'<rect x="{17 + k * 7.5}" y="{27 + r * 7.5}" width="5.6" height="5.6" rx="1.3" fill="{c("#8D93A0")}"/>'
-    return (f'<rect x="17" y="15" width="30" height="7" rx="2" fill="{c("#FFFFFF")}"/>'
-            + keys + f'<rect x="40.6" y="34.5" width="6.4" height="13.1" rx="1.5" fill="{c("#F08A3C")}"/>')
-
-
-def g_settings(c):
-    return (f'<path d="{gear(32, 32, 16.5, 12.6, 8, 0.46, 0.09)}" fill="{c("#FFFFFF")}"/>'
-            f'<circle cx="32" cy="32" r="7.4" fill="{c("#EDEEF2")}"/>'
-            f'<circle cx="32" cy="32" r="4.8" fill="{c("#E0245E")}"/>')
-
-
-def g_taskman(c):
-    return f'<path d="M15 43l8-9 6 4.5 8.5-12 5 4.5L49 20" fill="none" stroke="{c("#FFFFFF")}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>'
-
-
-def g_android(c):
-    tiles = ''
-    for r in range(3):
-        for k in range(2):
-            tiles += f'<rect x="{25 + k * 7.6}" y="{18.5 + r * 7.6}" width="6.2" height="6.2" rx="1.4" fill="{c("#B5F5CF")}"/>'
-    return (f'<rect x="21" y="12" width="22" height="40" rx="4.5" fill="{c("#127A43")}" stroke="{c("#0B4D2A")}" stroke-width="2.2"/>'
-            + tiles + f'<rect x="28.5" y="45" width="7" height="2" rx="1" fill="{c("#B5F5CF")}"/>')
-
-
-def g_terminal(c):
-    return (f'<path d="M18 24l8 7-8 7" fill="none" stroke="{c("#7DE3E8")}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>'
-            f'<path d="M30 39h14" stroke="{c("#FFFFFF")}" stroke-width="3.4" stroke-linecap="round"/>')
-
-
-def g_snip(c):
-    br = 'M16 25v-5a3 3 0 0 1 3-3h5 M40 17h5a3 3 0 0 1 3 3v5 M48 39v5a3 3 0 0 1-3 3h-5 M24 47h-5a3 3 0 0 1-3-3v-5'
-    return (f'<rect x="20" y="21" width="24" height="22" rx="2.5" fill="{c("#FBC1D5")}" fill-opacity="0.85"/>'
-            f'<path d="{br}" fill="none" stroke="{c("#FFFFFF")}" stroke-width="3" stroke-linecap="round"/>')
-
-
-def g_drivers(c):
-    pins = ''
-    for i in range(3):
-        o = 25.5 + i * 5.3
-        pins += (f'<rect x="{o}" y="15" width="2.6" height="6" rx="1" fill="{c("#FFF0D9")}"/>'
-                 f'<rect x="{o}" y="43" width="2.6" height="6" rx="1" fill="{c("#FFF0D9")}"/>'
-                 f'<rect x="15" y="{o}" width="6" height="2.6" rx="1" fill="{c("#FFF0D9")}"/>'
-                 f'<rect x="43" y="{o}" width="6" height="2.6" rx="1" fill="{c("#FFF0D9")}"/>')
-    return (pins + f'<rect x="20" y="20" width="24" height="24" rx="3.5" fill="{c("#FFF0D9")}"/>'
-            f'<rect x="26.5" y="26.5" width="11" height="11" rx="2" fill="{c("#F2A85A")}"/>')
-
-
-def g_welcome(c):
-    waves = ''.join(f'<path d="M16 {y}q4-2.6 8 0t8 0 8 0 8 0" fill="none" stroke="{c("#FFE4E4")}" stroke-width="2.4" stroke-linecap="round"/>' for y in (39, 44.5, 50))
-    return f'<path d="M20 36a12 12 0 0 1 24 0z" fill="{c("#FFC25A")}"/>' + waves
-
-
-def g_store(c):
-    return (f'<path d="M25.5 24v-3a6.5 6.5 0 0 1 13 0v3" fill="none" stroke="{c("#FFFFFF")}" stroke-width="2.8" stroke-linecap="round"/>'
-            f'<path d="M17 24h30l-1.8 21.5a3.5 3.5 0 0 1-3.5 3.2H22.3a3.5 3.5 0 0 1-3.5-3.2z" fill="{c("#C4B2FF")}"/>'
-            f'<path d="M25 30.5h14M32 30.5v13" stroke="{c("#FFFFFF")}" stroke-width="3.4" stroke-linecap="round"/>')
-
-
-def g_activity(c):
-    return f'<path d="M13 33h8l3.5-9 6 19 5-14 3 4h12.5" fill="none" stroke="{c("#FFFFFF")}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>'
-
-
-def g_disks(c):
-    return (f'<circle cx="32" cy="32" r="16" fill="{c("#E6EBF2")}"/>'
-            f'<circle cx="32" cy="32" r="10.5" fill="none" stroke="{c("#B9C3D1")}" stroke-width="1.3"/>'
-            f'<circle cx="32" cy="32" r="3.2" fill="{c("#56637A")}"/>'
-            f'<path d="M45 46l-9-10" stroke="{c("#56637A")}" stroke-width="2.6" stroke-linecap="round"/>')
-
-
-def g_archive(c):
-    teeth = ''.join(f'<rect x="{30 if i % 2 == 0 else 32}" y="{26 + i * 3}" width="2.4" height="2.2" rx=".5" fill="{c("#8A5A2E")}"/>' for i in range(5))
-    return (f'<rect x="16" y="20" width="32" height="27" rx="3" fill="{c("#F7E3C6")}"/>'
-            f'<rect x="14.5" y="16" width="35" height="8" rx="2.5" fill="{c("#FFF1DD")}"/>' + teeth +
-            f'<rect x="29.2" y="41" width="5.6" height="4" rx="1" fill="{c("#8A5A2E")}"/>')
-
-
-def g_media(c):
-    return f'<path d="M25 19.5v25a1.6 1.6 0 0 0 2.4 1.4l20-12.5a1.6 1.6 0 0 0 0-2.8l-20-12.5a1.6 1.6 0 0 0-2.4 1.4z" fill="{c("#FFFFFF")}"/>'
-
-
-def g_netmon(c):
-    return (f'<path d="M15 46V36l7-6 7 4 8-11 6 5 6-6v24z" fill="{c("#FFFFFF")}" fill-opacity="0.35"/>'
-            f'<path d="M15 36l7-6 7 4 8-11 6 5 6-6" fill="none" stroke="{c("#FFFFFF")}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
-            f'<path d="M15 47h34" stroke="{c("#FFFFFF")}" stroke-width="2.2" stroke-linecap="round"/>')
-
-
-def g_pdf(c):
-    return (f'<path d="M20 15a3 3 0 0 1 3-3h13l9 9v28a3 3 0 0 1-3 3H23a3 3 0 0 1-3-3z" fill="{c("#FFFFFF")}"/>'
-            f'<path d="M36 12v6.5a2.5 2.5 0 0 0 2.5 2.5H45" fill="{c("#F1D2D2")}"/>'
-            f'<rect x="16" y="30" width="26" height="9" rx="2" fill="{c("#E5383B")}"/>'
-            f'<path d="M24 44h14M24 48h10" stroke="{c("#D7DBE2")}" stroke-width="1.8" stroke-linecap="round"/>')
-
-
-def g_photos(c):
-    return (f'<rect x="14" y="17" width="36" height="30" rx="4" fill="{c("#FFFFFF")}"/>'
-            f'<path d="M17 44l9.5-11 6 6.5 4.5-4.5 10 9z" fill="{c("#34A0D9")}"/>'
-            f'<circle cx="39" cy="26" r="3.6" fill="{c("#FFC24B")}"/>')
-
-
-def g_ping(c):
-    return (f'<path d="M20 44a12 12 0 0 1 12-12M20 44a20 20 0 0 1 20-20M20 44a28 28 0 0 1 28-28" fill="none" stroke="{c("#FFFFFF")}" stroke-width="3" stroke-linecap="round"/>'
-            f'<circle cx="20" cy="44" r="3.6" fill="{c("#FFFFFF")}"/>')
-
-
-def g_rules(c):
-    s = ''
-    for i, (y, kx) in enumerate(((22, 38), (32, 25), (42, 34))):
-        s += (f'<path d="M15 {y}h34" stroke="{c("#FFFFFF")}" stroke-opacity="0.75" stroke-width="2.6" stroke-linecap="round"/>'
-              f'<circle cx="{kx}" cy="{y}" r="4.2" fill="{c("#FFFFFF")}"/>')
-    return s
-
-
-def g_winengine(c):
-    return f'<circle cx="32" cy="32" r="12.5" fill="none" stroke="{c("#FFFFFF")}" stroke-width="5.5"/>'
-
-
-APPS = {
-    'delayos-files': ('#EC5C8E', '#B8174D', g_files),
-    'delayos-notepad': ('#FBC56A', '#E8922E', g_notepad),
-    'delayos-calculator': ('#545A66', '#2C3038', g_calc),
-    'delayos-settings': ('#6B707C', '#3E424C', g_settings),
-    'delayos-taskmanager': ('#8A2545', '#4A2A36', g_taskman),
-    'delayos-android': ('#4BE08F', '#1E9E58', g_android),
-    'delayos-winengine': ('#3DDC84', '#16864A', g_winengine),
-    'delayos-terminal': ('#3A3D45', '#1E2026', g_terminal),
-    'delayos-snip': ('#F57AA6', '#D6336C', g_snip),
-    'delayos-drivers': ('#F9A64B', '#D8731E', g_drivers),
-    'delayos-welcome': ('#F9B8A8', '#F08C8C', g_welcome),
-    'delayos-store': ('#8B5CF6', '#5B21B6', g_store),
-    'delayos-activity-monitor': ('#2BD3B4', '#0F7A6A', g_activity),
-    'delayos-disks': ('#7C8AA3', '#3B475C', g_disks),
-    'delayos-archive': ('#D69A5E', '#8F5527', g_archive),
-    'delayos-media-player': ('#FF8A57', '#E04A2C', g_media),
-    'delayos-network-monitor': ('#5EA2F8', '#1F4FC6', g_netmon),
-    'delayos-pdf-reader': ('#F26B6B', '#B4232A', g_pdf),
-    'delayos-photos': ('#7CD4FA', '#1592D6', g_photos),
-    'delayos-ping-monitor': ('#3FD8A0', '#0B7F57', g_ping),
-    'delayos-process-rules': ('#8A93F7', '#4639C4', g_rules),
+GRAD = {
+    'b': _lin('b', '#7089FF', '#3F58E8'),                 # blue tile / blue object
+    'k': _lin('k', '#2D3657', '#141A2E'),                 # ink tile
+    'p': _lin('p', '#FFFFFF', '#DDE3F7'),                 # paper tile
+    'g': _lin('g', B400, B700, 1, 1),                     # blue glyph on paper
+    'l': _lin('l', '#DCE2FF', '#8FA3FF', 1, 1),           # light glyph on ink
+    'h': _lin('h', WHITE, WHITE, 0, 1, ' stop-opacity=".5"', ' stop-opacity="0"', '.55'),   # top rim light
+    'f': _lin('f', '#8199FF', B600),                      # folder front
+    'r': _lin('r', '#4862EC', B800),                      # folder back
+    's': _lin('s', WHITE, '#E6EAF9'),                     # sheet / paper object
 }
 
-# Standard / third-party names that should look like our apps (copies, no symlinks)
+
+def svg64(body):
+    ids = sorted(set(re.findall(r'url\(#(\w+)\)', body)))
+    defs = '<defs>%s</defs>\n' % ''.join(GRAD[i] for i in ids) if ids else ''
+    return '<svg %s viewBox="0 0 64 64" width="64" height="64">\n%s%s\n</svg>\n' % (SVGNS, defs, body)
+
+
+def S(d, col=WHITE, wd=3, extra=''):
+    return ('<path d="%s" fill="none" stroke="%s" stroke-width="%s" stroke-linecap="round" stroke-linejoin="round"%s/>'
+            % (d, col, wd, extra))
+
+
+def Pf(d, fill=WHITE, extra=''):
+    return '<path d="%s" fill="%s"%s/>' % (d, fill, extra)
+
+
+def Rf(x, y, wd, h, rx, fill=WHITE, extra=''):
+    return '<rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="%s"%s/>' % (x, y, wd, h, rx, fill, extra)
+
+
+def Cf(cx, cy, r, fill=WHITE, extra=''):
+    return '<circle cx="%s" cy="%s" r="%s" fill="%s"%s/>' % (cx, cy, r, fill, extra)
+
+
+# --------------------------------------------------------------------------
+# app tiles: 56-unit squircle on the 64 canvas
+SQ = 'M4 32C4 9 9 4 32 4s28 5 28 28-5 28-28 28S4 55 4 32Z'
+SQI = 'M4.5 32C4.5 9.4 9.4 4.5 32 4.5s27.5 4.9 27.5 27.5-4.9 27.5-27.5 27.5S4.5 54.6 4.5 32Z'
+
+
+def tile(kind, glyph):
+    rim = '<path d="%s" fill="none" stroke="%s"/>' % (SQI, '#C9D2F5' if kind == 'p' else 'url(#h)')
+    return svg64('<path d="%s" transform="translate(0 1.2)" fill="#0A1030" opacity=".18"/>\n'
+                 '<path d="%s" fill="url(#%s)"/>\n%s\n%s' % (SQ, SQ, kind, rim, glyph))
+
+
+GP = ('M22 20h20a9 9 0 0 1 8.9 7.6l1.6 9.9a5.2 5.2 0 0 1-9.2 4.1L40 38H24l-3.3 3.6a5.2 5.2 0 0 1-9.2-4.1'
+      'l1.6-9.9A9 9 0 0 1 22 20Z')
+
+
+def gamepad(body, detail, dy=0.0):
+    g = Pf(GP, body) + S('M21 26v6.4M17.8 29.2h6.4', detail, 2.6) + Cf(40.5, 27, 1.9, detail) + Cf(45, 31.2, 1.9, detail)
+    return '<g transform="translate(0 %s)">%s</g>' % (dy, g) if dy else g
+
+
+def app_glyphs():
+    a = {}
+    # --- DelayOS apps
+    a['delayos-files'] = ('b', Pf('M14 23.5a4 4 0 0 1 4-4h7.6a4 4 0 0 1 3 1.4l1.6 1.8a2.4 2.4 0 0 0 1.8.8H46a4 4 0 0 1 4 4V29H14Z',
+                                  WHITE, ' opacity=".6"') + Rf(14, 27, 36, 20.5, 4))
+    a['delayos-notepad'] = ('p', S('M19 20h13', B300, 3.4) + S('M19 28.5h26M19 36.5h26M19 44.5h12', B600, 3.4)
+                            + Pf('M37.5 50.5l1.6-6.4 11-11a2.6 2.6 0 0 1 3.7 0l1.1 1.1a2.6 2.6 0 0 1 0 3.7l-11 11Z', B700)
+                            + Pf('M37.5 50.5l1.6-6.4 4.8 4.8Z', INK))
+    keys = ''.join(Rf(18 + c * 10.25, 29 + r * 8, 7.5, 6, 2.2, WHITE, ' opacity=".85"')
+                   for r in range(3) for c in range(3) if not (c == 2 and r > 0))
+    a['delayos-calculator'] = ('k', Rf(18, 15, 28, 10, 3.2, 'url(#l)') + keys + Rf(38.5, 37, 7.5, 14, 2.2, B500))
+    gear_d = IG.gear_d(32, 32, 17.5, 12.6, 8, 0.42, 0.64) + 'M39 32a7 7 0 1 0-14 0 7 7 0 1 0 14 0Z'
+    a['delayos-settings'] = ('b', '<path d="%s" fill="#fff" fill-rule="evenodd" stroke="#fff" stroke-width="2.4" '
+                                  'stroke-linejoin="round"/>' % gear_d)
+    a['delayos-taskmanager'] = ('k', Rf(15.5, 36, 9, 12.5, 2.8, B600) + Rf(27.5, 27, 9, 21.5, 2.8, B400)
+                                + Rf(39.5, 17, 9, 31.5, 2.8, B200))
+    a['delayos-snip'] = ('b', Rf(24, 24, 16, 16, 3.5, WHITE, ' opacity=".55"')
+                         + S('M17 26v-5a4 4 0 0 1 4-4h5M38 17h5a4 4 0 0 1 4 4v5M47 38v5a4 4 0 0 1-4 4h-5M26 47h-5a4 4 0 0 1-4-4v-5', WHITE, 3.4))
+    a['delayos-terminal'] = ('k', S('M19 24l9 8-9 8', B400, 3.8) + S('M32.5 40h12.5', WHITE, 3.8))
+    a['delayos-store'] = ('b', S('M26 25v-2.5a6 6 0 0 1 12 0V25', WHITE, 3, ' opacity=".7"')
+                          + Pf('M18 25h28l-1.6 19.3a4 4 0 0 1-4 3.7H23.6a4 4 0 0 1-4-3.7Z')
+                          + S('M32 30.5v10M27.5 36.5l4.5 4.5 4.5-4.5', B600, 2.8))
+    a['delayos-welcome'] = ('b', Pf('M30 16c1.6 10.4 6.2 15 16.6 16.6-10.4 1.6-15 6.2-16.6 16.6-1.6-10.4-6.2-15-16.6-16.6 10.4-1.6 15-6.2 16.6-16.6Z')
+                            + Pf('M46.5 12.5c.5 3.3 2 4.8 5.3 5.3-3.3.5-4.8 2-5.3 5.3-.5-3.3-2-4.8-5.3-5.3 3.3-.5 4.8-2 5.3-5.3Z', WHITE, ' opacity=".7"'))
+    pins = S('M27 15v4M32 15v4M37 15v4M27 45v4M32 45v4M37 45v4M15 27h4M15 32h4M15 37h4M45 27h4M45 32h4M45 37h4', B300, 2.6)
+    a['delayos-drivers'] = ('k', pins + Rf(21, 21, 22, 22, 4.5, 'url(#l)') + Rf(27, 27, 10, 10, 2.5, B700))
+    a['delayos-winengine'] = ('k', Rf(14, 17, 36, 30, 6, 'url(#l)') + Pf('M14 26h36v15a6 6 0 0 1-6 6H20a6 6 0 0 1-6-6Z', INK, ' opacity=".82"')
+                              + Cf(19.5, 21.5, 1.5, B700) + Cf(24.5, 21.5, 1.5, B700)
+                              + '<path d="M28.5 31.5v10l8.5-5Z" fill="#fff" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>')
+    grid = ''.join(Rf(25 + c * 7.6, 18 + r * 7.6, 6.2, 6.2, 1.8, GREEN if (r, c) == (0, 1) else WHITE) for r in range(3) for c in range(2))
+    a['delayos-android'] = ('p', Rf(20.5, 11, 23, 42, 6, 'url(#g)') + grid + S('M29 47h6', WHITE, 2.2))
+    caps = ''.join(Rf(x, 44.5, 7.5, 6.5, 2.2, WHITE, ' opacity=".6"') for x in (19.5, 28.25, 37))
+    a['delayos-gamecontrols'] = ('b', gamepad(WHITE, B600, -3.5) + caps)
+    a['delayos-winboot'] = ('b', S('M46 32a14 14 0 1 1-4.1-9.9L45.5 25.7', WHITE, 3.4) + S('M45.5 17.5v8.2h-8.2', WHITE, 3.4)
+                            + Rf(26.5, 26.5, 11, 11, 3.2, WHITE, ' opacity=".75"'))
+    a['delayos-installer'] = ('b', S('M32 14.5v18M24 25.5l8 8 8-8', WHITE, 3.8)
+                              + S('M16.5 38v5.5a4.5 4.5 0 0 0 4.5 4.5h22a4.5 4.5 0 0 0 4.5-4.5V38', WHITE, 3.8, ' opacity=".7"'))
+    # --- Windows-switch game placeholders: neutral genre glyphs, never a game's own logo
+    a['delayos-winboot-game'] = ('k', gamepad('url(#l)', B800, 1.2))
+    a['delayos-winboot-valorant'] = ('k', '<circle cx="32" cy="32" r="11.5" fill="none" stroke="#A9B8FF" stroke-width="3.2"/>'
+                                     + S('M32 13v9M32 42v9M13 32h9M42 32h9', WHITE, 3.2) + Cf(32, 32, 2.6))
+    a['delayos-winboot-lol'] = ('k', Pf('M32 13l14 5v10.5c0 9.5-5.7 16.3-14 20.5-8.3-4.2-14-11-14-20.5V18Z', 'url(#l)')
+                                + S('M32 20.5v17.5M26.5 38h11M32 38v5', B800, 3))
+    wins = ''.join(Rf(x, y, 3, 3.4, .8, B800) for x, y in ((20, 35), (25, 35), (20, 41.5), (25, 41.5), (34, 27), (40, 27), (34, 33.5), (40, 33.5), (34, 40), (40, 40)))
+    a['delayos-winboot-fortnite'] = ('k', Rf(16.5, 30.5, 15, 20.5, 2.5, 'url(#l)') + Rf(30.5, 22, 16, 29, 2.5, B400) + wins
+                                     + Pf('M24.5 11l-7 10h5.2l-2.7 8 8.5-11.5h-5.2l3-6.5Z', WHITE))
+    a['delayos-winboot-pubg'] = ('k', S('M15 29.5l14.5 15.5M49 29.5 34.5 45M26.5 29.5l4 15M37.5 29.5l-4 15', B300, 1.8)
+                                 + Pf('M14 30a18 18 0 0 1 36 0q-4.5-3.8-9 0-4.5-3.8-9 0-4.5-3.8-9 0-4.5-3.8-9 0Z', 'url(#l)')
+                                 + Rf(26.5, 43.5, 11, 8.5, 2.2, WHITE))
+    # --- generic utilities (also used for the KDE apps that show up in Start)
+    a['delayos-activity-monitor'] = ('b', S('M13 33h8l4-10 6.5 19 5-13 3 4H51', WHITE, 3.4))
+    a['delayos-disks'] = ('k', Cf(32, 32, 17.5, 'url(#l)') + Pf('M32 32V14.5A17.5 17.5 0 0 1 49.5 32Z', B600)
+                          + Cf(32, 32, 6, INK) + Cf(32, 32, 2.2, WHITE))
+    a['delayos-archive'] = ('p', Pf('M17 26h30v17.5a4 4 0 0 1-4 4H21a4 4 0 0 1-4-4Z', 'url(#g)') + Rf(14, 17, 36, 9.5, 3.2, B800)
+                            + Rf(27, 31.5, 10, 5.5, 2.75, WHITE))
+    a['delayos-media-player'] = ('b', Pf('M25 20.5v23a2 2 0 0 0 3 1.7l19-11.5a2 2 0 0 0 0-3.4L28 18.8a2 2 0 0 0-3 1.7Z'))
+    a['delayos-network-monitor'] = ('k', Pf('M14 47V37l8-7 7 5 8-12 6 6 7-7v25Z', B600, ' opacity=".5"')
+                                    + S('M14 37l8-7 7 5 8-12 6 6 7-7', B200, 3.2))
+    a['delayos-pdf-reader'] = ('p', Pf('M21 16a4 4 0 0 1 4-4h11l9 9v27a4 4 0 0 1-4 4H25a4 4 0 0 1-4-4Z', 'url(#g)')
+                               + Pf('M36 12v5a4 4 0 0 0 4 4h5Z', B200) + Rf(15, 29.5, 27, 13, 3.2, CORAL)
+                               + S('M20 39.5v-7h2.2a2.2 2.2 0 0 1 0 4.4H20M26.5 32.5v7H28a3.5 3.5 0 0 0 0-7ZM34 39.5v-7h4M34 36h3', WHITE, 1.8))
+    a['delayos-photos'] = ('p', Cf(41.5, 23.5, 5, AMBER)
+                           + Pf('M13.5 47a2 2 0 0 1-1.6-3.2l11-14.8a2 2 0 0 1 3.2 0l7 9.3 3.9-4.7a2 2 0 0 1 3.1 0l8.8 10.1a2 2 0 0 1-1.5 3.3Z', 'url(#g)'))
+    a['delayos-ping-monitor'] = ('k', S('M20 32a12 12 0 0 1 12 12M20 21a23 23 0 0 1 23 23', B400, 3.4) + Cf(20, 44, 3.8, WHITE))
+    a['delayos-process-rules'] = ('b', S('M16 22h32M16 32h32M16 42h32', WHITE, 3, ' opacity=".55"')
+                                  + Cf(38, 22, 4.6) + Cf(25, 32, 4.6) + Cf(34, 42, 4.6))
+    a['delayos-clock'] = ('p', Cf(32, 32, 18, 'url(#g)') + S('M32 21.5V32l7.5 4.5', WHITE, 3.4))
+    a['delayos-weather'] = ('b', Cf(44, 20, 7.5, AMBER) + Pf('M22 47a8 8 0 0 1-.7-16 11 11 0 0 1 21-2.5A9.3 9.3 0 0 1 41 47Z'))
+    a['delayos-info'] = ('k', '<circle cx="32" cy="32" r="16" fill="none" stroke="%s" stroke-width="3.2"/>' % B300
+                         + S('M32 30.5v9.5', WHITE, 3.8) + Cf(32, 24, 2.4, WHITE))
+    a['delayos-emoji'] = ('b', '<circle cx="32" cy="32" r="16" fill="none" stroke="#fff" stroke-width="3.2"/>'
+                          + S('M25 35.5a8 8 0 0 0 14 0', WHITE, 3.2) + Cf(26.5, 27.5, 2.2) + Cf(37.5, 27.5, 2.2))
+    return {k: tile(kind, _clean(g)) for k, (kind, g) in a.items()}
+
+
+def _clean(s):
+    """2.5 -> 2.5 (keeps hand-written path data tidy)."""
+    return re.sub(r'(\d*\.\d)00(?!\d)', r'\1', s)
+
+
+# standard / third-party names that take the look of our apps (copies, no symlinks: they break on Windows checkouts)
 ALIASES = {
     'delayos-files': ['system-file-manager', 'org.kde.dolphin', 'folder-manager'],
     'delayos-notepad': ['accessories-text-editor', 'org.kde.kwrite', 'org.kde.kate'],
     'delayos-calculator': ['accessories-calculator', 'org.kde.kcalc', 'org.gnome.Calculator'],
     'delayos-settings': ['preferences-system', 'systemsettings', 'org.kde.systemsettings'],
     'delayos-taskmanager': ['utilities-system-monitor', 'org.kde.plasma-systemmonitor', 'ksysguard'],
-    'delayos-android': ['waydroid', 'Waydroid'],
-    'delayos-terminal': ['utilities-terminal', 'org.kde.konsole', 'konsole', 'terminal'],
+    'delayos-android': ['waydroid'],
+    'delayos-terminal': ['utilities-terminal', 'org.kde.konsole', 'konsole', 'terminal', 'foot'],
     'delayos-snip': ['org.kde.spectacle', 'spectacle', 'applets-screenshooter', 'accessories-screenshot'],
     'delayos-store': ['org.kde.discover', 'plasmadiscover', 'system-software-install'],
-    'delayos-disks': ['org.gnome.DiskUtility', 'gnome-disks', 'partitionmanager', 'org.kde.partitionmanager'],
+    'delayos-installer': ['calamares', 'system-installer'],
+    'delayos-disks': ['org.gnome.DiskUtility', 'gnome-disks', 'partitionmanager', 'org.kde.partitionmanager', 'filelight',
+                      'org.kde.filelight'],
     'delayos-archive': ['org.kde.ark', 'ark', 'org.gnome.FileRoller', 'file-roller', 'utilities-file-archiver'],
-    'delayos-media-player': ['org.kde.haruna', 'haruna', 'vlc', 'multimedia-video-player'],
+    'delayos-media-player': ['org.kde.haruna', 'haruna', 'multimedia-video-player'],
     'delayos-pdf-reader': ['org.kde.okular', 'okular'],
     'delayos-photos': ['org.kde.gwenview', 'gwenview', 'multimedia-photo-viewer'],
+    'delayos-clock': ['org.kde.kclock', 'kclock'],
+    'delayos-weather': ['org.kde.kweather', 'kweather'],
+    'delayos-info': ['hwinfo', 'kinfocenter', 'org.kde.kinfocenter'],
+    'delayos-emoji': ['preferences-desktop-emoticons', 'org.kde.plasma.emojier'],
 }
 
 
 # --------------------------------------------------------------------------
-# SETTINGS CATEGORY ICONS (28 px dark tiles with coloured glyph)
-def cat_icon(inner):
-    return f'''<svg {SVGNS} viewBox="0 0 28 28" width="28" height="28">
-  <rect x="0" y="0" width="28" height="28" rx="7" fill="#2A2C33"/>
-  <rect x="0.5" y="0.5" width="27" height="27" rx="6.5" fill="none" stroke="#ffffff" stroke-opacity="0.06"/>
-  {inner}
-</svg>
-'''
+# places: folders and the trash
+FOLDER_BACK = 'M6 17a5 5 0 0 1 5-5h12.6a5 5 0 0 1 3.8 1.8l2 2.4a3 3 0 0 0 2.3 1.1H53a5 5 0 0 1 5 5V30H6Z'
 
 
-CATS = {
-    'system': '<rect x="7.5" y="8.5" width="13" height="9" rx="1.3" fill="#9EA3AD"/><rect x="8.8" y="9.8" width="10.4" height="6.4" rx=".6" fill="#C6CAD2"/><path d="M5.5 19.2h17" stroke="#9EA3AD" stroke-width="1.8" stroke-linecap="round"/>',
-    'bluetooth': '<path d="M10 10.5l8 7-4 3.5v-14l4 3.5-8 7" fill="none" stroke="#4C8DF6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
-    'network': '<g fill="none" stroke="#4FC3E8" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 12a10.5 10.5 0 0 1 15 0"/><path d="M9 14.8a7 7 0 0 1 10 0"/><path d="M11.6 17.5a3.4 3.4 0 0 1 4.8 0"/></g><circle cx="14" cy="20" r="1.2" fill="#4FC3E8"/>',
-    'personalization': '<path d="M14 6.5a7.5 7.5 0 0 0 0 15c1.2 0 1.8-.8 1.8-1.7 0-.9-.6-1.2-.6-2 0-.9.7-1.5 1.6-1.5h1.6a3.3 3.3 0 0 0 3.3-3.3C21.7 9.4 18.2 6.5 14 6.5z" fill="#F06292"/><circle cx="10.4" cy="12.6" r="1.25" fill="#2A2C33"/><circle cx="13.2" cy="9.8" r="1.25" fill="#2A2C33"/><circle cx="17" cy="10.6" r="1.25" fill="#2A2C33"/><circle cx="10.8" cy="16.4" r="1.25" fill="#2A2C33"/>',
-    'apps': '<g fill="#F5A142"><rect x="7.5" y="7.5" width="5.8" height="5.8" rx="1.6"/><rect x="14.7" y="7.5" width="5.8" height="5.8" rx="1.6"/><rect x="7.5" y="14.7" width="5.8" height="5.8" rx="1.6"/><rect x="14.7" y="14.7" width="5.8" height="5.8" rx="1.6"/></g>',
-    'accounts': '<circle cx="14" cy="11" r="3.6" fill="#8E9BB4"/><path d="M7.5 20.5a6.5 6.5 0 0 1 13 0z" fill="#8E9BB4"/>',
-    'time-language': '<circle cx="14" cy="14" r="7.5" fill="#3DDC84"/><path d="M14 10v4.3l2.8 1.7" fill="none" stroke="#173D27" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
-    'app-support': '<rect x="9.5" y="7" width="12" height="9" rx="1.8" fill="#1E8F66"/><rect x="6.5" y="11" width="12" height="10" rx="1.8" fill="#2BC48A"/><path d="M6.5 13.8h12" stroke="#1C6E50" stroke-width="1"/>',
-    'update-drivers': '<g fill="none" stroke="#E0245E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12.5a6.6 6.6 0 0 0-11.8-2.6"/><path d="M8.4 6.8v3.4h3.4"/><path d="M7.5 15.5a6.6 6.6 0 0 0 11.8 2.6"/><path d="M19.6 21.2v-3.4h-3.4"/></g>',
+def folder(emblem=''):
+    return svg64(_clean(Pf(FOLDER_BACK, 'url(#r)') + '\n' + Rf(6, 22.5, 52, 31.5, 6, 'url(#f)') + '\n'
+                        + '<rect x="6.5" y="23" width="51" height="30.5" rx="5.5" fill="none" stroke="url(#h)"/>'
+                        + ('\n<g opacity=".92">%s</g>' % emblem if emblem else '')))
+
+
+def trash(full):
+    body = 'M17 23h30l-2.3 29.4a5 5 0 0 1-5 4.6H24.3a5 5 0 0 1-5-4.6Z'
+    if full:
+        b = Pf(body, 'url(#f)') + S('M26 30v19M32 30v19M38 30v19', WHITE, 2.6, ' opacity=".75"')
+    else:
+        b = '<path d="%s" fill="url(#s)" stroke="%s"/>' % (body, EDGE) + S('M26 30v19M32 30v19M38 30v19', B300, 2.6)
+    return svg64(_clean(S('M26 13v-1.5a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3V13', B700, 3) + Rf(13, 13, 38, 6.5, 3.25, B700) + '\n' + b))
+
+
+def places():
+    e = {
+        'folder': '',
+        'folder-documents': S('M25 33.5h14M25 38.5h14M25 43.5h8', WHITE, 2.6),
+        'folder-download': S('M32 31.5v11M26.5 38l5.5 5.5 5.5-5.5', WHITE, 2.6),
+        'folder-music': S('M29 44.5V33l9.5-2.2V42', WHITE, 2.6) + Cf(26.4, 44.6, 2.7) + Cf(35.9, 42.2, 2.7),
+        'folder-pictures': Pf('M23 45.5l6.5-8.5 4 5 2.5-2.8 5 6.3Z') + Cf(38, 33.5, 2.4),
+        'folder-videos': '<path d="M28.5 32.5v12l10.5-6Z" fill="#fff" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>',
+        'user-desktop': '<rect x="23.5" y="31" width="17" height="11.5" rx="2.5" fill="none" stroke="#fff" stroke-width="2.6"/>'
+                        + S('M28.5 46.5h7', WHITE, 2.6),
+        'user-home': S('M24 39l8-7.5 8 7.5M26.5 37.5v8.5h11v-8.5', WHITE, 2.6),
+        'folder-games': S('M27 35.5v6M24 38.5h6', WHITE, 2.6) + Cf(37.2, 36.7, 1.8) + Cf(40.6, 40.4, 1.8),
+    }
+    out = {k: folder(v) for k, v in e.items()}
+    out['user-trash'] = trash(False)
+    out['user-trash-full'] = trash(True)
+    return out
+
+
+PLACE_ALIASES = {
+    'folder': ['inode-directory', 'folder-blue', 'default-folder'],
+    'folder-download': ['folder-downloads'],
+    'folder-pictures': ['folder-images', 'folder-image'],
+    'folder-videos': ['folder-video'],
+    'user-desktop': ['folder-desktop'],
+    'user-home': ['folder-home'],
 }
 
 
 # --------------------------------------------------------------------------
-# SYMBOLIC LINE GLYPHS (24 units, 1.75 stroke, currentColor)
-def gear24():
-    return gear(12, 12, 9.6, 7.4, 8, 0.46, 0.10)
+# mimetypes: a sheet with a folded corner and one content glyph
+SHEET = ('<path d="M13 9a5 5 0 0 1 5-5h20l13 13v38a5 5 0 0 1-5 5H18a5 5 0 0 1-5-5Z" fill="url(#s)" stroke="%s"/>'
+         '<path d="M38 4v8a5 5 0 0 0 5 5h8Z" fill="%s"/>' % (EDGE, B200))
+BOX = S('M32 27l12 5.7v12.6L32 51l-12-5.7V32.7Z', B600, 2.8) + S('M20 32.7l12 5.7 12-5.7M32 38.4V51', B600, 2.8)
 
 
-SYM = {
-    'search': '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20.5 20.5"/>',
-    'task-view': '<rect x="3" y="8" width="13" height="11" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-3"/>',
-    'wifi': '<path d="M2.5 9a14 14 0 0 1 19 0"/><path d="M5.5 12.5a9.5 9.5 0 0 1 13 0"/><path d="M8.7 16a5 5 0 0 1 6.6 0"/><circle cx="12" cy="19.5" r=".9" fill="currentColor" stroke="none"/>',
-    'wifi-off': '<path d="M2.5 9a14 14 0 0 1 4.2-2.6"/><path d="M11 5.5a14 14 0 0 1 10.5 3.5"/><path d="M5.5 12.5a9.5 9.5 0 0 1 3.2-2"/><path d="M15.5 10.8a9.5 9.5 0 0 1 3 1.7"/><path d="M8.7 16a5 5 0 0 1 6.6 0"/><circle cx="12" cy="19.5" r=".9" fill="currentColor" stroke="none"/><path d="M3 3l18 18"/>',
-    'wired': '<rect x="9" y="2.5" width="6" height="5" rx="1"/><rect x="2.5" y="16.5" width="6" height="5" rx="1"/><rect x="15.5" y="16.5" width="6" height="5" rx="1"/><path d="M12 7.5v4.5M5.5 16.5V12h13v4.5"/>',
-    'speaker': '<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18.5 6a8.5 8.5 0 0 1 0 12"/>',
-    'speaker-low': '<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/>',
-    'speaker-muted': '<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
-    'microphone': '<rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v4"/>',
-    'battery': '<rect x="2.5" y="7" width="17" height="10" rx="2.2"/><path d="M22 10.5v3"/><rect x="5" y="9.5" width="10" height="5" rx=".8" fill="currentColor" stroke="none"/>',
-    'battery-full': '<rect x="2.5" y="7" width="17" height="10" rx="2.2"/><path d="M22 10.5v3"/><rect x="5" y="9.5" width="12" height="5" rx=".8" fill="currentColor" stroke="none"/>',
-    'battery-low': '<rect x="2.5" y="7" width="17" height="10" rx="2.2"/><path d="M22 10.5v3"/><rect x="5" y="9.5" width="3" height="5" rx=".8" fill="currentColor" stroke="none"/>',
-    'battery-charging': '<path d="M7 17H4.7a2.2 2.2 0 0 1-2.2-2.2V9.2A2.2 2.2 0 0 1 4.7 7h2.3M15 7h2.3a2.2 2.2 0 0 1 2.2 2.2v5.6a2.2 2.2 0 0 1-2.2 2.2H15"/><path d="M22 10.5v3"/><path d="M12 6.5 9 12h4l-2.5 5.5"/>',
-    'bluetooth': '<path d="M7 7.5 17 16.5l-5 4.5V3l5 4.5L7 16.5"/>',
-    'bell': '<path d="M6 9a6 6 0 0 1 12 0c0 6.5 2.5 8 2.5 8h-17S6 15.5 6 9"/><path d="M10.3 20.5a2 2 0 0 0 3.4 0"/>',
-    'bell-off': '<path d="M8.7 3.9A6 6 0 0 1 18 9c0 2.3.3 4 .8 5.2"/><path d="M17 17H3.5S6 15.5 6 9c0-.7.1-1.3.3-1.9"/><path d="M10.3 20.5a2 2 0 0 0 3.4 0"/><path d="M3 3l18 18"/>',
-    'bolt': '<path d="M13 2.5 4 13.5h7.5l-1 8 9-11H12z"/>',
-    'gamepad': '<path d="M7 6.5h10a4 4 0 0 1 3.9 3.2l1 5.6a3 3 0 0 1-5.3 2.3L15 15.5H9l-1.6 2.1a3 3 0 0 1-5.3-2.3l1-5.6A4 4 0 0 1 7 6.5z"/><path d="M6.5 11h4M8.5 9v4"/><circle cx="15" cy="10.3" r=".8" fill="currentColor" stroke="none"/><circle cx="17.3" cy="12.3" r=".8" fill="currentColor" stroke="none"/>',
-    'gamepad-filled': '<path fill-rule="evenodd" fill="currentColor" stroke="none" d="M7 5.5h10a5 5 0 0 1 4.9 4l1 5.6a3.9 3.9 0 0 1-6.9 3.1L14.6 16.5H9.4L8 18.2a3.9 3.9 0 0 1-6.9-3.1l1-5.6A5 5 0 0 1 7 5.5zM7.6 9.2v1.5H6.1v1.6h1.5v1.5h1.6v-1.5h1.5v-1.6H9.2V9.2zM15.9 10.3a1 1 0 1 1-2 0 1 1 0 1 1 2 0zM18.3 12.5a1 1 0 1 1-2 0 1 1 0 1 1 2 0z"/>',
-    'snip': '<path d="M3.5 8V6a2.5 2.5 0 0 1 2.5-2.5h2M16 3.5h2A2.5 2.5 0 0 1 20.5 6v2M20.5 16v2a2.5 2.5 0 0 1-2.5 2.5h-2M8 20.5H6A2.5 2.5 0 0 1 3.5 18v-2"/><circle cx="12" cy="12" r="3"/>',
-    'screen-record': '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/>',
-    'gear': None,  # generated below
-    'lock': '<rect x="5" y="11" width="14" height="10" rx="2.2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
-    'unlock': '<rect x="5" y="11" width="14" height="10" rx="2.2"/><path d="M8 11V7.5a4 4 0 0 1 7.7-1.5"/>',
-    'power': '<path d="M12 2.5v9"/><path d="M17.7 6.3a8.5 8.5 0 1 1-11.4 0"/>',
-    'restart': '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/>',
-    'logout': '<path d="M9.5 20.5H6A2.5 2.5 0 0 1 3.5 18V6A2.5 2.5 0 0 1 6 3.5h3.5"/><path d="M16 16.5 20.5 12 16 7.5M20.5 12H9"/>',
-    'moon': '<path d="M12.5 3.5a6.5 6.5 0 0 0 8 8 8.5 8.5 0 1 1-8-8z"/>',
-    'sun': '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
-    'brightness': '<circle cx="12" cy="12" r="3.5"/><path d="M12 4v1.5M12 18.5V20M4 12h1.5M18.5 12H20M6.3 6.3l1.1 1.1M16.6 16.6l1.1 1.1M6.3 17.7l1.1-1.1M16.6 7.4l1.1-1.1"/>',
-    'night-light': '<path d="M12.5 3.5a6.5 6.5 0 0 0 8 8 8.5 8.5 0 1 1-8-8z"/><path d="M18 3v3M16.5 4.5h3"/>',
-    'dnd': '<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',
-    'airplane': '<path d="M10.5 3.5c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5V9l7.5 4.5v2L13.5 13v4.5l2.5 2V21l-4-1-4 1v-1.5l2.5-2V13L3 15.5v-2L10.5 9z"/>',
-    'folder': '<path d="M3 6.5A2 2 0 0 1 5 4.5h4l2 2.5h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
-    'folder-open': '<path d="M5 19.5h12.5a2 2 0 0 0 1.9-1.4l1.6-5.4a1.5 1.5 0 0 0-1.4-1.9H8.4a2 2 0 0 0-1.9 1.4L4.5 19"/><path d="M3 17V6.5a2 2 0 0 1 2-2h4l2 2.5h6a2 2 0 0 1 2 2v1.8"/>',
-    'folder-plus': '<path d="M3 6.5A2 2 0 0 1 5 4.5h4l2 2.5h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v6M9 13.5h6"/>',
-    'file': '<path d="M14 2.5H6.5a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8z"/><path d="M14 2.5V8h5.5"/>',
-    'file-text': '<path d="M14 2.5H6.5a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8z"/><path d="M14 2.5V8h5.5M8.5 13h7M8.5 17h5"/>',
-    'file-plus': '<path d="M14 2.5H6.5a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8z"/><path d="M14 2.5V8h5.5M12 11.5v6M9 14.5h6"/>',
-    'clipboard': '<rect x="8" y="2.5" width="8" height="4" rx="1"/><path d="M16 4.5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h2"/>',
-    'copy': '<rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/>',
-    'cut': '<circle cx="6.5" cy="6.5" r="2.8"/><circle cx="6.5" cy="17.5" r="2.8"/><path d="M20 4.5 8.6 15.4M14.5 14.4 20 19.5M8.6 8.6 12 12"/>',
-    'paste': '<rect x="8" y="2.5" width="8" height="4" rx="1"/><path d="M16 4.5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h2"/><path d="M9 12.5h6M9 16.5h4"/>',
-    'rename': '<path d="M16.5 3.5a2.3 2.3 0 0 1 3.3 3.3L7.5 19l-4 1 1-4z"/><path d="M14.5 5.5l3.3 3.3"/>',
-    'share': '<circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="M8.2 13.3l7.6 4M15.8 6.7l-7.6 4"/>',
-    'sort': '<path d="M3.5 8 7 4.5 10.5 8M7 4.5v15M20.5 16 17 19.5 13.5 16M17 19.5v-15"/>',
-    'refresh': '<path d="M20.5 12a8.5 8.5 0 0 1-14.6 5.9L3.5 15.5"/><path d="M3.5 20.5v-5h5"/><path d="M3.5 12a8.5 8.5 0 0 1 14.6-5.9l2.4 2.4"/><path d="M20.5 3.5v5h-5"/>',
-    'undo': '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
-    'redo': '<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
-    'image': '<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="9" cy="9" r="1.8"/><path d="M21 15l-3.6-3.6a2 2 0 0 0-2.8 0L5 21"/>',
-    'monitor': '<rect x="2.5" y="3.5" width="19" height="13" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/>',
-    'brush': '<path d="M18.5 3.5a2.1 2.1 0 0 1 3 3L13 15l-3-3z"/><path d="M10 12c-2.5 0-4 1.6-4 3.6 0 1.8-1.2 2.9-2.5 3.4 1 1 2.6 1.5 4.3 1.5 2.9 0 5.2-2 5.2-4.9"/>',
-    'palette': '<path d="M12 3a9 9 0 0 0 0 18c1.4 0 2.1-.9 2.1-2 0-1-.7-1.4-.7-2.4 0-1 .8-1.8 1.9-1.8h1.9A3.9 3.9 0 0 0 21 10.9C21 6.5 17 3 12 3z"/><circle cx="7.6" cy="11.3" r="1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7.6" r="1" fill="currentColor" stroke="none"/><circle cx="15.2" cy="8.3" r="1" fill="currentColor" stroke="none"/>',
-    'pin': '<path d="M9 3.5h6M10 3.5v6l-3.5 4.5h11L14 9.5v-6M12 14v6.5"/>',
-    'pin-off': '<path d="M9 3.5h6M14 3.5v6l3.5 4.5H14M10 6v3.5L6.5 14H12M12 14v6.5M3 3l18 18"/>',
-    'trash': '<path d="M3.5 6h17M18.5 6v13.5a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V6M8.5 6V4.5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2V6M10 11v6M14 11v6"/>',
-    'close': '<path d="M18 6 6 18M6 6l12 12"/>',
-    'check': '<path d="M20 6.5 9 17.5l-5-5"/>',
-    'check-circle': '<circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7L16 9.7"/>',
-    'plus': '<path d="M12 5v14M5 12h14"/>',
-    'minus': '<path d="M5 12h14"/>',
-    'chevron-left': '<path d="M15 18l-6-6 6-6"/>',
-    'chevron-right': '<path d="M9 18l6-6-6-6"/>',
-    'chevron-up': '<path d="M18 15l-6-6-6 6"/>',
-    'chevron-down': '<path d="M6 9l6 6 6-6"/>',
-    'arrow-left': '<path d="M19 12H5M11 18l-6-6 6-6"/>',
-    'arrow-right': '<path d="M5 12h14M13 6l6 6-6 6"/>',
-    'arrow-up': '<path d="M12 19V5M6 11l6-6 6 6"/>',
-    'more-horizontal': '<circle cx="5.5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="18.5" cy="12" r="1.2" fill="currentColor"/>',
-    'more-vertical': '<circle cx="12" cy="5.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="18.5" r="1.2" fill="currentColor"/>',
-    'info': '<circle cx="12" cy="12" r="9"/><path d="M12 16.5v-5M12 8h.01"/>',
-    'warning': '<path d="M10.3 3.9 2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/>',
-    'home': '<path d="M3.5 10 12 3.5 20.5 10v9a2 2 0 0 1-2 2h-4v-6h-5v6h-4a2 2 0 0 1-2-2z"/>',
-    'star': '<path d="M12 3.2l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.3 9.6l6-.9z"/>',
-    'clock': '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
-    'calendar': '<rect x="3.5" y="4.5" width="17" height="16" rx="2.2"/><path d="M8 2.5v4M16 2.5v4M3.5 10h17"/>',
-    'keyboard': '<rect x="2.5" y="5.5" width="19" height="13" rx="2.2"/><path d="M6.5 9.5h.01M10 9.5h.01M14 9.5h.01M17.5 9.5h.01M6.5 12.5h.01M10 12.5h.01M14 12.5h.01M17.5 12.5h.01M8 15.5h8"/>',
-    'mouse': '<rect x="6" y="2.5" width="12" height="19" rx="6"/><path d="M12 6.5v4"/>',
-    'emoji': '<circle cx="12" cy="12" r="9"/><path d="M8.3 14.2a4.5 4.5 0 0 0 7.4 0"/><path d="M9 9.5h.01M15 9.5h.01"/>',
-    'user': '<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
-    'eye': '<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
-    'download': '<path d="M12 3.5v11.5M7 10.5l5 5 5-5M4.5 20.5h15"/>',
-    'upload': '<path d="M12 15.5V4M7 8.5l5-5 5 5M4.5 20.5h15"/>',
-    'external-link': '<path d="M14.5 3.5h6v6M20.5 3.5 11 13M18 14v4.5a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2H10"/>',
-    'filter': '<path d="M21 4H3l7 8.3V19l4 2v-8.7z"/>',
-    'grid': '<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>',
-    'list': '<path d="M8.5 6h12M8.5 12h12M8.5 18h12M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>',
-    'sliders': '<path d="M4 6.5h9M17 6.5h3M4 12h3M11 12h9M4 17.5h11M19 17.5h1"/><circle cx="15" cy="6.5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17.5" r="2"/>',
-    'window-minimize': '<path d="M6 12h12"/>',
-    'window-maximize': '<rect x="5.5" y="5.5" width="13" height="13" rx="2"/>',
-    'window-restore': '<rect x="4.5" y="8.5" width="11" height="11" rx="2"/><path d="M8.5 8.5V6.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2"/>',
-    'app-window': '<rect x="2.5" y="4" width="19" height="16" rx="2.2"/><path d="M2.5 8.5h19M6 6.3h.01M8.7 6.3h.01"/>',
-    'terminal': '<rect x="2.5" y="4" width="19" height="16" rx="2.2"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/>',
-    'calculator': '<rect x="4.5" y="2.5" width="15" height="19" rx="2.2"/><path d="M8 6.5h8M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5v3.5M8.5 18h.01M12 18h.01"/>',
-    'globe': '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
-    'shield': '<path d="M12 21.5s7.5-3.5 7.5-9.5V5.5L12 2.5l-7.5 3V12c0 6 7.5 9.5 7.5 9.5z"/>',
-    'key': '<circle cx="7.5" cy="15.5" r="4"/><path d="M10.3 12.7 19.5 3.5M16 7l2.5 2.5M18.5 4.5l2 2"/>',
-    'cpu': '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx=".8"/><path d="M9.5 2.5V6M14.5 2.5V6M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5"/>',
-    'memory': '<rect x="2.5" y="7" width="19" height="10" rx="1.5"/><path d="M6.5 10.5v3M10 10.5v3M14 10.5v3M17.5 10.5v3M6 17v2.5M18 17v2.5"/>',
-    'harddrive': '<rect x="2.5" y="13" width="19" height="7.5" rx="2"/><path d="M5.5 13 8 4.5h8l2.5 8.5M6.5 16.8h.01M10 16.8h.01"/>',
-    'usb': '<path d="M12 21.5V5.5M9 7.5l3-4 3 4M12 17.5l-5-3v-3M12 14.5l5-2.5v-2"/><circle cx="12" cy="20" r="1.5"/><rect x="5.5" y="9.5" width="3" height="2" fill="currentColor"/><circle cx="17" cy="8.5" r="1.4"/>',
-    'package': '<path d="M21 8v8.5a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4a2 2 0 0 1-1-1.7V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4a2 2 0 0 1 1 1.7z"/><path d="M3.3 7 12 12l8.7-5M12 22V12M7.5 4.5l9 5.2"/>',
-    'leaf': '<path d="M11 20.5A7 7 0 0 1 9.8 6.6C15.5 5.5 17 4.5 19 2.5c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z"/><path d="M3 21.5c0-3 1.8-5.4 5-6 2.4-.5 4.2-1.2 6-3.5"/>',
-    'squares-4': '<rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/>',
-    'sparkles': '<path d="M10 3.5l1.7 4.8 4.8 1.7-4.8 1.7L10 16.5l-1.7-4.8L3.5 10l4.8-1.7z"/><path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
-    'zoom-in': '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5M10.5 7.5v6M7.5 10.5h6"/>',
-    'zoom-out': '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5M7.5 10.5h6"/>',
-    'camera': '<path d="M14.5 4.5h-5L7.5 7H4.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h15a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
-    'cast': '<path d="M2.5 8V6a2 2 0 0 1 2-2h15a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2.5 12a8 8 0 0 1 8 8M2.5 16a4 4 0 0 1 4 4M2.5 20h.01"/>',
-    'desktop': '<rect x="2.5" y="3.5" width="19" height="13" rx="2"/><path d="M8.5 20.5h7M12 16.5v4M2.5 13h19"/>',
-    'apps': '<circle cx="6" cy="6" r="1.6"/><circle cx="12" cy="6" r="1.6"/><circle cx="18" cy="6" r="1.6"/><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/><circle cx="6" cy="18" r="1.6"/><circle cx="12" cy="18" r="1.6"/><circle cx="18" cy="18" r="1.6"/>',
-    'hash': '<path d="M4.5 9h15M4.5 15h15M10 3.5 8 20.5M16 3.5l-2 17"/>',
-    'text': '<path d="M5 6.5V4.5h14v2M12 4.5v15M9 19.5h6"/>',
-    'phone-android': '<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/>',
-    'bug': '<rect x="7.5" y="7" width="9" height="13" rx="4.5"/><path d="M12 11v9M7.5 12.5H3.5M20.5 12.5h-4M8 16.5l-3.5 2M16 16.5l3.5 2M8 9 5 6.5M16 9l3-2.5M9.5 7a2.5 2.5 0 0 1 5 0"/>',
+def mimes():
+    teeth = ''.join(Rf(29 if i % 2 == 0 else 32, 8 + i * 4, 3, 2.6, .6, B400) for i in range(7))
+    m = {
+        'text-x-generic': S('M21 26h12M21 33.5h22M21 41h22M21 48.5h14', B400, 3),
+        'image-x-generic': Cf(37.5, 30.5, 3.8, AMBER) + Pf('M19 51.5l9-12 6 7 4-4.2 7 9.2Z', 'url(#g)'),
+        'audio-x-generic': S('M27.5 49V31.5l13-3V46', B600, 3) + Cf(24.3, 49, 3.7, B600) + Cf(37.3, 46, 3.7, B600),
+        'video-x-generic': Rf(19, 27, 26, 21, 5, 'url(#g)')
+                           + '<path d="M29 32.5v10l8.5-5Z" fill="#fff" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>',
+        'package-x-generic': teeth + Rf(27, 38, 10, 13, 3.2, 'url(#g)') + Rf(30.5, 43.5, 3, 4.5, 1.5, WHITE),
+        'application-pdf': Pf('M13 29h38v18H13Z', CORAL)
+                           + S('M21 43v-10h3a3 3 0 0 1 0 6h-3M29.5 33v10h2a5 5 0 0 0 0-10ZM39.5 43v-10h5M39.5 38h4', WHITE, 2.4),
+        'application-x-executable': Rf(19, 26, 26, 22, 4.5, 'url(#g)') + Cf(23.5, 30, 1.2) + Cf(27.5, 30, 1.2)
+                                    + Rf(22, 33.5, 20, 11.5, 2, WHITE, ' opacity=".92"'),
+        'application-x-msi': S('M32 20v8M28.5 25l3.5 3.5 3.5-3.5', B400, 2.8)
+                             + S('M32 33l10 4.7v8.6L32 51l-10-4.7v-8.6Z', B600, 2.8) + S('M22 37.7l10 4.7 10-4.7', B600, 2.8),
+        'application-vnd.android.package-archive': Rf(22.5, 23, 19, 30, 4.5, 'url(#g)') + S('M32 28.5v9.5M27.5 34l4.5 4.5 4.5-4.5', WHITE, 2.6)
+                                                   + S('M29.5 47.5h5', GREEN, 2.4),
+        'application-x-deb': BOX,
+        'text-x-script': S('M27.5 31l-7 7 7 7M36.5 31l7 7-7 7', B600, 3),
+        'unknown': S('M21 26h12M21 33.5h22M21 41h9', '#D3DAF7', 3),
+    }
+    return {k: svg64(_clean(SHEET + '\n' + v)) for k, v in m.items()}
+
+
+MIME_ALIASES = {
+    'text-x-generic': ['text-plain', 'x-office-document', 'text-markdown', 'text-x-log', 'text-rtf', 'application-rtf'],
+    'image-x-generic': ['image-png', 'image-jpeg', 'image-gif', 'image-bmp', 'image-webp', 'image-svg+xml', 'image-tiff',
+                        'image-avif', 'image-x-icon'],
+    'audio-x-generic': ['audio-mpeg', 'audio-flac', 'audio-x-wav', 'audio-ogg', 'audio-mp4', 'audio-x-vorbis+ogg', 'audio-aac'],
+    'video-x-generic': ['video-mp4', 'video-x-matroska', 'video-webm', 'video-quicktime', 'video-x-msvideo', 'video-mpeg'],
+    'package-x-generic': ['application-zip', 'application-x-tar', 'application-x-compressed-tar', 'application-x-7z-compressed',
+                          'application-x-rar', 'application-vnd.rar', 'application-gzip', 'application-x-archive',
+                          'application-x-xz-compressed-tar', 'application-x-bzip-compressed-tar', 'application-zstd',
+                          'application-x-zstd-compressed-tar', 'application-x-xz', 'application-x-bzip'],
+    'application-x-executable': ['application-x-ms-dos-executable', 'application-x-msdownload', 'application-x-sharedlib',
+                                 'application-x-pie-executable', 'application-vnd.microsoft.portable-executable',
+                                 'application-x-ms-shortcut', 'application-x-wine-extension-msp'],
+    'application-x-msi': ['application-x-ole-storage'],
+    'application-x-deb': ['application-vnd.debian.binary-package', 'application-x-rpm', 'application-x-redhat-package-manager',
+                          'application-vnd.flatpak', 'application-vnd.appimage', 'application-x-iso9660-appimage'],
+    'text-x-script': ['application-x-shellscript', 'text-x-python', 'application-json', 'text-html', 'text-css',
+                      'application-javascript', 'text-x-csrc', 'text-x-c++src', 'application-xml', 'text-x-qml',
+                      'application-x-desktop'],
+    'unknown': ['application-octet-stream', 'application-x-zerosize'],
 }
-SYM['gear'] = '<path d="%s"/><circle cx="12" cy="12" r="3"/>' % gear24()
+
+
+# --------------------------------------------------------------------------
+# devices: objects (no tile) so their silhouette still reads when an app draws them as a mask
+def devices():
+    d = {
+        'computer': Rf(27, 45, 10, 8, 0, B300) + Rf(19.5, 52, 25, 4.5, 2.25, B200)
+                    + Rf(6, 9.5, 52, 37, 6.5, 'url(#k)') + Rf(9.5, 13, 45, 30, 3.5, 'url(#b)')
+                    + Pf('M9.5 33c9-5 15 3 23 0s14-6 22-2v8.5a3.5 3.5 0 0 1-3.5 3.5H13a3.5 3.5 0 0 1-3.5-3.5Z', WHITE, ' opacity=".2"'),
+        'drive-harddisk': '<rect x="6.5" y="16.5" width="51" height="32" rx="7.5" fill="url(#s)" stroke="%s"/>' % EDGE
+                          + Pf('M7 37h50v4a7 7 0 0 1-7 7H14a7 7 0 0 1-7-7Z', 'url(#b)') + Cf(49, 42.5, 2.1, '#9CF5C8')
+                          + S('M14.5 42.5h13', WHITE, 2.6, ' opacity=".75"') + Cf(22, 27, 5.5, B200) + Cf(22, 27, 1.8, B600)
+                          + S('M34 24.5h15M34 29.5h9', B200, 2.6),
+        'drive-removable-media': '<rect x="23.5" y="6.5" width="17" height="17" rx="2.5" fill="url(#s)" stroke="%s"/>' % EDGE
+                                 + Rf(27.5, 11.5, 3.2, 4.5, .8, B400) + Rf(33.3, 11.5, 3.2, 4.5, .8, B400)
+                                 + Rf(18, 21, 28, 38, 7, 'url(#b)')
+                                 + '<rect x="18.5" y="21.5" width="27" height="37" rx="6.5" fill="none" stroke="url(#h)"/>'
+                                 + S('M26 31h12', WHITE, 2.8, ' opacity=".7"') + Cf(32, 50, 2.2, '#9CF5C8'),
+        'input-gaming': '<g transform="translate(-8 -6) scale(1.25)">%s</g>' % gamepad('url(#b)', WHITE),
+    }
+    return {k: svg64(_clean(v)) for k, v in d.items()}
+
+
+DEVICE_ALIASES = {
+    'computer': ['video-display', 'computer-laptop'],
+    'drive-harddisk': ['drive-harddisk-solidstate', 'drive-harddisk-root', 'drive-harddisk-system'],
+    'drive-removable-media': ['drive-removable-media-usb', 'drive-removable-media-usb-pendrive', 'media-removable', 'media-flash'],
+    'input-gaming': ['input-gamepad'],
+}
+
+
+# --------------------------------------------------------------------------
+# monochrome line glyphs: three wrappers around the same 24-unit artwork
+LINE = 'fill="none" stroke="%s" stroke-width="%s" stroke-linecap="round" stroke-linejoin="round"'
 
 
 def sym_svg(inner):
-    return f'''<svg {SVGNS} viewBox="0 0 24 24" width="24" height="24">
-  <style id="current-color-scheme" type="text/css">.ColorScheme-Text {{ color:#e8eaee; }}</style>
-  <g class="ColorScheme-Text" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-    {inner}
-  </g>
-</svg>
-'''
+    """Icon-theme form: Plasma / Kirigami recolour it through the ColorScheme-Text class (currentColor)."""
+    return ('<svg %s viewBox="0 0 24 24" width="24" height="24">\n'
+            '  <style id="current-color-scheme" type="text/css">.ColorScheme-Text { color:#e8eaee; }</style>\n'
+            '  <g class="ColorScheme-Text" %s>%s</g>\n</svg>\n' % (SVGNS, LINE % ('currentColor', '1.5'), inner))
+
+
+def flat_svg(inner, ink):
+    """Plain form for files loaded by path and tinted by the app (DelayShell Glyph, DelaySys SIcon)."""
+    return ('<svg %s width="24" height="24" viewBox="0 0 24 24" %s>%s</svg>\n'
+            % (SVGNS, LINE % (ink, '1.5'), inner.replace('currentColor', ink)))
+
+
+def glyph_tile(inner):
+    """Settings category: the line glyph on a small ink tile."""
+    return tile('k', '<g transform="translate(14 14) scale(1.5)" %s>%s</g>' % (LINE % (B200, '1.7'), inner.replace('currentColor', B200)))
 
 
 INDEX = '''[Icon Theme]
@@ -526,75 +511,198 @@ PanelSizes=16,22,32,48,64,128,256
 DialogDefault=32
 DialogSizes=16,22,32,48,64,128,256
 
-Directories=scalable/apps,scalable/places,scalable/categories,symbolic/actions,symbolic/status
+Directories=%s
+'''
+DIRS = [  # (dir, nominal size, context)
+    ('scalable/apps', 64, 'Applications'), ('scalable/places', 64, 'Places'), ('scalable/mimetypes', 64, 'MimeTypes'),
+    ('scalable/devices', 64, 'Devices'), ('scalable/categories', 64, 'Categories'),
+    ('symbolic/actions', 24, 'Actions'), ('symbolic/status', 24, 'Status'), ('symbolic/devices', 24, 'Devices'),
+    ('symbolic/places', 24, 'Places'), ('symbolic/apps', 24, 'Applications'),
+]
 
-[scalable/apps]
-Size=64
-MinSize=8
-MaxSize=512
-Context=Applications
-Type=Scalable
 
-[scalable/places]
-Size=64
-MinSize=8
-MaxSize=512
-Context=Places
-Type=Scalable
+def index_theme():
+    s = INDEX % ','.join(d for d, _, _ in DIRS)
+    for d, size, ctx in DIRS:
+        s += '\n[%s]\nSize=%d\nMinSize=8\nMaxSize=512\nContext=%s\nType=Scalable\n' % (d, size, ctx)
+    return s
 
-[scalable/categories]
-Size=28
-MinSize=8
-MaxSize=512
-Context=Categories
-Type=Scalable
 
-[symbolic/actions]
-Size=24
-MinSize=8
-MaxSize=512
-Context=Actions
-Type=Scalable
+def build():
+    """Return {relative path under OUT: svg text} plus the preview catalogue."""
+    files, cat = {}, []            # cat: (section, name, svg, [aliases], mono)
+    T = 'usr/share/icons/DelayOS/'
+    H = 'usr/share/icons/hicolor/scalable/apps/'
 
-[symbolic/status]
-Size=24
-MinSize=8
-MaxSize=512
-Context=Status
-Type=Scalable
+    def put(rel, text):
+        assert rel not in files, 'duplicate ' + rel
+        files[rel] = text
+
+    logo = logo_svg()
+    for n in ('delayos-logo', 'distributor-logo', 'delayos'):
+        put(T + 'scalable/apps/%s.svg' % n, logo)
+    for n in ('start-here', 'start-here-kde', 'start-here-kde-plasma'):
+        put(T + 'scalable/places/%s.svg' % n, logo)
+    put(H + 'delayos-logo.svg', logo)
+    put(T + 'symbolic/status/delayos-logo-symbolic.svg', logo_symbolic())
+    put(T + 'symbolic/places/start-here-symbolic.svg', logo_symbolic())
+    cat.append(('Logo', 'delayos-logo', logo, ['distributor-logo', 'delayos', 'start-here', 'start-here-kde', 'start-here-kde-plasma'], False))
+
+    colour = set()
+    for n, svg in app_glyphs().items():
+        put(T + 'scalable/apps/%s.svg' % n, svg)
+        put(H + '%s.svg' % n, svg)             # hicolor copy: the app keeps its icon under any other icon theme
+        for al in ALIASES.get(n, []):
+            put(T + 'scalable/apps/%s.svg' % al, svg)
+        colour.update([n] + ALIASES.get(n, []))
+        sec = 'Game placeholders' if n.startswith('delayos-winboot-') else ('Apps' if n in APP_MAIN else 'Utilities')
+        cat.append((sec, n, svg, ALIASES.get(n, []), False))
+    for sec, sub, items, aliases in (('Places', 'places', places(), PLACE_ALIASES), ('File types', 'mimetypes', mimes(), MIME_ALIASES),
+                                     ('Devices', 'devices', devices(), DEVICE_ALIASES)):
+        for n, svg in items.items():
+            put(T + 'scalable/%s/%s.svg' % (sub, n), svg)
+            for al in aliases.get(n, []):
+                put(T + 'scalable/%s/%s.svg' % (sub, al), svg)
+            colour.update([n] + aliases.get(n, []))
+            cat.append((sec, n, svg, aliases.get(n, []), False))
+    put('usr/share/delayos/apps/files/qml/folder.svg', files[T + 'scalable/places/folder.svg'])
+
+    for fid, (cname, g) in IG.SETTINGS.items():
+        svg = glyph_tile(IG.G[g])
+        put(T + 'scalable/categories/delayos-settings-%s.svg' % cname, svg)
+        put('usr/share/delayos/apps/settings/icons/%s.svg' % fid, flat_svg(IG.G[g], B500))   # flat: the app draws its own tile
+        cat.append(('Settings categories', 'delayos-settings-' + cname, svg, ['settings/icons/%s.svg' % fid], False))
+
+    # line glyphs
+    used = {}
+    for n in IG.SYM_NAMES:
+        put(T + 'symbolic/actions/delayos-sym-%s.svg' % n, sym_svg(IG.G[n]))
+    for pct in range(0, 101, 10):
+        for ch in (False, True):
+            n = 'battery-%03d%s' % (pct, '-charging' if ch else '')
+            svg = sym_svg(IG.battery(pct, ch))
+            put(T + 'symbolic/status/%s.svg' % n, svg)
+            put(T + 'symbolic/status/%s-symbolic.svg' % n, svg)
+    for n, pct in (('battery-full', 100), ('battery-good', 60), ('battery-low', 20), ('battery-caution', 10), ('battery-empty', 0)):
+        for ch in (False, True):
+            svg = sym_svg(IG.battery(pct, ch))
+            nn = n + ('-charging' if ch else '')
+            put(T + 'symbolic/status/%s.svg' % nn, svg)
+            put(T + 'symbolic/status/%s-symbolic.svg' % nn, svg)
+    for ctx, table in IG.FDO.items():
+        for n, g in table.items():
+            svg = sym_svg(IG.G[g])
+            put(T + 'symbolic/%s/%s-symbolic.svg' % (ctx, n), svg)
+            plain = (ctx in ('actions', 'status') and n not in IG.SYMBOLIC_ONLY) or (ctx == 'devices' and n in IG.PLAIN_DEVICES)
+            if plain and n not in colour:
+                put(T + 'symbolic/%s/%s.svg' % (ctx, n), svg)
+            used.setdefault(g, []).append(n)
+    for fn, g in IG.SHELL.items():
+        put('usr/share/delayos/shell/icons/%s.svg' % fn, flat_svg(IG.G[g], '#000'))
+    for fn, g in IG.SYSKIT.items():
+        put('usr/share/delayos/apps/syskit/qml/DelaySys/glyphs/%s.svg' % fn, flat_svg(IG.G[g], '#fff'))
+    for n in sorted(IG.G):
+        cat.append(('Line glyphs', n, sym_svg(IG.G[n]), sorted(set(used.get(n, []))), True))
+    for pct in (0, 20, 40, 60, 80, 100):
+        cat.append(('Battery levels', 'battery-%03d' % pct, sym_svg(IG.battery(pct)), [], True))
+        cat.append(('Battery levels', 'battery-%03d-charging' % pct, sym_svg(IG.battery(pct, True)), [], True))
+    put(T + 'index.theme', index_theme())
+    return files, cat
+
+
+APP_MAIN = ('delayos-files delayos-notepad delayos-calculator delayos-settings delayos-taskmanager delayos-snip delayos-terminal '
+            'delayos-store delayos-welcome delayos-drivers delayos-winengine delayos-android delayos-gamecontrols delayos-winboot '
+            'delayos-installer').split()
+
+PREVIEW = '''<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DelayOS icon set</title>
+<style>
+:root{font:13px/1.4 Inter,"Noto Sans CJK KR",system-ui,sans-serif}
+body{margin:0;background:#1b1e27;color:#e8eaee}
+header{padding:20px 24px 4px}h1{font-size:20px;margin:0 0 4px}header p{margin:0;color:#9aa0aa}
+h2{font-size:14px;margin:22px 24px 8px;color:#c5ceff}h2 small{color:#7c828c;font-weight:400}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 24px}
+@media(max-width:900px){.pair{grid-template-columns:1fr}}
+.panel{border-radius:14px;padding:14px;display:grid;gap:6px;grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}
+.panel.mono{grid-template-columns:repeat(auto-fill,minmax(74px,1fr))}
+.dark{background:#0E1018;color:#F2F3F5}.light{background:#F7F7F9;color:#15171C}
+.cell{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 2px;text-align:center;border-radius:8px;min-width:0}
+.cell:hover{background:rgba(128,128,128,.14)}
+.cell img{width:56px;height:56px}.cell .row{display:flex;align-items:flex-end;gap:6px}.cell .row img.s{width:22px;height:22px}
+.cell svg{width:24px;height:24px}.cell .row svg.s{width:16px;height:16px}
+.cell span{font-size:10.5px;opacity:.72;word-break:break-all;line-height:1.25}
+footer{padding:24px;color:#7c828c}
+</style></head><body>
+<header><h1>DelayOS icon set</h1><p>Generated by <code>assets-src/gen_icons.py</code>. Every icon is shown on the dark and the light surface (Theme.windowBg). Hover a cell for the other names that use the same artwork. Line glyphs are drawn with <code>currentColor</code> at 24 px and 16 px.</p></header>
+<main id="m"></main>
+<footer>__COUNTS__</footer>
+<script>
+const DATA=__DATA__;
+const m=document.getElementById('m');
+for(const [sec,items] of DATA){
+  const h=document.createElement('h2');h.innerHTML=sec+' <small>'+items.length+'</small>';m.appendChild(h);
+  const pair=document.createElement('div');pair.className='pair';
+  for(const mode of ['dark','light']){
+    const p=document.createElement('div');p.className='panel '+mode+(items[0][3]?' mono':'');
+    for(const [name,svg,alias,mono] of items){
+      const c=document.createElement('div');c.className='cell';c.title=alias.length?name+'\\n= '+alias.join(', '):name;
+      const r=document.createElement('div');r.className='row';
+      if(mono){r.innerHTML=svg+svg.replace('<svg','<svg class="s"');}
+      else{const u='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);r.innerHTML='<img src="'+u+'"><img class="s" src="'+u+'">';}
+      const s=document.createElement('span');s.textContent=name;c.appendChild(r);c.appendChild(s);p.appendChild(c);
+    }
+    pair.appendChild(p);
+  }
+  m.appendChild(pair);
+}
+</script></body></html>
 '''
 
 
+def preview_html(cat, counts):
+    import json
+    secs, order = {}, []
+    for sec, name, svg, aliases, mono in cat:
+        if sec not in secs:
+            secs[sec] = []
+            order.append(sec)
+        if mono:   # inline: drop the scheme stylesheet so the page's own colour applies
+            svg = re.sub(r'\s*<style.*?</style>', '', svg, flags=re.S)
+        secs[sec].append([name, svg.strip(), aliases, mono])
+    data = json.dumps([[s, secs[s]] for s in order], ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
+    return PREVIEW.replace('__DATA__', data).replace('__COUNTS__', counts)
+
+
 def main():
-    if os.path.isdir(THEME):
-        shutil.rmtree(THEME)
-    w(os.path.join(THEME, 'index.theme'), INDEX)
-    # logo
-    w(os.path.join(LOGO, 'delayos.svg'), logo_svg())
-    w(os.path.join(LOGO, 'delayos-symbolic.svg'), logo_symbolic())
-    for name in ('delayos-logo', 'start-here', 'start-here-kde', 'start-here-kde-plasma', 'distributor-logo', 'delayos'):
-        sub = 'places' if name.startswith('start-here') else 'apps'
-        w(os.path.join(THEME, 'scalable', sub, name + '.svg'), logo_svg())
-    w(os.path.join(THEME, 'symbolic/status/delayos-logo-symbolic.svg'), logo_symbolic())
-    w(os.path.join(THEME, 'symbolic/status/start-here-symbolic.svg'), logo_symbolic())
-    # apps
-    for name, (top, bot, g) in APPS.items():
-        svg = app_icon(top, bot, g)
-        w(os.path.join(THEME, 'scalable/apps', name + '.svg'), svg)
-        for alias in ALIASES.get(name, []):
-            w(os.path.join(THEME, 'scalable/apps', alias + '.svg'), svg)
-    # settings categories
-    for name, inner in CATS.items():
-        w(os.path.join(THEME, 'scalable/categories', 'delayos-settings-' + name + '.svg'), cat_icon(inner))
-    # symbolic
-    for name, inner in SYM.items():
-        w(os.path.join(THEME, 'symbolic/actions', 'delayos-sym-' + name + '.svg'), sym_svg(inner))
-    # logo PNGs
-    if shutil.which('rsvg-convert'):
-        for s in (16, 22, 24, 32, 48, 64, 96, 128, 256, 512):
-            subprocess.run(['rsvg-convert', '-w', str(s), '-h', str(s), os.path.join(LOGO, 'delayos.svg'),
-                            '-o', os.path.join(LOGO, 'delayos-%d.png' % s)], check=True)
-    print('apps', len(APPS), 'cats', len(CATS), 'sym', len(SYM))
+    args = [a for a in sys.argv[2:]]
+    files, cat = build()
+    # the theme directory is rebuilt from scratch so stale names never survive
+    for d in (THEME, SHELL_DIR, SYSKIT_DIR):
+        if os.path.isdir(d) and '--keep' not in args:
+            shutil.rmtree(d)
+    for rel, text in files.items():
+        w(os.path.join(OUT, rel), text)
+    if '--logo' in args:      # logo masters + PNG renditions (needs rsvg-convert); not touched by default
+        w(os.path.join(LOGO, 'delayos.svg'), logo_svg())
+        w(os.path.join(LOGO, 'delayos-symbolic.svg'), logo_symbolic())
+        if shutil.which('rsvg-convert'):
+            for s in (16, 22, 24, 32, 48, 64, 96, 128, 256, 512):
+                subprocess.run(['rsvg-convert', '-w', str(s), '-h', str(s), os.path.join(LOGO, 'delayos.svg'),
+                                '-o', os.path.join(LOGO, 'delayos-%d.png' % s)], check=True)
+    by = {}
+    for sec, *_ in cat:
+        by[sec] = by.get(sec, 0) + 1
+    counts = 'files %d; ' % len(files) + ', '.join('%s %d' % kv for kv in by.items())
+    for a in args:
+        if a.startswith('--preview='):
+            w(a.split('=', 1)[1], preview_html(cat, counts))
+    print(counts)
+    dirs = {}
+    for rel in files:
+        dirs[os.path.dirname(rel)] = dirs.get(os.path.dirname(rel), 0) + 1
+    for d in sorted(dirs):
+        print('%4d  %s' % (dirs[d], d))
 
 
 if __name__ == '__main__':

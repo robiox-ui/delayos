@@ -54,6 +54,9 @@ file_permissions=(
   ["/usr/bin/delay-android-apps"]="0:0:755"
   ["/usr/bin/delay-gamecontrols"]="0:0:755"
   ["/usr/lib/delayos/delay-sys-helper"]="0:0:755"
+  # Windows 전환 (dual-boot switch, docs/windows-switch.md)
+  ["/usr/bin/delay-winboot"]="0:0:755"
+  ["/usr/lib/delayos/delay-winboot-helper"]="0:0:755"
   # Tuning tools taken from CachyOS-Settings
   ["/usr/bin/dlss-swapper"]="0:0:755"
   ["/usr/bin/dlss-swapper-dll"]="0:0:755"

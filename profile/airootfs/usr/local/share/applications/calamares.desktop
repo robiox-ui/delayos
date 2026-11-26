@@ -1,0 +1,19 @@
+[Desktop Entry]
+# Overrides /usr/share/applications/calamares.desktop (the stock file has translated
+# Icon[xx]= keys, e.g. Icon[ko], which point at icons that do not exist).
+Type=Application
+Version=1.0
+Name=Install DelayOS
+Name[ko]=DelayOS 설치
+GenericName=System Installer
+GenericName[ko]=시스템 설치 프로그램
+Comment=Install DelayOS on this PC
+Comment[ko]=이 PC에 DelayOS를 설치합니다
+Keywords=calamares;system;installer;install;설치;
+TryExec=calamares
+Exec=sh -c "pkexec calamares"
+Icon=delayos-installer
+Terminal=false
+StartupNotify=true
+Categories=Qt;System;
+X-AppStream-Ignore=true

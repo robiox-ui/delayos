@@ -3,7 +3,7 @@ ColorScheme=DelayOS
 Font=JetBrains Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 LineSpacing=1
 BoldIntense=true
-UseFontLineChararacters=true
+UseFontLineChararacters=false
 
 [Cursor Options]
 CursorShape=0

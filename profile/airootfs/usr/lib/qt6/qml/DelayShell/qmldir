@@ -1,5 +1,7 @@
 module DelayShell
 singleton Metrics 1.0 Metrics.qml
+singleton ShellBus 1.0 ShellBus.qml
+LazyPopup 1.0 LazyPopup.qml
 PopupWindow 1.0 PopupWindow.qml
 Glyph 1.0 Glyph.qml
 ShellListener 1.0 ShellListener.qml

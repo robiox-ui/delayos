@@ -17,8 +17,8 @@ Window {
 
     property int pageIdx: 0
     property var browsers: [
+        { id: "google-chrome", repo: "google-chrome", name: "Google Chrome", desc: "Google 계정과 동기화되는 웹 브라우저 (기본 설치됨)", icon: "google-chrome" },
         { id: "org.mozilla.firefox", repo: "firefox", name: "Firefox", desc: "빠르고 개인 정보를 보호하는 웹 브라우저", icon: "firefox" },
-        { id: "com.google.Chrome", repo: "", name: "Google Chrome", desc: "Google 계정과 동기화되는 웹 브라우저", icon: "/var/lib/flatpak/appstream/flathub/x86_64/active/icons/128x128/com.google.Chrome.png" },
         { id: "com.brave.Browser", repo: "", name: "Brave", desc: "광고와 추적기를 차단하는 브라우저", icon: "/var/lib/flatpak/appstream/flathub/x86_64/active/icons/128x128/com.brave.Browser.png" },
         { id: "com.microsoft.Edge", repo: "", name: "Microsoft Edge", desc: "Windows에서 쓰던 브라우저", icon: "/var/lib/flatpak/appstream/flathub/x86_64/active/icons/128x128/com.microsoft.Edge.png" }
     ]

@@ -26,12 +26,13 @@ PlasmoidItem {
     Item { id: geo; readonly property rect r: Qt.rect(Screen.virtualX, Screen.virtualY, Screen.width, Screen.height) }
 
     function place() {
-        const g = geo.r
+        const g = geo.r, panel = lazy.get()
         panel.posX = Math.round(g.x + (g.width - panel.panelWidth) / 2)
         // bottom edge 22 px above the dock top
         panel.posY = Math.round(g.y + g.height - Metrics.dockTop - 22 - panel.panelHeight)
+        return panel
     }
-    function toggle() { place(); panel.toggle() }
+    function toggle() { place().toggle() }
 
     Connections {
         target: Plasmoid
@@ -40,10 +41,11 @@ PlasmoidItem {
     ShellListener {
         name: "start"
         onToggleRequested: root.toggle()
-        onShowRequested: { root.place(); panel.open() }
-        onHideRequested: panel.close()
-        onQueryRequested: text => { root.place(); panel.open(); panel.setQuery(text) }
+        onShowRequested: root.place().open()
+        onHideRequested: if (lazy.item) lazy.item.close()
+        onQueryRequested: text => { const p = root.place(); p.open(); p.setQuery(text) }
     }
 
-    StartPanel { id: panel }
+    // built on first use; pre-built a few seconds after login when there is RAM to spare
+    LazyPopup { id: lazy; warm: true; sourceComponent: StartPanel {} }
 }

@@ -48,7 +48,7 @@ while read -r line; do
   if as_builder "yay -S --noconfirm --needed --answerdiff None --answerclean None --removemake=false $line"; then
     BUILT+=("$line")
   elif (( optional )); then
-    warn "$line failed to build ??skipping (optional)"
+    warn "$line failed to build - skipping (optional)"
   else
     die "Required AUR package $line failed to build"
   fi
@@ -198,10 +198,17 @@ for s in NetworkManager-dispatcher rtkit-daemon scx_loader; do
 done
 ln -sf /usr/lib/systemd/system/NetworkManager-dispatcher.service "$W/dbus-org.freedesktop.nm-dispatcher.service"
 ln -sf /etc/systemd/system/delay-eac-facts.service "$W/multi-user.target.wants/delay-eac-facts.service"
-# VM guest tools (each unit has its own ConditionVirtualization, so they idle on real hardware)
-for s in vmtoolsd vmware-vmblock-fuse qemu-guest-agent vboxservice spice-vdagentd; do
+ln -sf /usr/lib/systemd/system/bluetooth.service "$W/dbus-org.bluez.service"
+# VM guest tools (each unit has its own ConditionVirtualization, so they idle on real hardware).
+# qemu-guest-agent and spice-vdagentd are NOT enabled here: they have no such condition and
+# qemu-guest-agent waits 90 s for /dev/virtio-ports/org.qemu.guest_agent.0 on every machine
+# that is not a QEMU guest. Their own udev rules start them when the virtio port exists.
+for s in vmtoolsd vmware-vmblock-fuse vboxservice; do
   ln -sf "/usr/lib/systemd/system/$s.service" "$W/multi-user.target.wants/$s.service"
 done
+# pacman already runs ldconfig after every transaction; ldconfig.service only repeats it
+# (ConditionNeedsUpdate is always true on the live overlay) and cost 7.5 s of every live boot
+ln -sf /dev/null "$W/ldconfig.service"
 # Boot was stuck 2 minutes in systemd-networkd-wait-online (we use NetworkManager), and
 # systemd-loop@ tried to loop-attach the CD drive: mask both, plus networkd itself
 for s in systemd-networkd-wait-online.service systemd-networkd.service systemd-networkd.socket \

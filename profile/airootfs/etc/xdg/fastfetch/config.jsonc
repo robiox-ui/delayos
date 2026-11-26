@@ -3,13 +3,13 @@
   "logo": {
     "type": "file",
     "source": "/usr/share/delayos/fastfetch/logo.txt",
-    "color": { "1": "38;2;122;143;255", "2": "38;2;77;107;254", "3": "38;2;52;78;214" },
-    "padding": { "top": 1, "left": 2, "right": 3 }
+    "color": { "1": "38;2;156;173;255", "2": "38;2;77;107;254", "3": "38;2;45;68;200" },
+    "padding": { "top": 1, "left": 2, "right": 4 }
   },
   "display": {
     "separator": "  ",
-    "color": { "keys": "38;2;77;107;254", "title": "38;2;122;143;255" },
-    "key": { "width": 14 }
+    "color": { "keys": "38;2;77;107;254", "title": "38;2;156;173;255" },
+    "key": { "width": 12 }
   },
   "modules": [
     "title",
@@ -22,14 +22,12 @@
     { "type": "display", "key": "디스플레이" },
     { "type": "de", "key": "데스크톱" },
     { "type": "wm", "key": "창 관리자" },
-    { "type": "theme", "key": "테마" },
-    { "type": "icons", "key": "아이콘" },
     { "type": "terminal", "key": "터미널" },
     { "type": "cpu", "key": "CPU" },
     { "type": "gpu", "key": "GPU" },
     { "type": "memory", "key": "메모리" },
     { "type": "swap", "key": "스왑" },
-    { "type": "disk", "key": "디스크" },
+    { "type": "disk", "key": "디스크", "folders": "/" },
     { "type": "localip", "key": "로컬 IP" },
     { "type": "battery", "key": "배터리" },
     { "type": "locale", "key": "로케일" },

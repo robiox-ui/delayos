@@ -23,19 +23,20 @@ PlasmoidItem {
 
     Item { id: geo; readonly property rect r: Qt.rect(Screen.virtualX, Screen.virtualY, Screen.width, Screen.height) }
     function place() {
-        const g = geo.r
+        const g = geo.r, cc = lazy.get()
         cc.maxHeight = g.height - Metrics.popupTop - Metrics.edgeMargin
         cc.posX = Math.round(g.x + g.width - Metrics.edgeMargin - cc.panelWidth)
         cc.posY = Math.round(g.y + Metrics.popupTop)
+        return cc
     }
-    function toggle() { place(); cc.toggle() }
+    function toggle() { place().toggle() }
 
     Connections { target: Plasmoid; function onActivated() { root.toggle() } }
     ShellListener {
         name: "controlcenter"
         onToggleRequested: root.toggle()
-        onShowRequested: { root.place(); cc.open() }
-        onHideRequested: cc.close()
+        onShowRequested: root.place().open()
+        onHideRequested: if (lazy.item) lazy.item.close()
     }
 
     // shared notification settings (Focus = do not disturb)
@@ -57,14 +58,18 @@ PlasmoidItem {
     }
     Binding { target: NotificationManager.Server; property: "inhibited"; value: root.dndOn }
 
-    ControlCenter {
-        id: cc
-        dndOn: root.dndOn
-        onToggleDnd: root.toggleDnd()
+    // the panel (network, sound, brightness, notification list ...) is built on first use;
+    // the notification banner below is always there
+    LazyPopup {
+        id: lazy
+        sourceComponent: ControlCenter {
+            dndOn: root.dndOn
+            onToggleDnd: root.toggleDnd()
+        }
     }
     NotificationIsland {
         id: island
         screenRect: geo.r
-        suppressed: root.dndOn || cc.shown
+        suppressed: root.dndOn || (lazy.item !== null && lazy.item.shown)
     }
 }

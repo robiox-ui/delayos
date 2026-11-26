@@ -18,19 +18,20 @@ PlasmoidItem {
 
     Item { id: geo; readonly property rect r: Qt.rect(Screen.virtualX, Screen.virtualY, Screen.width, Screen.height) }
     function place() {
-        const g = geo.r
+        const g = geo.r, cal = lazy.get()
         cal.posX = Math.round(g.x + g.width - Metrics.edgeMargin - cal.panelWidth)
         cal.posY = Math.round(g.y + Metrics.popupTop)
+        return cal
     }
-    function toggle() { place(); cal.toggle() }
+    function toggle() { place().toggle() }
 
     Connections { target: Plasmoid; function onActivated() { root.toggle() } }
     ShellListener {
         name: "calendar"
         onToggleRequested: root.toggle()
-        onShowRequested: { root.place(); cal.open() }
-        onHideRequested: cal.close()
+        onShowRequested: root.place().open()
+        onHideRequested: if (lazy.item) lazy.item.close()
     }
 
-    CalendarPopover { id: cal }
+    LazyPopup { id: lazy; sourceComponent: CalendarPopover {} }   // built on first use
 }

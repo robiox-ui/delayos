@@ -1,0 +1,8 @@
+# KDE's own first-run window ("Welcome to Arch Linux running KDE Plasma") and the yearly
+# KDE donation pop-up are started by kded modules: DelayOS has its own welcome app.
+# (kded6 still reads its module settings from kded5rc.)
+[Module-kded_plasma_welcome]
+autoload=false
+
+[Module-donationmessage]
+autoload=false
