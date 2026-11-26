@@ -64,6 +64,16 @@ PC를 켤 때 **Esc**를 누르면 부팅 메뉴가 나오고 "이전 상태로 
 
 부팅 메뉴는 기본적으로 숨겨져 있습니다(`GRUB_TIMEOUT_STYLE=hidden`, 1초). GRUB은 대기 시간이 0이면 키를 확인하지 않으므로 1초를 둡니다. Esc는 전원을 켠 직후부터 여러 번 누르는 것이 확실합니다. Shift를 누르고 있어도 메뉴가 나오게 해 두었지만(`keystatus --shift`) 이 기능은 펌웨어가 키 상태를 알려 줄 때만 동작하고, 많은 UEFI PC에서는 동작하지 않습니다. 다른 운영 체제가 함께 설치된 PC(os-prober가 찾은 경우)는 메뉴를 3초 동안 보여 줍니다.
 
+
+### 부팅 메뉴의 글자
+
+부팅 메뉴는 한국어입니다: "DelayOS", "DelayOS 고급 옵션"(커널별 항목과 대체 initramfs), "UEFI 펌웨어 설정", "이전 상태로 부팅", "DelayOS 복구".
+
+- `/etc/grub.d/10_delayos`와 `30_delayos-firmware`가 grub 패키지의 `10_linux`, `30_uefi-firmware` 대신 항목을 씁니다(항목 id와 커널 옵션은 같음). 원래 파일은 지우지 않고 실행 권한만 뺍니다. grub이 업데이트되면 권한이 돌아오므로 `10_delayos`가 실행될 때마다, 그리고 pacman 훅 `65-delay-grub-ko.hook`이 다시 뺍니다.
+- 스냅샷 메뉴는 grub-btrfs가 만든 파일을 `/usr/lib/delayos/delay-grub-ko snapshots`가 고칩니다: 열 제목 "날짜 / 설명", 스냅샷마다 "이 상태로 부팅 (커널 …)"이 먼저, "…, 대체 initramfs"가 그다음. 이 PC의 CPU와 다른 제조사의 마이크로코드 항목은 뺍니다. `41_snapshots-btrfs`에 한 줄을 끼워 넣는 방식이고 grub-btrfs가 업데이트되면 같은 훅이 다시 넣습니다.
+- `/etc/default/grub` 끝의 한 줄이 `/etc/locale.conf`의 `LANG`을 읽어 GRUB 자체의 안내문(키 설명)도 한국어로 나오게 합니다.
+- 한글은 GRUB의 그래픽 터미널과 unicode 글꼴이 있어야 그려집니다. 글꼴을 불러오지 못하면(`$lang`이 비어 있음) 같은 항목이 영어 제목("DelayOS advanced options", "UEFI firmware settings", "DelayOS Recovery")으로 나옵니다. "이전 상태로 부팅" 하위 메뉴만은 그 경우에도 한글 그대로입니다.
+- 펌웨어 부팅 메뉴의 "DelayOS Recovery"와 전용 부트로더 `recovery.efi`의 안내문은 영어입니다. 펌웨어와 글꼴 없는 GRUB 이미지는 한글을 그리지 못합니다.
 ### 켜기/끄기
 
 새로 설치하면 켜져 있습니다(`delay-postinstall`의 마지막 단계 `delay-snapshot setup --install-time`). 이전 ISO로 설치한 PC는 설정 › 시스템 › 복구의 "켜기" 또는:
@@ -208,6 +218,7 @@ sudo delay-deploy apply delayos.dimg /dev/nvme0n1p2 --replace-system   # @만 �
 | `/usr/local/bin/delay-deploy` | boot / apply / capture / recovery |
 | `/usr/local/bin/delay-recovery-ctl` | 복구 환경으로 재시작, 부팅 성공 기록, 상태 |
 | `/etc/grub.d/45_delayos-recovery` | 부팅 메뉴 항목 "DelayOS 복구", 한 번만 시작, 3회 실패 감지 |
+| `/etc/grub.d/10_delayos`, `30_delayos-firmware`, `/usr/lib/delayos/delay-grub-ko`, `/etc/pacman.d/hooks/65-delay-grub-ko.hook` | 한국어 부팅 메뉴 |
 | `/usr/lib/systemd/system/delay-snapshot-{daily.timer,daily.service,boot.service}` | 매일 스냅샷, 되돌린 뒤 정리 |
 | `/usr/lib/systemd/system/delay-boot-ok{.service,.timer,-mark.service}` | 부팅 성공 기록 |
 | `/usr/lib/udev/rules.d/62-delayos-recovery.rules` | 복구 파티션 숨기기 |

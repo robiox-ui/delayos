@@ -1,0 +1,129 @@
+#!/bin/bash
+# delay-grub-ko: keeps the GRUB boot menu of an installed DelayOS in Korean.
+#
+#   delay-grub-ko setup            (root) idempotent; run by /etc/grub.d/10_delayos on every
+#                                  grub-mkconfig, by the pacman hook 65-delay-grub-ko.hook after
+#                                  grub / grub-btrfs updates and by delay-postinstall:
+#       - grub's 10_linux and 30_uefi-firmware are switched off (chmod -x): /etc/grub.d/10_delayos
+#         and 30_delayos-firmware write the same entries with Korean titles
+#       - /etc/default/grub reads LANG from /etc/locale.conf, so the menu's own texts (key help,
+#         "GNU GRUB 버전") are Korean no matter which environment grub-mkconfig is run from
+#       - grub-btrfs' generator gets one line that passes the snapshot menu through "snapshots"
+#   delay-grub-ko snapshots FILE   rewrite grub-btrfs' menu (grub-btrfs.new) in place:
+#       - column titles 날짜 / 설명
+#       - per snapshot one entry per kernel "이 상태로 부팅 (커널 …)" with the normal initramfs
+#         first and the fallback image after it; microcode images of the other CPU vendor dropped
+#       - "Loading ..." lines replaced by one Korean line
+# Package files are never replaced: they are patched in place and patched again after updates.
+set -u
+export LC_ALL=C.UTF-8
+
+GRUBD=/etc/grub.d
+SELF=/usr/lib/delayos/delay-grub-ko
+
+setup() {
+  local f
+  for f in "$GRUBD/10_linux" "$GRUBD/30_uefi-firmware"; do
+    # only when the DelayOS replacement is there
+    case $f in
+      */10_linux) [[ -x $GRUBD/10_delayos ]] || continue ;;
+      *) [[ -x $GRUBD/30_delayos-firmware ]] || continue ;;
+    esac
+    [[ -x $f ]] && chmod -x "$f" 2>/dev/null
+  done
+
+  f=/etc/default/grub
+  if [[ -w $f ]] && ! grep -q 'delay-grub-ko' "$f"; then
+    printf '%s\n' '# DelayOS (delay-grub-ko): the boot menu uses the system language' \
+      '[ -r /etc/locale.conf ] && . /etc/locale.conf && export LANG' >> "$f"
+  fi
+
+  f=$GRUBD/41_snapshots-btrfs
+  if [[ -w $f ]] && ! grep -q 'delay-grub-ko' "$f"; then
+    # just before grub-btrfs checks and installs the file it generated
+    sed -i '/^if "\${bindir}\/\${GRUB_BTRFS_SCRIPT_CHECK/i [ -x '"$SELF"' ] \&\& '"$SELF"' snapshots "$grub_btrfs_directory/grub-btrfs.new" || true # DelayOS' "$f"
+  fi
+  # --migrate (pacman hook): an installed system whose boot menu was still written by 10_linux gets
+  # the Korean one now. Not in a chroot without a boot menu (ISO build), not on a booted snapshot.
+  if [[ ${1:-} == --migrate && -f /boot/grub/grub.cfg && -x $GRUBD/10_delayos ]] \
+     && grep -q '^### BEGIN /etc/grub.d/10_linux ###' /boot/grub/grub.cfg \
+     && ! grep -q 'systemd.volatile=overlay' /proc/cmdline 2>/dev/null \
+     && command -v grub-mkconfig >/dev/null; then
+    grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+
+snapshots() {
+  local file=${1:-} vendor="" tmp
+  [[ -f $file ]] || return 0
+  case "$(sed -n 's/^vendor_id[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo 2>/dev/null | head -n1)" in
+    AuthenticAMD|HygonGenuine) vendor=amd ;;
+    GenuineIntel) vendor=intel ;;
+  esac
+  tmp=$(mktemp "${file}.XXXXXX") || return 0
+  if awk -v vendor="$vendor" '
+    function title(t,   k, fb) {
+      # "  vmlinuz-linux-delayos & initramfs-linux-delayos-fallback.img & amd-ucode.img"
+      k = t; sub(/^[ ]+/, "", k); sub(/ &.*$/, "", k); sub(/^vmlinuz-/, "", k)
+      fb = (t ~ /-fallback\.img/) ? ", 대체 initramfs" : ""
+      return "  이 상태로 부팅 (커널 " k fb ")"
+    }
+    function flush_entry() {
+      if (!in_entry) return
+      in_entry = 0
+      if (e_other) { n_other++; other[n_other] = ebuf }
+      else if (e_fb) { n_fb++; fb[n_fb] = ebuf }
+      else { n_norm++; norm[n_norm] = ebuf }
+      ebuf = ""
+    }
+    function flush_snap(   i, any) {
+      any = n_norm + n_fb
+      for (i = 1; i <= n_norm; i++) printf "%s", norm[i]
+      for (i = 1; i <= n_fb; i++) printf "%s", fb[i]
+      # entries with the microcode of the other CPU vendor: only when there is nothing else
+      if (!any) for (i = 1; i <= n_other; i++) printf "%s", other[i]
+      n_norm = n_fb = n_other = 0
+    }
+    # header line added by grub-btrfs: same display width (a Hangul syllable is two columns)
+    /^menuentry \x27\|/ && /Date/ {
+      sub(/Date/, "날짜"); sub(/Description/, "   설명    "); sub(/Snapshot/, " 스냅샷 "); sub(/Type/, "종류")
+      print; next
+    }
+    /^submenu \x27/ { in_snap = 1; print; next }
+    in_snap && /^    menuentry \x27/ {
+      flush_entry()
+      in_entry = 1
+      e_fb = ($0 ~ /-fallback\.img/)
+      e_other = 0
+      if (vendor == "amd" && $0 ~ /intel-ucode/) e_other = 1
+      if (vendor == "intel" && $0 ~ /amd-ucode/) e_other = 1
+      q1 = index($0, "\x27"); rest = substr($0, q1 + 1); q2 = index(rest, "\x27")
+      ebuf = "\n" substr($0, 1, q1) title(substr(rest, 1, q2 - 1)) substr(rest, q2) "\n"
+      next
+    }
+    in_entry {
+      if ($0 ~ /^[ \t]*echo \x27Loading Snapshot:/) {
+        line = $0; sub(/Loading Snapshot:/, "이 상태로 시작하는 중:", line); ebuf = ebuf line "\n"; next
+      }
+      if ($0 ~ /^[ \t]*echo \x27Loading (Kernel|Initramfs|Microcode)/) next
+      ebuf = ebuf $0 "\n"
+      if ($0 ~ /^    }[ \t]*$/) flush_entry()
+      next
+    }
+    in_snap && /^}[ \t]*$/ { flush_entry(); flush_snap(); in_snap = 0; print; next }
+    in_snap && /^[ \t]*$/ { next }
+    { print }
+    END { flush_entry(); flush_snap() }
+  ' "$file" > "$tmp" && [[ -s $tmp ]] && { ! command -v grub-script-check >/dev/null || grub-script-check "$tmp"; }; then
+    cat "$tmp" > "$file"
+  fi
+  rm -f "$tmp"
+  return 0
+}
+
+case "${1:-}" in
+  setup) setup "${2:-}" ;;
+  snapshots) snapshots "${2:-}" ;;
+  *) echo "usage: delay-grub-ko setup | snapshots FILE" >&2; exit 2 ;;
+esac

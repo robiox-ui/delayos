@@ -1,0 +1,17 @@
+# The lock screen of Plasma 6.8 lives in the shell package of plasma-desktop
+# (/usr/share/plasma/shells/org.kde.plasma.desktop/contents/lockscreen/LockScreen.qml); a
+# look-and-feel theme can no longer replace it, and a second shell package would also change the
+# desktop layout lookup. So the DelayOS lock screen (same look as the SDDM theme) is copied over
+# that one file, again after every update of either side. If a future Plasma changes the lock
+# screen interface, kscreenlocker falls back to its built-in locker; the PC still locks/unlocks.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Path
+Target = usr/share/plasma/shells/org.kde.plasma.desktop/contents/lockscreen/LockScreen.qml
+Target = usr/share/delayos/lockscreen/LockScreen.qml
+
+[Action]
+Description = Applying the DelayOS lock screen...
+When = PostTransaction
+Exec = /usr/bin/install -m644 /usr/share/delayos/lockscreen/LockScreen.qml /usr/share/plasma/shells/org.kde.plasma.desktop/contents/lockscreen/LockScreen.qml

@@ -1,0 +1,13 @@
+[Unit]
+Description=Keep the boot splash until the login screen is up
+Documentation=file:/etc/systemd/system/sddm.service.d/delay-splash.conf
+DefaultDependencies=no
+After=plymouth-start.service
+Conflicts=shutdown.target
+Before=shutdown.target
+ConditionPathExists=/run/plymouth/pid
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/delayos/delay-splash-handoff
+TimeoutStartSec=30

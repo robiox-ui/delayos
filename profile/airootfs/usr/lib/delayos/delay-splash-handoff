@@ -1,0 +1,23 @@
+#!/bin/sh
+# delay-splash-handoff: ends the Plymouth boot splash when the display server is up, and leaves the
+# last splash frame on screen (--retain-splash) until that server draws its first frame.
+# Started together with sddm.service (sddm.service.d/delay-splash.conf). Never waits longer than
+# 15 s: without a display server the splash goes away and the console is visible.
+plymouth --ping 2>/dev/null || exit 0
+
+up() { # a Wayland compositor (SDDM greeter, or the session of an autologin user) or an X server
+  for s in /run/user/*/wayland-[0-9] /tmp/.X11-unix/X[0-9]; do
+    [ -S "$s" ] && return 0
+  done
+  return 1
+}
+
+i=0
+while [ "$i" -lt 150 ]; do
+  up && break
+  sleep 0.1
+  i=$((i + 1))
+done
+# the socket exists a moment before the compositor has taken over the screen
+[ "$i" -lt 150 ] && sleep 0.5
+exec plymouth quit --retain-splash

@@ -66,6 +66,11 @@ file_permissions=(
   ["/usr/local/bin/delay-recovery-ctl"]="0:0:755"
   ["/usr/lib/delayos/delay-recovery-info"]="0:0:755"
   ["/etc/grub.d/45_delayos-recovery"]="0:0:755"
+  # Korean boot menu (10_delayos replaces grub's 10_linux, 30_delayos-firmware its 30_uefi-firmware)
+  ["/etc/grub.d/10_delayos"]="0:0:755"
+  ["/etc/grub.d/30_delayos-firmware"]="0:0:755"
+  ["/usr/lib/delayos/delay-grub-ko"]="0:0:755"
+  ["/usr/lib/delayos/delay-splash-handoff"]="0:0:755"
   ["/usr/local/bin/delay-cpu-opt"]="0:0:755"
   ["/usr/local/bin/delay-gpu-setup"]="0:0:755"
   ["/usr/bin/delay-steam-compat"]="0:0:755"

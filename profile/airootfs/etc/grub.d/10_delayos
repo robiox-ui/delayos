@@ -1,0 +1,277 @@
+#! /bin/sh
+set -e
+# DelayOS: the boot menu entries of the installed system, in Korean. Replaces grub's 10_linux
+# (same kernels, same ids, same kernel command line; only the visible text differs):
+#   DelayOS                                   id gnulinux-simple-<uuid>
+#   DelayOS 고급 옵션                         id gnulinux-advanced-<uuid>
+#     DelayOS (커널 linux-delayos)            id gnulinux-<kernel>-advanced-<uuid>
+#     DelayOS (커널 linux-delayos, 대체 initramfs)
+#     DelayOS (커널 linux-delayos, 복구 모드)   only with GRUB_DISABLE_RECOVERY=false
+# The Hangul titles need GRUB's graphical terminal with the unicode font. grub.cfg sets $lang only
+# when that font was loaded (00_header), so without it the same entries get plain ASCII titles.
+#
+# 10_linux belongs to the grub package and comes back executable with every grub update; this
+# script runs before it (grub-mkconfig tests -x just before each script) and switches it off.
+# Derived from grub's 10_linux, Copyright (C) Free Software Foundation, Inc., GPL-3.0-or-later.
+
+prefix="/usr"
+exec_prefix="/usr"
+datarootdir="/usr/share"
+
+. "$pkgdatadir/grub-mkconfig_lib"
+
+# stock generators replaced by DelayOS ones, snapshot menu texts (see the script)
+if [ -x /usr/lib/delayos/delay-grub-ko ]; then
+  /usr/lib/delayos/delay-grub-ko setup >&2 || true
+else
+  for f in /etc/grub.d/10_linux /etc/grub.d/30_uefi-firmware; do
+    if [ -x "$f" ]; then chmod -x "$f" 2>/dev/null || true; fi
+  done
+fi
+
+OS="DelayOS"
+CLASS="--class delayos --class gnu-linux --class gnu --class os"
+
+case ${GRUB_DEVICE} in
+  /dev/loop/*|/dev/loop[0-9])
+    GRUB_DEVICE=`losetup ${GRUB_DEVICE} | sed -e "s/^[^(]*(\([^)]\+\)).*/\1/"`
+  ;;
+esac
+
+: ${GRUB_CMDLINE_LINUX_RECOVERY:=single}
+: ${GRUB_DISABLE_LINUX_PARTUUID=true}
+
+# btrfs may reside on multiple devices: UUID in that case (as 10_linux)
+if ( [ "x${GRUB_DEVICE_UUID}" = "x" ] && [ "x${GRUB_DEVICE_PARTUUID}" = "x" ] ) \
+    || ( [ "x${GRUB_DISABLE_LINUX_UUID}" = "xtrue" ] \
+	&& [ "x${GRUB_DISABLE_LINUX_PARTUUID}" = "xtrue" ] ) \
+    || ( ! findfs UUID="${GRUB_DEVICE_UUID}" > /dev/null 2>&1 \
+	&& ! findfs PARTUUID="${GRUB_DEVICE_PARTUUID}" > /dev/null 2>&1 ) \
+    || ( test -e "${GRUB_DEVICE}" && ( uses_abstraction "${GRUB_DEVICE}" lvm || uses_abstraction "${GRUB_DEVICE}" diskfilter ) ); then
+  LINUX_ROOT_DEVICE=${GRUB_DEVICE}
+elif [ "x${GRUB_DEVICE_UUID}" = "x" ] \
+    || [ "x${GRUB_DISABLE_LINUX_UUID}" = "xtrue" ]; then
+  LINUX_ROOT_DEVICE=PARTUUID=${GRUB_DEVICE_PARTUUID}
+else
+  LINUX_ROOT_DEVICE=UUID=${GRUB_DEVICE_UUID}
+fi
+
+case x"$GRUB_FS" in
+    xbtrfs)
+	rootsubvol="`make_system_path_relative_to_its_root /`"
+	rootsubvol="${rootsubvol#/}"
+	if [ "x${rootsubvol}" != x ]; then
+	    GRUB_CMDLINE_LINUX="rootflags=subvol=${rootsubvol} ${GRUB_CMDLINE_LINUX}"
+	fi;;
+esac
+
+# Texts: Korean with the graphical terminal, ASCII without. Exported: submenus are a new context.
+cat << 'EOF'
+if [ "x${lang}" != x ]; then
+  set delay_t_adv='DelayOS 고급 옵션'
+  set delay_w_kernel='커널'
+  set delay_w_fallback='대체 initramfs'
+  set delay_w_recovery='복구 모드'
+  set delay_m_start='DelayOS를 시작하는 중...'
+else
+  set delay_t_adv='DelayOS advanced options'
+  set delay_w_kernel='kernel'
+  set delay_w_fallback='fallback initramfs'
+  set delay_w_recovery='recovery mode'
+  set delay_m_start='Starting DelayOS...'
+fi
+export delay_t_adv
+export delay_w_kernel
+export delay_w_fallback
+export delay_w_recovery
+export delay_m_start
+EOF
+
+linux_entry ()
+{
+  version="$1"
+  type="$2"
+  args="$3"
+
+  if [ -z "$boot_device_id" ]; then
+      boot_device_id="$(grub_get_device_id "${GRUB_DEVICE}")"
+  fi
+  # titles are in double quotes: GRUB expands the delay_* variables; the kernel name is [A-Za-z0-9._-]
+  kname="$(echo "$version" | LC_ALL=C sed 's/[^A-Za-z0-9._+-]/_/g')"
+  if [ x$type != xsimple ] ; then
+      case $type in
+	  fallback)
+	      title="${OS} (\${delay_w_kernel} ${kname}, \${delay_w_fallback})"
+	      allowed_user_list="$(grub_get_auth_user_list $GRUB_ADVANCED_ACCESS_LEVEL)" ;;
+	  recovery)
+	      title="${OS} (\${delay_w_kernel} ${kname}, \${delay_w_recovery})"
+	      allowed_user_list="$(grub_get_auth_user_list $GRUB_RECOVERY_ACCESS_LEVEL)" ;;
+	  *)
+	      title="${OS} (\${delay_w_kernel} ${kname})"
+	      allowed_user_list="$(grub_get_auth_user_list $GRUB_ADVANCED_ACCESS_LEVEL)" ;;
+      esac
+      echo "menuentry \"${title}\" ${CLASS} \$menuentry_id_option 'gnulinux-$version-$type-$boot_device_id' ${allowed_user_list}{" | sed "s/^/$submenu_indentation/"
+  else
+      allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+      echo "menuentry '${OS}' ${CLASS} \$menuentry_id_option 'gnulinux-simple-$boot_device_id' ${allowed_user_list}{" | sed "s/^/$submenu_indentation/"
+  fi
+  if [ x$type != xrecovery ] ; then
+      save_default_entry | grub_add_tab
+  fi
+
+  if [ "x$GRUB_GFXPAYLOAD_LINUX" = x ]; then
+      echo "	load_video" | sed "s/^/$submenu_indentation/"
+      if grep -qx "CONFIG_FB_EFI=y" "${config}" 2> /dev/null \
+	  && grep -qx "CONFIG_VT_HW_CONSOLE_BINDING=y" "${config}" 2> /dev/null; then
+	  echo '	if [ "x$grub_platform" = xefi ]; then' | sed "s/^/$submenu_indentation/"
+	  echo "		set gfxpayload=keep" | sed "s/^/$submenu_indentation/"
+	  echo '	fi' | sed "s/^/$submenu_indentation/"
+      fi
+  else
+      if [ "x$GRUB_GFXPAYLOAD_LINUX" != xtext ]; then
+	  echo "	load_video" | sed "s/^/$submenu_indentation/"
+      fi
+      echo "	set gfxpayload=$GRUB_GFXPAYLOAD_LINUX" | sed "s/^/$submenu_indentation/"
+  fi
+
+  echo "	insmod gzio" | sed "s/^/$submenu_indentation/"
+
+  if [ x$dirname = x/ ]; then
+    if [ -z "${prepare_root_cache}" ]; then
+      prepare_root_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE} | grub_add_tab)"
+    fi
+    printf '%s\n' "${prepare_root_cache}" | sed "s/^/$submenu_indentation/"
+  else
+    if [ -z "${prepare_boot_cache}" ]; then
+      prepare_boot_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE_BOOT} | grub_add_tab)"
+    fi
+    printf '%s\n' "${prepare_boot_cache}" | sed "s/^/$submenu_indentation/"
+  fi
+  # The everyday entry starts without any text (hidden menu, then the splash). The entries someone
+  # picked by hand say what is happening, in one line.
+  if [ x$type != xsimple ] ; then
+    echo '	echo "${delay_m_start}"' | sed "s/^/$submenu_indentation/"
+  fi
+  sed "s/^/$submenu_indentation/" << EOF
+	linux	${rel_dirname}/${basename} root=${linux_root_device_thisversion} rw ${args}
+EOF
+  if test -n "${initrd}" ; then
+    initrd_path=
+    for i in ${initrd}; do
+      initrd_path="${initrd_path} ${rel_dirname}/${i}"
+    done
+    sed "s/^/$submenu_indentation/" << EOF
+	initrd	$(echo $initrd_path)
+EOF
+  fi
+  sed "s/^/$submenu_indentation/" << EOF
+}
+EOF
+}
+
+list=
+for i in /boot/vmlinuz-* /vmlinuz-* /boot/kernel-* ; do
+    if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
+done
+
+prepare_boot_cache=
+prepare_root_cache=
+boot_device_id=
+submenu_indentation=""
+
+reverse_sorted_list=$(echo $list | tr ' ' '\n' | sed -e 's/\.old$/ 1/; / 1$/! s/$/ 2/' | version_sort -r | sed -e 's/ 1$/.old/; s/ 2$//')
+
+# The DelayOS kernel is the everyday entry (version sort would put linux-lts first)
+: ${GRUB_TOP_LEVEL:=/boot/vmlinuz-linux-delayos}
+if [ "x$GRUB_TOP_LEVEL" != x ] && [ -e "$GRUB_TOP_LEVEL" ]; then
+  reverse_sorted_list=$(grub_move_to_front "$GRUB_TOP_LEVEL" ${reverse_sorted_list})
+fi
+
+if [ "x${GRUB_DISABLE_SUBMENU}" = xyes ] || [ "x${GRUB_DISABLE_SUBMENU}" = xy ]; then
+  GRUB_DISABLE_SUBMENU="true"
+fi
+
+is_top_level=true
+for linux in ${reverse_sorted_list}; do
+  echo "DelayOS 커널: $linux" >&2
+  basename=`basename $linux`
+  dirname=`dirname $linux`
+  rel_dirname=`make_system_path_relative_to_its_root $dirname`
+  version=`echo $basename | sed -e "s,vmlinuz-,,g"`
+  alt_version=`echo $version | sed -e "s,\.old$,,g"`
+  linux_root_device_thisversion="${LINUX_ROOT_DEVICE}"
+
+  initrd_early=
+  for i in ${GRUB_EARLY_INITRD_LINUX_STOCK} \
+	   ${GRUB_EARLY_INITRD_LINUX_CUSTOM}; do
+    if test -e "${dirname}/${i}" ; then
+      initrd_early="${initrd_early} ${i}"
+    fi
+  done
+
+  initrd_real=
+  for i in "initramfs-${version}.img" "initramfs-${alt_version}.img.old" \
+	   "initramfs-${alt_version}.img" "initrd.img-${version}" \
+	   "initrd-${version}.img" "initrd-${version}"; do
+    if test -e "${dirname}/${i}" ; then
+      initrd_real="${i}"
+      break
+    fi
+  done
+
+  initrd=
+  if test -n "${initrd_early}" || test -n "${initrd_real}"; then
+    initrd="${initrd_early} ${initrd_real}"
+  fi
+
+  config=
+  for i in "${dirname}/config-${version}" "${dirname}/config-${alt_version}" ; do
+    if test -e "${i}" ; then
+      config="${i}"
+      break
+    fi
+  done
+
+  if test -z "${initrd_real}" ; then
+    # no initramfs: "UUID=" cannot be resolved by the kernel itself
+    if [ "x${GRUB_DEVICE_PARTUUID}" = "x" ] \
+	|| [ "x${GRUB_DISABLE_LINUX_PARTUUID}" = "xtrue" ]; then
+	linux_root_device_thisversion=${GRUB_DEVICE}
+    else
+	linux_root_device_thisversion=PARTUUID=${GRUB_DEVICE_PARTUUID}
+    fi
+  fi
+
+  if [ "x$is_top_level" = xtrue ] && [ "x${GRUB_DISABLE_SUBMENU}" != xtrue ]; then
+    linux_entry "${version}" simple \
+    "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
+
+    submenu_indentation="$grub_tab"
+
+    if [ -z "$boot_device_id" ]; then
+	boot_device_id="$(grub_get_device_id "${GRUB_DEVICE}")"
+    fi
+    echo "submenu \"\${delay_t_adv}\" \$menuentry_id_option 'gnulinux-advanced-$boot_device_id' $(grub_echo_unrestricted_maybe){"
+    is_top_level=false
+  fi
+
+  linux_entry "${version}" advanced \
+              "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
+
+  if test -e "${dirname}/initramfs-${version}-fallback.img" ; then
+    initrd="${initrd_early} initramfs-${version}-fallback.img"
+    linux_entry "${version}" fallback \
+                "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
+  fi
+
+  if [ "x${GRUB_DISABLE_RECOVERY}" != "xtrue" ]; then
+    initrd="${initrd_early} ${initrd_real}"
+    linux_entry "${version}" recovery \
+                "${GRUB_CMDLINE_LINUX_RECOVERY} ${GRUB_CMDLINE_LINUX}"
+  fi
+done
+
+# closing '}' of the submenu
+if [ x"$is_top_level" != xtrue ]; then
+  echo '}'
+fi

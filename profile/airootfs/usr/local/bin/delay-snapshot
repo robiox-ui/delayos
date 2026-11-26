@@ -488,6 +488,8 @@ EOF
     set_gb GRUB_BTRFS_TITLE_FORMAT '("date" "description")'
     set_gb GRUB_BTRFS_IGNORE_SPECIFIC_PATH '("@" "@factory")'
     set_gb GRUB_BTRFS_IGNORE_PREFIX_PATH '("var/lib/docker" "@var/lib/docker" "@/var/lib/docker" "@docker" "@old-" "@.new")'
+    # Korean texts in the snapshot menu (patches /etc/grub.d/41_snapshots-btrfs, see the script)
+    [[ -x /usr/lib/delayos/delay-grub-ko ]] && /usr/lib/delayos/delay-grub-ko setup || true
   fi
   mkdir -p /etc/mkinitcpio.conf.d
   cat > /etc/mkinitcpio.conf.d/delayos-snapshots.conf <<'EOF'

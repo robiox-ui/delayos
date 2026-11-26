@@ -1,13 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- DelayOS: pkexec /usr/lib/delayos/delay-sys-helper <command> ...
+     One action per command (pkexec picks the action whose exec.argv1 equals the first argument),
+     so the password prompt says what is about to happen. org.delayos.syshelper without argv1 is
+     the fallback for any other first argument. -->
 <policyconfig>
   <vendor>DelayOS</vendor>
   <action id="org.delayos.syshelper">
-    <description>Install, remove and update software</description>
-    <description xml:lang="ko">소프트웨어 설치, 제거 및 업데이트</description>
-    <message>Authentication is required to change the installed software</message>
-    <message xml:lang="ko">설치된 소프트웨어를 변경하려면 인증이 필요합니다</message>
+    <description>Change system settings</description>
+    <description xml:lang="ko">시스템 설정 변경</description>
+    <message>Authentication is required to change system settings</message>
+    <message xml:lang="ko">시스템 설정을 변경하려면 인증이 필요합니다</message>
+    <icon_name>preferences-system</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+  </action>
+  <action id="org.delayos.syshelper.install">
+    <description>Install apps and drivers</description>
+    <description xml:lang="ko">앱과 드라이버 설치</description>
+    <message>Authentication is required to install software</message>
+    <message xml:lang="ko">앱이나 드라이버를 설치하려면 인증이 필요합니다</message>
+    <icon_name>system-software-install</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">install</annotate>
+  </action>
+  <action id="org.delayos.syshelper.remove">
+    <description>Remove apps</description>
+    <description xml:lang="ko">앱 제거</description>
+    <message>Authentication is required to remove software</message>
+    <message xml:lang="ko">앱을 제거하려면 인증이 필요합니다</message>
+    <icon_name>edit-delete</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">remove</annotate>
+  </action>
+  <action id="org.delayos.syshelper.upgrade">
+    <description>Update the system</description>
+    <description xml:lang="ko">시스템 업데이트</description>
+    <message>Authentication is required to update the system</message>
+    <message xml:lang="ko">시스템을 업데이트하려면 인증이 필요합니다</message>
     <icon_name>system-software-update</icon_name>
     <defaults>
       <allow_any>auth_admin</allow_any>
@@ -15,5 +60,216 @@
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">upgrade</annotate>
+  </action>
+  <action id="org.delayos.syshelper.clean-cache">
+    <description>Clean the update cache</description>
+    <description xml:lang="ko">업데이트 캐시 정리</description>
+    <message>Authentication is required to clean the update cache</message>
+    <message xml:lang="ko">업데이트 캐시를 정리하려면 인증이 필요합니다</message>
+    <icon_name>edit-clear</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">clean-cache</annotate>
+  </action>
+  <action id="org.delayos.syshelper.flatpak-lang">
+    <description>Set the language of Flatpak apps</description>
+    <description xml:lang="ko">Flatpak 앱 언어 설정</description>
+    <message>Authentication is required to set the language of Flatpak apps</message>
+    <message xml:lang="ko">Flatpak 앱의 언어를 설정하려면 인증이 필요합니다</message>
+    <icon_name>preferences-desktop-locale</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">flatpak-lang</annotate>
+  </action>
+  <action id="org.delayos.syshelper.android-init">
+    <description>Set up Android app support</description>
+    <description xml:lang="ko">Android 앱 지원 설정</description>
+    <message>Authentication is required to set up Android app support</message>
+    <message xml:lang="ko">Android 앱 지원을 설정하려면 인증이 필요합니다</message>
+    <icon_name>applications-other</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">android-init</annotate>
+  </action>
+  <action id="org.delayos.syshelper.enable-service">
+    <description>Turn on a system service</description>
+    <description xml:lang="ko">시스템 서비스 켜기</description>
+    <message>Authentication is required to turn on a system service</message>
+    <message xml:lang="ko">시스템 서비스를 켜려면 인증이 필요합니다</message>
+    <icon_name>preferences-system</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">enable-service</annotate>
+  </action>
+  <action id="org.delayos.syshelper.cpu-opt">
+    <description>Change the CPU optimization</description>
+    <description xml:lang="ko">CPU 최적화 변경</description>
+    <message>Authentication is required to change the CPU optimization</message>
+    <message xml:lang="ko">CPU 최적화 설정을 바꾸려면 인증이 필요합니다</message>
+    <icon_name>cpu</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">cpu-opt</annotate>
+  </action>
+  <action id="org.delayos.syshelper.gpu-setup">
+    <description>Install graphics drivers</description>
+    <description xml:lang="ko">그래픽 드라이버 설치</description>
+    <message>Authentication is required to install the graphics drivers</message>
+    <message xml:lang="ko">그래픽 드라이버를 설치하려면 인증이 필요합니다</message>
+    <icon_name>video-display</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">gpu-setup</annotate>
+  </action>
+  <action id="org.delayos.syshelper.recovery">
+    <description>Use system recovery</description>
+    <description xml:lang="ko">시스템 복구 기능 사용</description>
+    <message>Authentication is required to use system recovery</message>
+    <message xml:lang="ko">시스템 복구 기능을 사용하려면 인증이 필요합니다</message>
+    <icon_name>system-reboot</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">recovery</annotate>
+  </action>
+  <action id="org.delayos.syshelper.snapshot-create">
+    <description>Create a snapshot</description>
+    <description xml:lang="ko">스냅샷 만들기</description>
+    <message>Authentication is required to create a system snapshot</message>
+    <message xml:lang="ko">스냅샷을 만들려면 인증이 필요합니다</message>
+    <icon_name>document-save</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">snapshot-create</annotate>
+  </action>
+  <action id="org.delayos.syshelper.snapshot-delete">
+    <description>Delete a snapshot</description>
+    <description xml:lang="ko">스냅샷 삭제</description>
+    <message>Authentication is required to delete a system snapshot</message>
+    <message xml:lang="ko">스냅샷을 삭제하려면 인증이 필요합니다</message>
+    <icon_name>edit-delete</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">snapshot-delete</annotate>
+  </action>
+  <action id="org.delayos.syshelper.snapshot-rollback">
+    <description>Go back to an earlier state</description>
+    <description xml:lang="ko">이전 상태로 되돌리기</description>
+    <message>Authentication is required to restore the system to an earlier state</message>
+    <message xml:lang="ko">시스템을 이전 상태로 되돌리려면 인증이 필요합니다</message>
+    <icon_name>edit-undo</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">snapshot-rollback</annotate>
+  </action>
+  <action id="org.delayos.syshelper.snapshots-enable">
+    <description>Turn on snapshots</description>
+    <description xml:lang="ko">스냅샷 기능 켜기</description>
+    <message>Authentication is required to turn on system snapshots</message>
+    <message xml:lang="ko">스냅샷 기능을 켜려면 인증이 필요합니다</message>
+    <icon_name>preferences-system</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">snapshots-enable</annotate>
+  </action>
+  <action id="org.delayos.syshelper.recovery-reboot">
+    <description>Start DelayOS Recovery</description>
+    <description xml:lang="ko">DelayOS 복구 시작</description>
+    <message>Authentication is required to restart into DelayOS Recovery</message>
+    <message xml:lang="ko">DelayOS 복구를 시작하려면 인증이 필요합니다</message>
+    <icon_name>system-reboot</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">recovery-reboot</annotate>
+  </action>
+  <action id="org.delayos.syshelper.recovery-reset">
+    <description>Reset this PC</description>
+    <description xml:lang="ko">이 PC 초기화</description>
+    <message>Authentication is required to reset this PC</message>
+    <message xml:lang="ko">이 PC를 초기화하려면 인증이 필요합니다</message>
+    <icon_name>system-reboot</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">recovery-reset</annotate>
+  </action>
+  <action id="org.delayos.syshelper.firmware-setup">
+    <description>Restart into the firmware setup</description>
+    <description xml:lang="ko">펌웨어 설정으로 다시 시작</description>
+    <message>Authentication is required to restart into the firmware (UEFI) setup</message>
+    <message xml:lang="ko">펌웨어(UEFI) 설정으로 다시 시작하려면 인증이 필요합니다</message>
+    <icon_name>system-reboot</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">firmware-setup</annotate>
+  </action>
+  <action id="org.delayos.syshelper.recovery-install">
+    <description>Create or update the recovery partition</description>
+    <description xml:lang="ko">복구 파티션 만들기/업데이트</description>
+    <message>Authentication is required to create or update the recovery partition</message>
+    <message xml:lang="ko">복구 파티션을 만들거나 업데이트하려면 인증이 필요합니다</message>
+    <icon_name>drive-harddisk</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/delayos/delay-sys-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">recovery-install</annotate>
   </action>
 </policyconfig>

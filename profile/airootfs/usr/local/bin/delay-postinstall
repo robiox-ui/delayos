@@ -91,12 +91,15 @@ grep -q '^GRUB_DISABLE_OS_PROBER' /etc/default/grub || echo 'GRUB_DISABLE_OS_PRO
 if [[ ${DELAYOS_WINGAMES:-0} == 1 ]]; then
   sed -i 's/^GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=true/' /etc/default/grub
 fi
-sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0 splash nowatchdog nvme_core.default_ps_max_latency_us=0 split_lock_detect=off zswap.enabled=0 mitigations=auto"/' /etc/default/grub
+sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 rd.udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false vt.global_cursor_default=0 splash nowatchdog nvme_core.default_ps_max_latency_us=0 split_lock_detect=off zswap.enabled=0 mitigations=auto"/' /etc/default/grub
 sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="DelayOS"/' /etc/default/grub
 # grub-mkconfig sorts linux-lts before linux-delayos, so the default entry booted the LTS
 # fallback kernel: pin linux-delayos as the top-level entry (GRUB >= 2.12)
 sed -i '/^GRUB_TOP_LEVEL=/d' /etc/default/grub
 echo 'GRUB_TOP_LEVEL="/boot/vmlinuz-linux-delayos"' >> /etc/default/grub
+# Korean boot menu: /etc/grub.d/10_delayos and 30_delayos-firmware replace the stock generators,
+# the snapshot menu of grub-btrfs is translated (delay-grub-ko; repeated by a pacman hook)
+/usr/lib/delayos/delay-grub-ko setup || true
 
 # Services
 systemctl enable sddm NetworkManager bluetooth fstrim.timer irqbalance \

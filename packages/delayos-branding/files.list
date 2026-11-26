@@ -1,11 +1,13 @@
 # Name, logo, boot splash, login screen, wallpapers
 etc/pacman.d/hooks/50-delay-os-release.hook
 etc/pacman.d/hooks/60-delay-plymouth.hook
+etc/pacman.d/hooks/66-delay-lockscreen.hook
 etc/sddm.conf.d/10-delay.conf
 etc/skel/사진/
 etc/xdg/fastfetch/
 usr/bin/delayfetch
 usr/share/delayos/fastfetch/
+usr/share/delayos/lockscreen/
 usr/share/delayos/logo/
 usr/share/delayos/os-release
 usr/share/icons/hicolor/

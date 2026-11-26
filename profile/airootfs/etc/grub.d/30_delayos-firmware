@@ -1,0 +1,22 @@
+#! /bin/sh
+set -e
+# DelayOS: boot menu entry "UEFI 펌웨어 설정" (replaces grub's 30_uefi-firmware, same id).
+# ASCII title when the graphical terminal with the unicode font is not available ($lang unset).
+
+. "$pkgdatadir/grub-mkconfig_lib"
+
+f=/etc/grub.d/30_uefi-firmware
+if [ -x "$f" ]; then chmod -x "$f" 2>/dev/null || true; fi
+
+allowed_user_list="$(grub_get_auth_user_list $GRUB_RECOVERY_ACCESS_LEVEL)"
+cat << EOF
+if [ "\$grub_platform" = "efi" ]; then
+	fwsetup --is-supported
+	if [ "\$?" = 0 ]; then
+		if [ "x\${lang}" != x ]; then set delay_t_fw='UEFI 펌웨어 설정'; else set delay_t_fw='UEFI firmware settings'; fi
+		menuentry "\${delay_t_fw}" --class delayos --class settings \$menuentry_id_option 'uefi-firmware' ${allowed_user_list}{
+			fwsetup
+		}
+	fi
+fi
+EOF

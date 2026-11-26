@@ -1,0 +1,15 @@
+# grub and grub-btrfs own /etc/grub.d/10_linux, 30_uefi-firmware and 41_snapshots-btrfs: an update
+# puts the stock (English) files back. Switch the first two off again (10_delayos and
+# 30_delayos-firmware replace them) and patch the snapshot menu generator again.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = grub
+Target = grub-btrfs
+Target = delayos-settings-base
+
+[Action]
+Description = Keeping the boot menu in Korean...
+When = PostTransaction
+Exec = /usr/lib/delayos/delay-grub-ko setup --migrate

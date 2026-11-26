@@ -12,9 +12,23 @@
 #   cpu-opt enable|disable|kernel-install|kernel-remove   delay-cpu-opt (CPU-optimized packages)
 #   gpu-setup           delay-gpu-setup (drivers that match the GPUs)
 #   recovery SUB ...    snapshots (delay-snapshot) and restart into the recovery environment (delay-recovery-ctl)
+#   snapshot-create|snapshot-delete|snapshot-rollback|snapshots-enable|recovery-reboot|recovery-reset|
+#   firmware-setup|recovery-install   the same as "recovery SUB", one polkit action (prompt text) each
 set -u
 export LC_ALL=C
 cmd="${1:-}"; shift || true
+
+# Flat names for the recovery commands: pkexec chooses the polkit action (and with it the text of
+# the password prompt: "스냅샷을 만들려면…", "이 PC를 초기화하려면…") by the first argument only.
+case "$cmd" in
+  snapshot-create|snapshot-delete|snapshot-rollback) set -- "$cmd" "$@"; cmd=recovery ;;
+  snapshots-enable) set -- enable; cmd=recovery ;;
+  recovery-reboot)  set -- reboot "${1:-menu}"; cmd=recovery ;;
+  recovery-reset)
+    case "${1:-}" in reset-keep|reset-wipe) set -- reboot "$1"; cmd=recovery ;; *) echo "usage: delay-sys-helper recovery-reset reset-keep|reset-wipe" >&2; exit 2 ;; esac ;;
+  firmware-setup)   set -- firmware; cmd=recovery ;;
+  recovery-install) set -- install-re; cmd=recovery ;;
+esac
 
 valid_pkgs() {
   [[ $# -gt 0 ]] || { echo "no packages" >&2; exit 2; }

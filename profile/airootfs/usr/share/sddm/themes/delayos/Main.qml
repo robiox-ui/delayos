@@ -218,5 +218,15 @@ Rectangle {
         }
     }
 
+    // Fade in from the boot splash colour (#0B0B10) instead of popping up out of a black screen
+    Rectangle {
+        anchors.fill: parent
+        z: 1000
+        color: "#0B0B10"
+        opacity: 1
+        visible: opacity > 0
+        NumberAnimation on opacity { from: 1; to: 0; duration: 420; easing.type: Easing.OutCubic }
+    }
+
     Component.onCompleted: pw.forceActiveFocus()
 }

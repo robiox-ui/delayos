@@ -46,11 +46,19 @@ if search --no-floppy --fs-uuid --set=delay_re ${re_uuid} ; then
   fi
   set delay_re_act="\${delay_re_action}"
 
-  menuentry 'DelayOS 복구' --class delayos --class recovery --id 'delayos-recovery' {
+  # Hangul needs the graphical terminal with the unicode font (\$lang is set only then, 00_header)
+  if [ "x\${lang}" != x ]; then
+    set delay_t_re='DelayOS 복구'
+    set delay_m_re='DelayOS 복구 환경을 불러오는 중...'
+  else
+    set delay_t_re='DelayOS Recovery'
+    set delay_m_re='Starting DelayOS Recovery...'
+  fi
+  menuentry "\${delay_t_re}" --class delayos --class recovery --id 'delayos-recovery' {
     search --no-floppy --fs-uuid --set=root ${re_uuid}
     load_video
     set gfxpayload=keep
-    echo 'DelayOS 복구 환경을 불러오는 중...'
+    echo "\${delay_m_re}"
     linux /${RE_DIR}/boot/vmlinuz archisobasedir=${RE_DIR} archisodevice=UUID=${re_uuid} nomodeset quiet loglevel=3 rd.udev.log_level=3 nowatchdog delayos.re=1 delayos.root=${root_uuid} "delayos.re.action=\${delay_re_act}"
     initrd /${RE_DIR}/boot/initramfs.img
   }

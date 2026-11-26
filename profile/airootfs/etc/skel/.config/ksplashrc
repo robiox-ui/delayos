@@ -1,6 +1,7 @@
-# No login splash: ksplash kept the screen covered after plasmashell was already up, so the
-# desktop now shows as soon as it exists. (In the user's config, not /etc/xdg: the look-and-feel
-# defaults in ~/.config/kdedefaults would override a system-wide file.)
+# Login splash = the boot splash continued: same background, logo and dots as the Plymouth theme
+# (look-and-feel org.delayos.dock, contents/splash), so there is no black screen between the boot
+# splash and the desktop; KWin fades from it to the desktop. (In the user's config, not /etc/xdg:
+# the look-and-feel defaults in ~/.config/kdedefaults would override a system-wide file.)
 [KSplash]
-Engine=none
-Theme=None
+Engine=KSplashQML
+Theme=org.delayos.dock

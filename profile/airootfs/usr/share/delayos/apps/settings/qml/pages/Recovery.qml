@@ -6,7 +6,7 @@ import "../controls"
 
 // 시스템 › 복구: 이 PC 초기화, 고급 시작 옵션, 복구 파티션, 시스템 스냅샷 (docs/recovery.md).
 // Reads through sb.recovery.status (pkexec delay-recovery-info, no password); every change is
-// `pkexec delay-sys-helper recovery ...`.
+// `pkexec delay-sys-helper <command> ...` (snapshot-create, recovery-reset, ...).
 SPage {
     id: pg
     property var st: ({ ok: false, snapshots: [] })
@@ -17,7 +17,17 @@ SPage {
     property string resetMode: "keep"
 
     function load() { win.call("sb.recovery.status", [], function(r) { pg.loading = false; if (r && !r.error) pg.st = r }) }
-    function run(id, args) { if (job !== "") return; job = id; jobLine = ""; sys.spawn("rec-" + id, ["pkexec", sys.helper(), "recovery"].concat(args)) }
+    // Each change has its own helper command, so the password prompt names it (polkit picks the
+    // action by the first argument): snapshot-create, recovery-reset, firmware-setup ...
+    function helperArgs(args) {
+        var a = args.slice()
+        if (a[0] === "reboot") return (a[1] || "").indexOf("reset-") === 0 ? ["recovery-reset", a[1]] : ["recovery-reboot", a[1] || "menu"]
+        if (a[0] === "enable") a[0] = "snapshots-enable"
+        else if (a[0] === "firmware") a[0] = "firmware-setup"
+        else if (a[0] === "install-re") a[0] = "recovery-install"
+        return a
+    }
+    function run(id, args) { if (job !== "") return; job = id; jobLine = ""; sys.spawn("rec-" + id, ["pkexec", sys.helper()].concat(helperArgs(args))) }
     Component.onCompleted: load()
 
     Connections {

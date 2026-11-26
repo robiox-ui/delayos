@@ -14,6 +14,7 @@ etc/systemd/system.conf.d/10-delay.conf
 etc/systemd/system/delay-cpu-opt.service
 etc/systemd/system/delay-eac-facts.service
 etc/systemd/system/delay-firstboot.service
+etc/systemd/system/sddm.service.d/delay-splash.conf
 etc/tmpfiles.d/delay-mglru.conf
 etc/tmpfiles.d/delay-performance.conf
 etc/xdg/MangoHud/MangoHud.conf
@@ -55,4 +56,7 @@ usr/local/bin/delay-recovery-ctl
 usr/local/bin/delay-snapshot
 etc/xdg/autostart/org.delayos.SnapshotBoot.desktop
 usr/lib/delayos/delay-recovery-info
+usr/lib/delayos/delay-grub-ko
+usr/lib/delayos/delay-splash-handoff
+etc/pacman.d/hooks/65-delay-grub-ko.hook
 usr/share/polkit-1/actions/org.delayos.recovery.policy

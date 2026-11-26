@@ -304,8 +304,11 @@ for f in $(grep -rl 'vmlinuz-linux\b\|initramfs-linux\.img' "$PROFILE/efiboot" "
          -e 's/Arch Linux/DelayOS/g' "$f"
 done
 # Live kernel options: quiet, fast, no mitigations-induced FPS loss on the live USB
+# plymouth.use-simpledrm: the live initramfs has no GPU drivers (they load from the squashfs), and
+# Plymouth otherwise waits for one before it shows anything: splash on the firmware framebuffer
+# at once. show_status=false: no "[ OK ] ..." console lines flashing between splash and desktop.
 for f in $(grep -rl 'archisobasedir' "$PROFILE/efiboot" "$PROFILE/syslinux" "$PROFILE/grub"); do
-  sed -i 's/\(archisosearchuuid=%ARCHISO_UUID%\)/\1 quiet splash loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0 nowatchdog split_lock_detect=off module_blacklist=pcspkr i915.modeset=1 amdgpu.modeset=1 nvme_load=yes copytoram=auto cow_spacesize=10G/' "$f"
+  sed -i 's/\(archisosearchuuid=%ARCHISO_UUID%\)/\1 quiet splash plymouth.use-simpledrm systemd.show_status=false rd.systemd.show_status=false loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0 nowatchdog split_lock_detect=off module_blacklist=pcspkr i915.modeset=1 amdgpu.modeset=1 nvme_load=yes copytoram=auto cow_spacesize=10G/' "$f"
 done
 
 # Services (releng uses systemd-networkd/iwd; we use NetworkManager + SDDM)
