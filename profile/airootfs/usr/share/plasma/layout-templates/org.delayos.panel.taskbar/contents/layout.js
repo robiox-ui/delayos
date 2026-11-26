@@ -35,6 +35,14 @@ dock.currentConfigGroup = ["General"];
 dock.writeConfig("mode", "taskbar");
 dock.writeConfig("launchers", savedPins() || pins());
 dock.writeConfig("defaultLaunchers", pins());
+// bar menu options chosen in the other layout (delay-shell-layout saves them next to the pins)
+try {
+    var saved = ConfigFile("delayosrc", "Dock");
+    ["showTaskView", "searchMode", "locked"].forEach(function (k) {
+        var v = saved.readEntry(k);
+        if (v !== undefined && v !== null && String(v).length) dock.writeConfig(k, String(v));
+    });
+} catch (e) {}
 
 // DelayOS popups (shell-popups stream): headless plasmoids that draw their own glass windows.
 // Meta alone opens Start (it provides org.kde.plasma.launchermenu). The panel still gives each of

@@ -26,10 +26,14 @@ panels().forEach(function (p) {
     p.widgets("org.delayos.dock").forEach(function (w) {
         w.currentConfigGroup = ["General"];
         var pins = w.readConfig("launchers");
-        if (pins && String(pins).length) {
-            var c = ConfigFile("delayosrc", "Dock");
+        var c = ConfigFile("delayosrc", "Dock");
+        if (pins && String(pins).length)
             c.writeEntry("launchers", String(pins));
-        }
+        // bar menu options (right-click on the empty area of the dock / taskbar)
+        ["showTaskView", "searchMode", "locked"].forEach(function (k) {
+            var v = w.readConfig(k);
+            if (v !== undefined && v !== null && String(v).length) c.writeEntry(k, String(v));
+        });
     });
     // free the widget shortcuts (Meta+Space/A/V/X) so the widgets of the new panel can take them
     p.widgetIds.forEach(function (id) { try { var w = p.widgetById(id); if (w && w.globalShortcut) w.globalShortcut = ""; } catch (e) {} });

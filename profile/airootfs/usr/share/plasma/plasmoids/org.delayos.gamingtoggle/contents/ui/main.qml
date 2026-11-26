@@ -19,6 +19,7 @@ PlasmoidItem {
         Layout.minimumWidth: Layout.preferredWidth
         Layout.maximumWidth: Layout.preferredWidth
         Layout.fillHeight: true
+        BarContextArea { anchors.fill: parent }
         GamingPill {
             id: pill
             x: 8

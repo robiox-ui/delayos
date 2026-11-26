@@ -16,5 +16,11 @@
     </entry>
     <!-- written by delay-shell-activate dock-entry N (Meta+N): "N:<timestamp>" -->
     <entry name="activateRequest" type="String"><default></default></entry>
+    <!-- bar menu (right-click on the empty area): 작업 보기 단추 표시 -->
+    <entry name="showTaskView" type="Bool"><default>true</default></entry>
+    <!-- bar menu > 검색: "icon" (아이콘만), "box" (검색 상자 표시) or "hidden" (숨기기) -->
+    <entry name="searchMode" type="String"><default>icon</default></entry>
+    <!-- bar menu > 작업 표시줄 잠금: pins cannot be dragged and the panel edit mode is not offered -->
+    <entry name="locked" type="Bool"><default>false</default></entry>
   </group>
 </kcfg>

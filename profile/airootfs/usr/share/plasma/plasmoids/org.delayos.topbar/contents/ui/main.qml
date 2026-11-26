@@ -55,6 +55,8 @@ PlasmoidItem {
 
         // positions are measured from the panel's left edge (the containment adds its own margin)
         readonly property real sceneX: { width; return mapToItem(null, 0, 0).x }
+        // right-click on the empty area of the top bar: a small DelayOS menu instead of Plasma's panel menu
+        BarContextArea { anchors.fill: parent }
         // logo: 16 px, centre x = 27
         Rectangle {
             id: logoBtn
@@ -68,7 +70,8 @@ PlasmoidItem {
                 id: logoMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                onClicked: act.toggle("start")
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: (m) => act.toggle(m.button === Qt.RightButton ? "winx" : "start")
             }
         }
         Text {

@@ -28,6 +28,15 @@ PlasmoidItem {
     readonly property int barH: taskbar ? 43 : 47
     readonly property int unpinnedGap: 8
 
+    // bar menu options (right-click on the empty area), kept in the plasmoid config
+    readonly property bool showTaskView: Plasmoid.configuration.showTaskView
+    readonly property string searchMode: Plasmoid.configuration.searchMode   // icon | box | hidden
+    readonly property bool locked: Plasmoid.configuration.locked
+    readonly property int searchBoxW: 150
+    readonly property int searchW: searchMode === "hidden" ? 0 : searchMode === "box" ? searchBoxW + 10 : pitch
+    // width of the fixed tiles in front of the apps: Start + Search + Task View
+    readonly property int leadW: pitch + searchW + (showTaskView ? pitch : 0)
+
     // ---------- model ----------
     TaskManager.VirtualDesktopInfo { id: vdInfo }
     TaskManager.ActivityInfo { id: actInfo }
@@ -75,7 +84,7 @@ PlasmoidItem {
     Component.onCompleted: recount()
 
     // outer width of the dock = 506 px for 9 items (ui-spec 3.2): 1 + 50 per item + 55 (empty slot)
-    readonly property int dockWidth: 1 + 3 * pitch + tasksModel.count * pitch
+    readonly property int dockWidth: 1 + leadW + tasksModel.count * pitch
                                      + (unpinnedCount > 0 ? unpinnedGap + 5 : 55)
 
     Activator { id: act; containment: Plasmoid.containment }
@@ -126,6 +135,61 @@ PlasmoidItem {
     // ---------- drag to reorder ----------
     property int dragRow: -1
 
+    // ---------- bar menu (empty area, Search and Task View tiles) ----------
+    property bool autohide: false
+    Exec {
+        id: barSh
+        onFinished: (cmd, out, code) => {
+            if (cmd.indexOf(" status") > 0) root.autohide = /autohide=true/.test(out)
+        }
+    }
+    function setSearchMode(m) { Plasmoid.configuration.searchMode = m }
+    function barEntries() {
+        var e = [
+            { text: "검색", glyph: "search", submenu: [
+                { text: "검색 상자 표시", checked: root.searchMode === "box", run: function() { root.setSearchMode("box") } },
+                { text: "아이콘만", checked: root.searchMode === "icon", run: function() { root.setSearchMode("icon") } },
+                { text: "숨기기", checked: root.searchMode === "hidden", run: function() { root.setSearchMode("hidden") } } ] },
+            { text: "작업 보기 단추 표시", glyph: "s:taskview", checked: root.showTaskView,
+              run: function() { Plasmoid.configuration.showTaskView = !root.showTaskView } },
+            { separator: true },
+            { text: "바탕 화면 보기", glyph: "monitor",
+              run: function() { barSh.run("qdbus6 org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut 'Show Desktop'") } },
+            { separator: true },
+            { text: "작업 관리자", glyph: "activity", run: function() { barSh.run("setsid -f delay-shell launch taskmanager") } },
+            { separator: true },
+            { text: "작업 표시줄 잠금", glyph: "lock", checked: root.locked,
+              run: function() { Plasmoid.configuration.locked = !root.locked } }
+        ]
+        if (!root.locked)
+            e.push({ text: "작업 표시줄 편집 모드", glyph: "grid",
+                     run: function() { if (Plasmoid.containment && Plasmoid.containment.corona) Plasmoid.containment.corona.editMode = true } })
+        e.push({ text: root.taskbar ? "독으로 전환" : "작업 표시줄로 전환", glyph: "arrow-left-right",
+                 run: function() { barSh.run("setsid -f /usr/local/bin/delay-shell-layout " + (root.taskbar ? "dock" : "taskbar")) } })
+        if (!root.taskbar)
+            e.push({ text: "자동 숨기기", glyph: "chevron-down", checked: root.autohide,
+                     run: function() { var on = !root.autohide; root.autohide = on
+                                       barSh.run("/usr/local/bin/delay-shell-layout autohide " + (on ? "on" : "off")) } })
+        e.push({ text: "작업 표시줄 설정", glyph: "settings", run: function() { barSh.run("setsid -f delay-settings personalisation#dock") } })
+        return e
+    }
+    function openBarMenu(item, x) {
+        var m = barMenuLoader.item
+        if (!m) { barMenuLoader.active = true; m = barMenuLoader.item }
+        if (!m) return
+        if (m.visible) { m.close(); return }
+        m.entries = barEntries()
+        // above the bar, left edge at the pointer (Windows 11)
+        m.popupAt(item, x, -8 - item.mapToItem(null, 0, 0).y, true)
+    }
+    Loader { id: barMenuLoader; active: false; sourceComponent: BarMenu {} }
+    Connections {
+        target: barMenuLoader.item
+        function onAboutToShow() { barSh.run("/usr/local/bin/delay-shell-layout status") }
+    }
+    // the open menu shows the fresh auto-hide state as soon as the status call returns
+    onAutohideChanged: if (barMenuLoader.item && barMenuLoader.item.visible) barMenuLoader.item.entries = barEntries()
+
     fullRepresentation: Item {
         id: full
         // The panel containment adds its own margins around applets; measure them so that the
@@ -146,6 +210,13 @@ PlasmoidItem {
 
         // x of the item row inside this applet: dock = 0 from the window edge, taskbar = centred on screen
         readonly property real rowX: root.taskbar ? Math.round((Window.width - root.dockWidth) / 2 - sceneX) : -sceneX
+
+        // right-click on the empty area of the bar: the DelayOS bar menu (not Plasma's panel menu)
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.RightButton
+            onClicked: (m) => root.openBarMenu(full, m.x)
+        }
 
         DropArea {
             anchors.fill: parent
@@ -168,16 +239,41 @@ PlasmoidItem {
                 tip: "시작"
                 active: root.startOpen
                 onClicked: act.toggle("start")
+                onRightClicked: act.toggle("winx")      // Windows: right-click on Start = Win+X menu
                 Logo { anchors.centerIn: parent; size: 26 }
             }
             DockButton {
+                id: searchBtn
+                readonly property bool box: root.searchMode === "box"
                 tip: "검색"
+                visible: root.searchMode !== "hidden"
+                width: root.searchW
+                tileW: box ? root.searchBoxW : 40
+                tileH: box ? 32 : 40
+                tileR: box ? 16 : 10
+                tileColor: box ? (root.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)) : "transparent"
                 onClicked: act.toggle("search")
-                Glyph { anchors.centerIn: parent; name: "search"; size: 18; color: root.glyphColor; stroke: 2 }
+                onRightClicked: (x) => root.openBarMenu(searchBtn, x)
+                Glyph {
+                    x: searchBtn.box ? (searchBtn.width - root.searchBoxW) / 2 + 12 : (parent.width - width) / 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "search"; size: searchBtn.box ? 15 : 18; color: root.glyphColor; stroke: 2
+                }
+                Text {
+                    visible: searchBtn.box
+                    x: (searchBtn.width - root.searchBoxW) / 2 + 36
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "검색"
+                    font.family: Theme.font; font.pixelSize: Theme.fsBody
+                    color: root.dark ? "#C9CDD4" : "#3A3E46"
+                }
             }
             DockButton {
+                id: taskViewBtn
                 tip: "작업 보기"
+                visible: root.showTaskView
                 onClicked: act.toggle("taskview")
+                onRightClicked: (x) => root.openBarMenu(taskViewBtn, x)
                 Glyph { anchors.centerIn: parent; name: "taskview"; size: 18; color: root.glyphColor; stroke: 1.9 }
             }
 
@@ -210,16 +306,21 @@ PlasmoidItem {
         id: db
         property string tip: ""
         property bool active: false
+        property int tileW: 40
+        property int tileH: 40
+        property int tileR: 10
+        property color tileColor: "transparent"
         signal clicked()
+        signal rightClicked(real x)
         default property alias content: holder.data
         width: root.pitch
         height: root.barH
         Rectangle {
             anchors.centerIn: parent
-            width: 40; height: 40; radius: 10
+            width: db.tileW; height: db.tileH; radius: db.tileR
             color: dbMouse.pressed ? root.tilePressed
                  : (dbMouse.containsMouse || db.active) ? root.tileHover
-                 : "transparent"
+                 : db.tileColor
         }
         Item { id: holder; anchors.fill: parent }
         PlasmaCore.ToolTipArea {
@@ -230,7 +331,8 @@ PlasmoidItem {
                 id: dbMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                onClicked: db.clicked()
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: (m) => { if (m.button === Qt.RightButton) db.rightClicked(m.x); else db.clicked() }
             }
         }
     }
@@ -303,7 +405,7 @@ PlasmoidItem {
         PlasmaCore.ToolTipArea {
             anchors.fill: tile
             location: Plasmoid.location
-            active: !menu.visible && root.dragRow < 0
+            active: !menu.visible && root.dragRow < 0 && !(barMenuLoader.item && barMenuLoader.item.visible)
             mainItem: TipLabel { text: task.model.AppName || task.model.display || "" }
             // the MouseArea is a child of the tooltip area, so both see the hover
             MouseArea {
@@ -315,12 +417,12 @@ PlasmoidItem {
                 property bool moved: false
                 onPressed: (m) => { pressPos = Qt.point(m.x, m.y); moved = false }
                 onPositionChanged: (m) => {
-                    if (!(m.buttons & Qt.LeftButton) || !task.pinned) return
+                    if (!(m.buttons & Qt.LeftButton) || !task.pinned || root.locked) return
                     if (!moved && Math.abs(m.x - pressPos.x) < 8) return
                     moved = true
                     root.dragRow = task.index
                     var p = mapToItem(task.parent, m.x, m.y)
-                    var target = Math.floor((p.x - 3 * root.pitch) / root.pitch)
+                    var target = Math.floor((p.x - root.leadW) / root.pitch)
                     target = Math.max(0, Math.min(root.pinnedCount - 1, target))
                     if (target !== task.index) tasksModel.move(task.index, target)
                 }

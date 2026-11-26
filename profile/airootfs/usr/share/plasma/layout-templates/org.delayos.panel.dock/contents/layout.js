@@ -37,4 +37,12 @@ dock.currentConfigGroup = ["General"];
 dock.writeConfig("mode", "dock");
 dock.writeConfig("launchers", savedPins() || pins());
 dock.writeConfig("defaultLaunchers", pins());
+// bar menu options chosen in the other layout (delay-shell-layout saves them next to the pins)
+try {
+    var saved = ConfigFile("delayosrc", "Dock");
+    ["showTaskView", "searchMode", "locked"].forEach(function (k) {
+        var v = saved.readEntry(k);
+        if (v !== undefined && v !== null && String(v).length) dock.writeConfig(k, String(v));
+    });
+} catch (e) {}
 // The Start popup (org.delayos.start) lives in the top bar with the other DelayOS popups.

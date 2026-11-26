@@ -145,6 +145,9 @@ PlasmoidItem {
         Layout.minimumWidth: Layout.preferredWidth
         Layout.fillHeight: true
 
+        // right-click anywhere on the status area: the DelayOS bar menu, not Plasma's applet menu
+        BarContextArea { anchors.fill: parent; taskbar: root.taskbar }
+
         // ======== top bar ========
         Row {
             id: topRow

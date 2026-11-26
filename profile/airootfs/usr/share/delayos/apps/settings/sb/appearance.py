@@ -23,12 +23,13 @@ def state():
     mode = _t("Mode", "")
     if mode not in ("light", "dark", "auto"):
         mode = "light" if "light" in scheme.lower() else "dark"
-    layout = kread("delayosrc", "Shell", "Layout", "dock")
+    # delay-shell-layout owns these keys ("layout", "autohide"); "Layout" is what older builds of this page wrote
+    layout = kread("delayosrc", "Shell", "layout", "") or kread("delayosrc", "Shell", "Layout", "dock")
     return {
         "mode": mode, "scheme": scheme, "accent": read_accent(),
         "accentName": _t("AccentName", "블루"),
         "layout": layout if layout in ("dock", "taskbar") else "dock",
-        "autohide": kread("delayosrc", "Shell", "DockAutoHide", "false") == "true",
+        "autohide": kread("delayosrc", "Shell", "autohide", "false") == "true",
         "wallpaper": current_wallpaper(),
     }
 

@@ -4,4 +4,6 @@ Logo 1.0 Logo.qml
 Exec 1.0 Exec.qml
 Activator 1.0 Activator.qml
 GamingPill 1.0 GamingPill.qml
+BarMenu 1.0 BarMenu.qml
+BarContextArea 1.0 BarContextArea.qml
 Apps 1.0 apps.js
