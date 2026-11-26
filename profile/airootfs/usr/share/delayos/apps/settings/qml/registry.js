@@ -21,6 +21,7 @@ var pages = {
     notifications:   { file: "Notifications", title: "알림", parent: "system" },
     power:           { file: "Power", title: "전원 및 배터리", parent: "system" },
     storage:         { file: "Storage", title: "저장소", parent: "system" },
+    recovery:        { file: "Recovery", title: "복구", parent: "system" },
     about:           { file: "About", title: "정보", parent: "system" },
     bluetooth:       { file: "Bluetooth", title: "Bluetooth 및 장치" },
     mouse:           { file: "Mouse", title: "마우스 및 터치패드", parent: "bluetooth" },
@@ -44,7 +45,7 @@ var alias = {
     "personalization": "personalisation", "wallpaper": "background", "colors": "colours", "theme": "colours",
     "dock": "personalisation", "taskbar": "personalisation", "touchpad": "mouse", "wifi": "network",
     "drivers": "update", "updates": "update", "language": "time", "keymap": "keymapping", "gamecontrols": "keymapping",
-    "battery": "power", "users": "accounts", "windows": "appsupport", "android": "appsupport", "anticheat": "appsupport"
+    "battery": "power", "reset": "recovery", "snapshots": "recovery", "snapshot": "recovery", "restore": "recovery", "users": "accounts", "windows": "appsupport", "android": "appsupport", "anticheat": "appsupport"
 }
 
 function crumbOf(id) {
@@ -83,6 +84,11 @@ var rows = [
     ["전원 모드", "power", "p-profile", "power mode performance 성능 절전"],
     ["화면 끄기 및 절전", "power", "p-sleep", "screen sleep timeout 절전 화면 끄기"],
     ["저장소", "storage", "", "storage disk space 디스크 용량"],
+    ["복구", "recovery", "", "recovery restore repair 복구 복원 시동 부팅"],
+    ["이 PC 초기화", "recovery", "reset", "reset this pc factory reinstall 초기화 공장 재설치 포맷"],
+    ["고급 시작 옵션", "recovery", "advanced", "advanced startup recovery environment uefi firmware bios 고급 시작 복구 환경 펌웨어 바이오스"],
+    ["시스템 스냅샷", "recovery", "snapshots", "snapshot rollback restore point 스냅샷 되돌리기 복원 지점 이전 상태"],
+    ["복구 파티션", "recovery", "partition", "recovery partition 복구 파티션"],
     ["정보", "about", "", "about system info pc specs 사양 정보 cpu ram"],
     ["PC 이름 바꾸기", "system", "rename", "rename pc hostname 이름"],
     ["Wi-Fi", "network", "wifi", "wifi wireless 무선 네트워크"],

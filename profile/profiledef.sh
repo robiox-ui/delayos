@@ -60,6 +60,12 @@ file_permissions=(
   # Hidden Windows for anti-cheat games (delay-winsetup, docs/windows-switch.md)
   ["/usr/local/bin/delay-winsetup"]="0:0:755"
   # Gaming performance (docs/gaming-performance.md): CPU-optimized packages, GPU drivers, Proton default, benchmark
+  # Snapshots, recovery environment, deployment tool (docs/recovery.md)
+  ["/usr/local/bin/delay-snapshot"]="0:0:755"
+  ["/usr/local/bin/delay-deploy"]="0:0:755"
+  ["/usr/local/bin/delay-recovery-ctl"]="0:0:755"
+  ["/usr/lib/delayos/delay-recovery-info"]="0:0:755"
+  ["/etc/grub.d/45_delayos-recovery"]="0:0:755"
   ["/usr/local/bin/delay-cpu-opt"]="0:0:755"
   ["/usr/local/bin/delay-gpu-setup"]="0:0:755"
   ["/usr/bin/delay-steam-compat"]="0:0:755"

@@ -1,0 +1,10 @@
+#!/bin/bash
+# delay-recovery-info: read-only status for 설정 > 시스템 > 복구 (snapshots, factory copy, recovery
+# partition). Run through pkexec (polkit action org.delayos.recovery.info: no password for the
+# active local user). Takes no arguments, changes nothing, prints one line of JSON.
+# Changes go through delay-sys-helper recovery ... (password).
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin
+snap=$(/usr/local/bin/delay-snapshot --json status 2>/dev/null); [[ $snap == \{* ]] || snap='{"supported":false}'
+list=$(/usr/local/bin/delay-snapshot --json list 2>/dev/null);   [[ $list == \[* ]] || list='[]'
+re=$(/usr/local/bin/delay-recovery-ctl --json status 2>/dev/null); [[ $re == \{* ]] || re='{"present":false}'
+printf '{"snap":%s,"snapshots":%s,"re":%s}\n' "$snap" "$list" "$re"

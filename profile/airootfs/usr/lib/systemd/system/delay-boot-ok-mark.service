@@ -1,0 +1,7 @@
+[Unit]
+Description=DelayOS: report a successful start to the boot loader
+ConditionKernelCommandLine=!archisobasedir
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/delay-recovery-ctl boot-ok --quiet --check

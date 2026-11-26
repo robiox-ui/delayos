@@ -1,0 +1,28 @@
+## DelayOS recovery environment: as small as it can be and still repair a system offline.
+## No linux-firmware (the screen is the firmware framebuffer, storage/USB/keyboard need none),
+## no network. The kernel line is replaced by build.sh (RE_KERNEL, default linux-delayos).
+base
+linux-delayos
+mkinitcpio
+mkinitcpio-archiso
+
+## what the repair tools call
+btrfs-progs
+e2fsprogs
+xfsprogs
+dosfstools
+cryptsetup
+grub
+efibootmgr
+gptfdisk
+parted
+squashfs-tools
+arch-install-scripts
+
+## the menu: dialog inside kmscon (draws Hangul with its built-in GNU Unifont, no GPU driver needed)
+dialog
+kmscon
+
+## command prompt comfort
+nano
+less

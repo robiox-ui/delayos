@@ -1,0 +1,10 @@
+[Unit]
+Description=DelayOS: report a successful start 90 seconds after boot
+ConditionKernelCommandLine=!archisobasedir
+
+[Timer]
+OnBootSec=90s
+Unit=delay-boot-ok-mark.service
+
+[Install]
+WantedBy=timers.target

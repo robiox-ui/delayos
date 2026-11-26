@@ -1,0 +1,474 @@
+#!/usr/bin/env bash
+# delay-recovery: the menu of the DelayOS recovery environment ("DelayOS 복구"). docs/recovery.md
+#
+# Runs on tty1 of the recovery system (recovery/profile, started by delay-recovery-session inside
+# kmscon so that Korean text can be drawn without a GPU driver). Keyboard only, dialog(1).
+#   시동 복구 / 이전 상태로 되돌리기 / 이 PC 초기화 / 명령 프롬프트 / 펌웨어 설정 / 계속
+# The work itself is done by delay-deploy and delay-snapshot (the same tools the installed system has).
+#
+# It only ever works on the DelayOS installation on the disk it was started from: never on NTFS,
+# BitLocker, FAT or the hidden Windows partitions, never on another disk.
+#
+# Test outside the recovery environment: DELAY_RE_TEST=1 delay-recovery   (logs to /var/log)
+set -u
+export LC_ALL=C.UTF-8 LANGUAGE=en
+PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin
+
+RE_LABEL=DELAYOS-RE
+RE_DIR=delayos-re
+BOOTMNT=/run/archiso/bootmnt
+MNT=/mnt/delayos
+TOP=/mnt/delayos-top
+TESTMODE=${DELAY_RE_TEST:-0}
+L=${DELAY_RE_LANG:-ko}            # ko | en (en: plain Linux console that cannot draw Hangul)
+W=74                              # dialog width: fits 80 columns
+
+t() { if [[ $L == ko ]]; then printf '%s' "$1"; else printf '%s' "$2"; fi; }
+BT=$(t "DelayOS 복구" "DelayOS Recovery")
+
+# ------------------------------------------------------------------ log
+LOG=/dev/null
+RE_DEV=""        # the recovery partition we were started from
+RE_MNT=""        # where it is mounted read-write (logs, boot counter)
+arg() { local w; for w in $(cat /proc/cmdline); do case "$w" in "$1"=*) printf '%s' "${w#*=}" | tr -d '"'; return 0 ;; esac; done; return 1; }
+open_re() {
+  # archiso keeps the partition mounted on $BOOTMNT, or has copied the image to RAM and let go of it
+  local spec
+  [[ $TESTMODE == 1 ]] && return 1
+  if mountpoint -q "$BOOTMNT" && [[ -d $BOOTMNT/$RE_DIR ]]; then
+    RE_DEV=$(findmnt -fno SOURCE "$BOOTMNT")
+    mount -o remount,rw "$BOOTMNT" 2>/dev/null && RE_MNT=$BOOTMNT
+    return 0
+  fi
+  spec=$(arg archisodevice 2>/dev/null || true)
+  case "$spec" in UUID=*) RE_DEV=$(blkid -U "${spec#UUID=}" 2>/dev/null) ;; /dev/*) RE_DEV=$spec ;; esac
+  [[ -b $RE_DEV ]] || RE_DEV=$(blkid -t "LABEL=$RE_LABEL" -o device 2>/dev/null | head -n1)
+  [[ -b $RE_DEV ]] || return 1
+  mkdir -p /run/delayos-re
+  mountpoint -q /run/delayos-re || mount -o rw,noatime "$RE_DEV" /run/delayos-re 2>/dev/null || return 1
+  RE_MNT=/run/delayos-re
+}
+init_log() {
+  local d=/var/log/delay-recovery
+  open_re
+  [[ -n $RE_MNT && -d $RE_MNT/$RE_DIR ]] && d=$RE_MNT/$RE_DIR/logs
+  mkdir -p "$d" 2>/dev/null || d=/tmp
+  LOG=$d/recovery-$(date +%Y%m%d-%H%M%S).log
+  : > "$LOG" 2>/dev/null || LOG=/tmp/delay-recovery.log
+  # keep the 20 newest
+  ls -1t "$d"/recovery-*.log 2>/dev/null | tail -n +21 | while read -r f; do rm -f "$f"; done
+  log "DelayOS recovery started: $(cat "$RE_MNT/$RE_DIR/version" 2>/dev/null) cmdline: $(cat /proc/cmdline)"
+}
+log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >> "$LOG" 2>/dev/null; }
+
+# ------------------------------------------------------------------ dialog helpers
+D() { dialog --backtitle "$BT" --ok-label "$(t 확인 OK)" --cancel-label "$(t 취소 Cancel)" --yes-label "$(t 예 Yes)" --no-label "$(t 아니요 No)" "$@"; }
+msgbox() { D --title "$1" --msgbox "$2" "${3:-12}" $W; }
+yesno()  { D --title "$1" --defaultno --yesno "$2" "${3:-12}" $W; }      # default: No
+yesno_y() { D --title "$1" --yesno "$2" "${3:-12}" $W; }                 # default: Yes
+infobox() { D --title "$1" --infobox "$2" "${3:-5}" $W; }
+strip_ansi() { sed -u 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\r/\n/g'; }
+# run a command, show its output live, log it. Returns the command's exit status.
+run_box() { # $1 title, rest: command
+  local title=$1 rc; shift
+  log "RUN: $*"
+  { "$@" 2>&1; echo "$?" > /tmp/.delay-re-rc; } | strip_ansi | tee -a "$LOG" \
+    | D --title "$title" --exit-label "$(t 확인 OK)" --programbox "$(t '진행 상황 (끝나면 Enter)' 'Progress (press Enter when finished)')" 22 $W
+  rc=$(cat /tmp/.delay-re-rc 2>/dev/null || echo 1); rm -f /tmp/.delay-re-rc
+  log "EXIT: $rc"
+  return "$rc"
+}
+# run quietly with a "please wait" box
+run_wait() { # $1 title $2 text, rest: command
+  local title=$1 text=$2 rc; shift 2
+  infobox "$title" "$text"
+  log "RUN: $*"
+  "$@" >> "$LOG" 2>&1; rc=$?
+  log "EXIT: $rc"
+  return $rc
+}
+
+# ------------------------------------------------------------------ the installation we work on
+SYS_DEV=""        # block device with the file system of the system (partition or /dev/mapper/...)
+SYS_FS=""         # btrfs | ext4 | xfs
+SYS_NAME=""
+LUKS_NAME=""      # mapper name we opened
+re_disk() { # disk the recovery environment was started from
+  [[ -b $RE_DEV ]] || return 1
+  lsblk -lpnso NAME,TYPE "$RE_DEV" 2>/dev/null | awk '$2 == "disk" { print $1; exit }'
+}
+probe_dev() { # $1 device -> prints "fs|name" when a DelayOS (or any Linux) system is on it
+  local dev=$1 fs m r name=""
+  fs=$(blkid -s TYPE -o value "$dev" 2>/dev/null)
+  case "$fs" in btrfs|ext4|xfs) ;; *) return 1 ;; esac
+  m=$(mktemp -d /tmp/probe.XXXXXX)
+  if [[ $fs == btrfs ]]; then mount -o ro,subvolid=5 "$dev" "$m" 2>/dev/null || { rmdir "$m"; return 1; }; r=$m/@
+  else mount -o ro "$dev" "$m" 2>/dev/null || { rmdir "$m"; return 1; }; r=$m; fi
+  if [[ -e $r/usr/lib/os-release || -e $r/etc/os-release ]]; then
+    name=$(sed -n 's/^PRETTY_NAME="\?\([^"]*\)"\?$/\1/p' "$r/etc/os-release" 2>/dev/null | head -n1)
+    [[ -f $r/etc/hostname ]] && name="${name:-Linux} ($(head -n1 "$r/etc/hostname"))"
+  elif [[ $fs == btrfs && ( -d $m/@factory || -d $m/@snapshots ) ]]; then
+    name=$(t "DelayOS (시스템 손상됨)" "DelayOS (system damaged)")
+  fi
+  umount "$m" 2>/dev/null; rmdir "$m" 2>/dev/null
+  [[ -n $name ]] || return 1
+  printf '%s|%s' "$fs" "$name"
+}
+unlock_luks() { # $1 partition -> opens it, prints mapper device
+  local part=$1 pw name=delayos-re-$(basename "$1") i
+  [[ -b /dev/mapper/$name ]] && { echo "/dev/mapper/$name"; return 0; }
+  for i in 1 2 3; do
+    pw=$(D --title "$(t '암호화된 디스크' 'Encrypted disk')" --insecure --stdout --passwordbox \
+      "$(t "DelayOS가 설치된 디스크($part)가 암호화되어 있습니다.\n디스크 암호를 입력하세요." "The DelayOS disk ($part) is encrypted.\nEnter the disk passphrase.")" 10 $W) || return 1
+    if printf '%s' "$pw" | cryptsetup open --key-file=- "$part" "$name" 2>>"$LOG"; then
+      LUKS_NAME=$name; log "unlocked $part as $name"; echo "/dev/mapper/$name"; return 0
+    fi
+    msgbox "$(t '암호화된 디스크' 'Encrypted disk')" "$(t '암호가 맞지 않습니다.' 'Wrong passphrase.')" 6
+  done
+  return 1
+}
+find_system() {
+  local disk="" want dev fs label plabel type res cands=() names=() devs=() n i sel
+  if [[ $TESTMODE == 1 ]]; then disk=${DELAY_RE_DISK:-}; else disk=$(re_disk); fi
+  want=$(arg delayos.root 2>/dev/null || true)
+  infobox "$BT" "$(t 'DelayOS 설치를 찾는 중…' 'Looking for the DelayOS installation…')" 3
+  while read -r dev fs type; do
+    [[ $type == part || $type == crypt ]] || continue
+    label=$(blkid -s LABEL -o value "$dev" 2>/dev/null); plabel=$(blkid -s PARTLABEL -o value "$dev" 2>/dev/null)
+    case "$fs" in ""|vfat|ntfs|exfat|BitLocker|swap|squashfs|iso9660|LVM2_member) continue ;; esac
+    case "$label" in "$RE_LABEL"|DELAYOSWIN|DELAYWINSET) continue ;; esac
+    case "$plabel" in DelayOS-Windows|DelayOS-WinSetup) continue ;; esac
+    if [[ $fs == crypto_LUKS ]]; then
+      devs+=("$dev"); names+=("$(t '암호화된 DelayOS' 'Encrypted DelayOS')"); cands+=("luks")
+    elif res=$(probe_dev "$dev"); then
+      devs+=("$dev"); names+=("${res#*|}"); cands+=("${res%%|*}")
+    fi
+  done < <(if [[ -n $disk ]]; then lsblk -lpno NAME,FSTYPE,TYPE "$disk"; else lsblk -lpno NAME,FSTYPE,TYPE; fi 2>/dev/null)
+  n=${#devs[@]}
+  if (( n == 0 )); then
+    msgbox "$BT" "$(t "이 디스크에서 DelayOS 설치를 찾지 못했습니다.\n\n'명령 프롬프트'에서 직접 확인하거나 DelayOS 설치 USB로 다시 설치하세요." \
+      "No DelayOS installation was found on this disk.\n\nUse the command prompt to look, or reinstall from the DelayOS USB.")" 10
+    return 1
+  fi
+  sel=0
+  if (( n > 1 )); then
+    # the one that started us wins; otherwise ask
+    sel=-1
+    for i in "${!devs[@]}"; do [[ -n $want && $(blkid -s UUID -o value "${devs[i]}") == "$want" ]] && sel=$i; done
+    if (( sel < 0 )); then
+      local items=()
+      for i in "${!devs[@]}"; do items+=("$i" "${devs[i]}  ${names[i]}"); done
+      sel=$(D --title "$BT" --stdout --menu "$(t '복구할 DelayOS를 고르세요.' 'Choose the DelayOS to repair.')" 14 $W 6 "${items[@]}") || return 1
+    fi
+  fi
+  SYS_DEV=${devs[sel]}; SYS_FS=${cands[sel]}; SYS_NAME=${names[sel]}
+  if [[ $SYS_FS == luks ]]; then
+    dev=$(unlock_luks "$SYS_DEV") || return 1
+    res=$(probe_dev "$dev") || { msgbox "$BT" "$(t '암호를 풀었지만 그 안에서 DelayOS를 찾지 못했습니다.' 'Unlocked, but no DelayOS was found inside.')" 7; return 1; }
+    SYS_DEV=$dev; SYS_FS=${res%%|*}; SYS_NAME=${res#*|}
+  fi
+  log "system: $SYS_DEV ($SYS_FS) $SYS_NAME"
+  return 0
+}
+need_system() { [[ -n $SYS_DEV ]] || find_system; }
+need_btrfs() {
+  need_system || return 1
+  [[ $SYS_FS == btrfs ]] && return 0
+  msgbox "$BT" "$(t "이 DelayOS는 btrfs가 아닌 파일 시스템($SYS_FS)에 설치되어 있어 스냅샷과 초기화를 쓸 수 없습니다.\n시동 복구는 사용할 수 있습니다." \
+    "This DelayOS is on $SYS_FS, not btrfs: snapshots and reset are not available.\nStartup repair still works.")" 9
+  return 1
+}
+umount_all() {
+  local p
+  for p in /proc/[0-9]*; do [[ $(readlink "$p/root" 2>/dev/null) == "$MNT" ]] && kill "${p#/proc/}" 2>/dev/null; done
+  mountpoint -q "$MNT" && { umount -R "$MNT" 2>>"$LOG" || umount -R -l "$MNT" 2>>"$LOG"; }
+  mountpoint -q "$TOP" && { umount "$TOP" 2>>"$LOG" || umount -l "$TOP" 2>>"$LOG"; }
+  return 0
+}
+mount_top() { # read-write top level of the btrfs
+  mkdir -p "$TOP"
+  mountpoint -q "$TOP" && return 0
+  mount -o subvolid=5,noatime "$SYS_DEV" "$TOP" 2>>"$LOG"
+}
+mount_sys() { # the system the way delay-deploy wants it
+  mkdir -p "$MNT"
+  mountpoint -q "$MNT" && return 0
+  if [[ $SYS_FS == btrfs ]]; then mount -o subvol=/@,noatime "$SYS_DEV" "$MNT" 2>>"$LOG"
+  else mount "$SYS_DEV" "$MNT" 2>>"$LOG"; fi
+}
+env_set() { # boot counter / one-time requests on the recovery partition
+  local f=$RE_MNT/$RE_DIR/grubenv
+  [[ $TESTMODE == 1 || -z $RE_MNT ]] && return 0
+  [[ -f $f ]] && grub-editenv "$f" "$@" 2>>"$LOG"
+}
+boot_ok() { env_set set delay_boot_ok=1 delay_boot_tries=0; env_set unset delay_next delay_re_action; sync; }
+ask_restart() { # $1 title $2 text
+  if yesno_y "$1" "$2\n\n$(t '지금 다시 시작할까요?' 'Restart now?')" "${3:-10}"; then do_continue; fi
+}
+
+# ------------------------------------------------------------------ 1. startup repair
+startup_repair() {
+  local title; title=$(t '시동 복구' 'Startup Repair')
+  need_system || return
+  yesno_y "$title" "$(t "DelayOS가 시작되지 않는 문제를 고칩니다. 개인 파일과 설치한 앱은 그대로 둡니다.\n\n  1. 파일 시스템 점검\n  2. fstab(디스크 연결 정보) 점검\n  3. 커널 이미지와 initramfs 다시 만들기\n  4. 부트로더(GRUB)와 부팅 메뉴 다시 설치\n  5. UEFI 부팅 순서 정리\n\n대상: $SYS_NAME\n\n시작할까요?" \
+    "Fixes problems that keep DelayOS from starting. Personal files and apps are kept.\n\n  1. Check the file system\n  2. Check fstab\n  3. Rebuild kernel image and initramfs\n  4. Reinstall the boot loader (GRUB) and boot menu\n  5. Fix the UEFI boot order\n\nTarget: $SYS_NAME\n\nStart?")" 19 || return
+  umount_all
+  local notes="" rc
+  # --- file system
+  if [[ $SYS_FS == btrfs ]]; then
+    if ! mount_top; then
+      log "btrfs mount failed: $(dmesg | tail -n 5)"
+      if yesno "$title" "$(t "파일 시스템을 열 수 없습니다. 갑자기 전원이 꺼진 뒤라면 기록 로그(log tree)가 손상된 경우가 많습니다.\n\n기록 로그를 지우고 다시 시도할까요? 전원이 꺼지기 직전 몇 초 동안의 변경 내용만 잃습니다." \
+        "The file system cannot be opened. After a sudden power loss the log tree is often the cause.\n\nClear the log tree and try again? Only the last few seconds before the power loss are lost.")" 12; then
+        run_wait "$title" "$(t '기록 로그를 지우는 중…' 'Clearing the log tree…')" btrfs rescue zero-log "$SYS_DEV"
+      fi
+      if ! mount_top && ! { mkdir -p "$TOP"; mount -o subvolid=5,rescue=usebackuproot "$SYS_DEV" "$TOP" 2>>"$LOG"; }; then
+        msgbox "$title" "$(t "파일 시스템을 열지 못했습니다. 디스크가 손상되었을 수 있습니다.\n\n'명령 프롬프트'에서 'btrfs check $SYS_DEV'로 상태를 확인할 수 있습니다. 중요한 파일이 있다면 'btrfs restore'로 먼저 꺼내세요.\n\n기록: $LOG" \
+          "The file system could not be opened; the disk may be damaged.\n\nUse the command prompt: 'btrfs check $SYS_DEV'. Rescue important files with 'btrfs restore' first.\n\nLog: $LOG")" 13
+        return
+      fi
+    fi
+    if btrfs device stats "$TOP" 2>/dev/null | tee -a "$LOG" | awk '$2 != 0 { f = 1 } END { exit !f }'; then
+      notes+="$(t '· 디스크 오류 기록이 있습니다(btrfs device stats). 디스크 교체를 고려하세요.' '· The disk has logged errors (btrfs device stats). Consider replacing it.')\n"
+    fi
+    if yesno "$title" "$(t "파일 시스템 전체를 정밀 검사할까요? (읽기 전용, 아무것도 고치지 않음)\n\n디스크 크기에 따라 몇 분에서 수십 분이 걸립니다. 건너뛰어도 나머지 복구는 진행됩니다." \
+      "Run a full file system check? (read-only, changes nothing)\n\nTakes minutes to tens of minutes depending on the disk. The rest of the repair runs either way.")" 11; then
+      umount_all
+      if run_box "$(t '파일 시스템 검사' 'File system check')" btrfs check --readonly "$SYS_DEV"; then
+        notes+="$(t '· 파일 시스템 검사: 이상 없음' '· File system check: no errors')\n"
+      else
+        notes+="$(t "· 파일 시스템 검사에서 오류가 나왔습니다. '이전 상태로 되돌리기'나 '이 PC 초기화'를 권장합니다." "· The file system check found errors. 'Go back to an earlier state' or 'Reset this PC' is recommended.")\n"
+      fi
+    fi
+    mount_top
+    if [[ ! -d $TOP/@ ]]; then
+      umount_all
+      msgbox "$title" "$(t "시스템(@)이 없습니다. '이전 상태로 되돌리기'로 스냅샷에서 되살리거나 '이 PC 초기화'를 사용하세요." \
+        "The system (@) is missing. Use 'Go back to an earlier state' or 'Reset this PC'.")" 8
+      return
+    fi
+    umount "$TOP" 2>>"$LOG"
+  else
+    run_box "$(t '파일 시스템 검사' 'File system check')" fsck -p "$SYS_DEV"; rc=$?
+    (( rc > 1 )) && notes+="$(t '· fsck가 고치지 못한 오류가 있습니다.' '· fsck left errors it could not fix.')\n"
+  fi
+  # --- boot files
+  if ! mount_sys; then
+    msgbox "$title" "$(t "시스템을 마운트하지 못했습니다.\n기록: $LOG" "The system could not be mounted.\nLog: $LOG")" 7; return
+  fi
+  local dd=(delay-deploy --force boot "$MNT")
+  if [[ ! -x $MNT/usr/bin/grub-install || ! -x $MNT/usr/bin/mkinitcpio ]]; then
+    umount_all
+    msgbox "$title" "$(t "시스템 안에 부팅 도구(GRUB, mkinitcpio)가 없습니다. 시스템 파일이 많이 손상되었습니다.\n\n'이전 상태로 되돌리기'나 '이 PC 초기화(내 파일 유지)'를 사용하세요." \
+      "The system has no boot tools (GRUB, mkinitcpio): it is badly damaged.\n\nUse 'Go back to an earlier state' or 'Reset this PC (keep my files)'.")" 10
+    return
+  fi
+  run_box "$title" "${dd[@]}"; rc=$?
+  umount_all
+  if (( rc == 0 )); then
+    boot_ok
+    ask_restart "$title" "$(t "시동 복구를 마쳤습니다.\n${notes}" "Startup repair finished.\n${notes}")\n$(t "기록: $LOG" "Log: $LOG")" 14
+  else
+    msgbox "$title" "$(t "시동 복구가 일부 단계에서 실패했습니다.\n${notes}\n'이전 상태로 되돌리기'를 시도하거나, 그래도 안 되면 '이 PC 초기화(내 파일 유지)'를 사용하세요.\n\n기록: $LOG" \
+      "Startup repair failed in some steps.\n${notes}\nTry 'Go back to an earlier state', then 'Reset this PC (keep my files)'.\n\nLog: $LOG")" 14
+  fi
+}
+
+# ------------------------------------------------------------------ 2. rollback
+rollback() {
+  local title; title=$(t '이전 상태로 되돌리기' 'Go back to an earlier state')
+  need_btrfs || return
+  umount_all
+  mount_top || { msgbox "$title" "$(t "파일 시스템을 열지 못했습니다. 먼저 '시동 복구'를 실행하세요." "The file system cannot be opened. Run 'Startup Repair' first.")" 7; return; }
+  local items=() n date kind desc sel
+  while IFS=$'\t' read -r n date kind desc; do
+    [[ -n $n ]] && items=("$n" "$date  [$kind] ${desc:0:38}" "${items[@]+"${items[@]}"}")
+  done < <(delay-snapshot --top "$TOP" --tsv list 2>>"$LOG")
+  if (( ${#items[@]} == 0 )); then
+    umount_all
+    msgbox "$title" "$(t "저장된 스냅샷이 없습니다.\n\n스냅샷은 업데이트나 앱 설치 직전, 그리고 하루에 한 번 자동으로 만들어집니다." "There are no snapshots.\n\nSnapshots are made before updates and app installs, and once a day.")" 9
+    return
+  fi
+  sel=$(D --title "$title" --stdout --menu "$(t "되돌릴 시점을 고르세요. 시스템(앱, 설정, 드라이버)이 그때로 돌아갑니다.\n홈 폴더의 개인 파일은 바뀌지 않습니다." \
+    "Choose a point in time. The system (apps, settings, drivers) goes back to it.\nPersonal files in the home folder are not changed.")" 22 $W 12 "${items[@]}") || { umount_all; return; }
+  if ! yesno "$title" "$(t "스냅샷 $sel 상태로 시스템을 되돌립니다.\n\n지금 상태도 스냅샷으로 남으므로 다시 돌아올 수 있습니다.\n\n계속할까요?" \
+    "The system will be restored to snapshot $sel.\n\nThe present state is kept as a snapshot too, so this can be undone.\n\nContinue?")" 11; then umount_all; return; fi
+  if run_wait "$title" "$(t '되돌리는 중…' 'Restoring…')" delay-snapshot --top "$TOP" rollback "$sel"; then
+    umount_all; boot_ok
+    ask_restart "$title" "$(t "스냅샷 $sel 상태로 되돌렸습니다." "Restored snapshot $sel.")"
+  else
+    umount_all
+    msgbox "$title" "$(t "되돌리지 못했습니다. 시스템은 바뀌지 않았습니다.\n기록: $LOG" "Could not restore. Nothing was changed.\nLog: $LOG")" 8
+  fi
+}
+
+# ------------------------------------------------------------------ 3. reset
+in_sys() { chroot "$MNT" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/bin HOME=/root LANG=C.UTF-8 "$@"; }
+ask_account() { # sets NEW_USER NEW_NAME NEW_PASS
+  local title=$1 a b
+  while :; do
+    NEW_USER=$(D --title "$title" --stdout --inputbox "$(t "새 사용자 계정의 로그인 이름을 입력하세요.\n(영문 소문자로 시작, 영문 소문자·숫자·-·_ 만 사용)" \
+      "Login name of the new user account.\n(starts with a lowercase letter; lowercase letters, digits, - and _ only)")" 10 $W "user") || return 1
+    [[ $NEW_USER =~ ^[a-z_][a-z0-9_-]{0,30}$ && $NEW_USER != root && $NEW_USER != live ]] && break
+    msgbox "$title" "$(t '쓸 수 없는 이름입니다.' 'This name cannot be used.')" 6
+  done
+  NEW_NAME=$NEW_USER
+  while :; do
+    a=$(D --title "$title" --insecure --stdout --passwordbox "$(t "'$NEW_USER' 계정의 암호를 입력하세요." "Password for '$NEW_USER'.")" 9 $W) || return 1
+    b=$(D --title "$title" --insecure --stdout --passwordbox "$(t '암호를 한 번 더 입력하세요.' 'Enter the password again.')" 9 $W) || return 1
+    if [[ -z $a ]]; then msgbox "$title" "$(t '암호를 비워 둘 수 없습니다.' 'The password cannot be empty.')" 6
+    elif [[ $a != "$b" ]]; then msgbox "$title" "$(t '두 암호가 다릅니다.' 'The passwords do not match.')" 6
+    else NEW_PASS=$a; return 0; fi
+  done
+}
+make_account() { # in the freshly reset system mounted on $MNT
+  local u groups="" old=() g
+  mount -o subvol=/@home,noatime "$SYS_DEV" "$MNT/home" 2>>"$LOG" || return 1
+  mapfile -t old < <(awk -F: '$3 >= 1000 && $3 < 60000 { print $1 }' "$MNT/etc/passwd")
+  if (( ${#old[@]} )); then
+    # the new account gets the groups the installer gave the first one (wheel, audio, video, ...)
+    groups=$(in_sys id -Gn "${old[0]}" 2>/dev/null | tr ' ' '\n' | grep -vx "${old[0]}" | paste -sd,)
+    for u in "${old[@]}"; do in_sys userdel -f "$u" >>"$LOG" 2>&1; done
+  fi
+  [[ -n $groups ]] || groups=wheel
+  for g in ${groups//,/ }; do in_sys getent group "$g" >/dev/null || groups=$(tr ',' '\n' <<<"$groups" | grep -vx "$g" | paste -sd,); done
+  in_sys useradd -m -c "$NEW_NAME" -G "$groups" -s /bin/bash "$NEW_USER" >>"$LOG" 2>&1 || return 1
+  printf '%s:%s\n' "$NEW_USER" "$NEW_PASS" | in_sys chpasswd >>"$LOG" 2>&1 || return 1
+  # the installer gives root the user's password when one was set there
+  if awk -F: '$1 == "root" && $2 !~ /^[!*]/ && $2 != "" { f = 1 } END { exit !f }' "$MNT/etc/shadow"; then
+    printf 'root:%s\n' "$NEW_PASS" | in_sys chpasswd >>"$LOG" 2>&1
+  fi
+  # automatic login of an account that no longer exists
+  for u in "${old[@]+"${old[@]}"}"; do
+    grep -rlE "^User=$u\$" "$MNT/etc/sddm.conf" "$MNT/etc/sddm.conf.d" 2>/dev/null | while read -r g; do sed -i "s/^User=$u\$/User=$NEW_USER/" "$g"; done
+  done
+  NEW_PASS=""
+  return 0
+}
+reset_pc() { # $1 = "" | keep | wipe
+  local title mode=${1:-} rc
+  title=$(t '이 PC 초기화' 'Reset this PC')
+  need_btrfs || return
+  umount_all
+  mount_top || { msgbox "$title" "$(t "파일 시스템을 열지 못했습니다. 먼저 '시동 복구'를 실행하세요." "The file system cannot be opened. Run 'Startup Repair' first.")" 7; return; }
+  if [[ ! -d $TOP/@factory ]]; then
+    umount_all
+    msgbox "$title" "$(t "초기화용 사본(@factory)이 없어 이 PC를 초기화할 수 없습니다.\n\nDelayOS 설치 USB로 다시 설치하세요. 설치 프로그램에서 '파티션 바꾸기'를 고르면 다른 파티션은 유지됩니다." \
+      "The factory copy (@factory) is missing, so this PC cannot be reset.\n\nReinstall from the DelayOS USB.")" 10
+    return
+  fi
+  local facdate; facdate=$(btrfs subvolume show "$TOP/@factory" 2>/dev/null | sed -n 's/^\s*Creation time:\s*//p' | cut -d' ' -f1)
+  if [[ -z $mode ]]; then
+    mode=$(D --title "$title" --stdout --menu "$(t "DelayOS를 설치 직후(${facdate}) 상태로 되돌립니다. 방법을 고르세요." "DelayOS goes back to the state right after installation (${facdate}). Choose how.")" 13 $W 2 \
+      keep "$(t '내 파일 유지   앱과 설정은 제거, 홈 폴더의 파일은 그대로' 'Keep my files   apps and settings removed, home folder kept')" \
+      wipe "$(t '모두 제거      개인 파일, 계정, 앱, 설정을 전부 삭제' 'Remove everything   files, accounts, apps, settings')") || { umount_all; return; }
+  fi
+  if [[ $mode == keep ]]; then
+    yesno "$title" "$(t "[내 파일 유지]\n\n· 설치 후에 추가한 앱, 드라이버, 시스템 설정이 제거됩니다.\n· 홈 폴더(문서, 사진, 게임 저장 파일, 앱별 사용자 설정)는 그대로 둡니다.\n· 사용자 계정과 암호, Wi-Fi 설정, PC 이름은 유지합니다.\n· 지금 상태는 스냅샷으로 남아 '이전 상태로 되돌리기'로 돌아올 수 있습니다.\n· 초기화 후 '업데이트'를 실행해 최신 상태로 만드세요.\n\n초기화할까요?" \
+      "[Keep my files]\n\n· Apps, drivers and system settings added after installation are removed.\n· The home folder is kept.\n· User accounts, passwords, Wi-Fi settings and the PC name are kept.\n· The present state is kept as a snapshot.\n· Run the updater afterwards.\n\nReset?")" 17 || { umount_all; return; }
+  else
+    yesno "$title" "$(t "[모두 제거]\n\n· 모든 사용자 계정과 홈 폴더의 파일(문서, 사진, 게임 저장 파일)이 삭제됩니다.\n· 설치한 앱, 설정, 스냅샷, Docker 데이터가 모두 삭제됩니다.\n· 되돌릴 수 없습니다.\n· Windows 파티션과 다른 디스크는 건드리지 않습니다.\n\n정말 모두 지울까요?" \
+      "[Remove everything]\n\n· All user accounts and files in the home folders are deleted.\n· Installed apps, settings, snapshots and Docker data are deleted.\n· This cannot be undone.\n· The Windows partition and other disks are not touched.\n\nReally remove everything?")" 15 || { umount_all; return; }
+    yesno "$title" "$(t "마지막 확인입니다.\n\n$SYS_NAME 의 개인 파일을 전부 삭제합니다. 계속할까요?" "Last confirmation.\n\nAll personal files of $SYS_NAME will be deleted. Continue?")" 9 || { umount_all; return; }
+    ask_account "$title" || { umount_all; return; }
+  fi
+  log "reset $mode"
+  run_box "$title" delay-snapshot --top "$TOP" reset "$mode"; rc=$?
+  umount "$TOP" 2>>"$LOG"
+  if (( rc != 0 )); then
+    umount_all
+    msgbox "$title" "$(t "초기화하지 못했습니다.\n기록: $LOG" "The reset failed.\nLog: $LOG")" 7; return
+  fi
+  if ! mount_sys; then msgbox "$title" "$(t "초기화한 시스템을 마운트하지 못했습니다.\n기록: $LOG" "The reset system could not be mounted.\nLog: $LOG")" 7; return; fi
+  if [[ $mode == wipe ]]; then
+    infobox "$title" "$(t '새 계정을 만드는 중…' 'Creating the new account…')" 3
+    make_account || msgbox "$title" "$(t "새 계정을 만들지 못했습니다. '명령 프롬프트'에서 직접 만들 수 있습니다:\n  mount -o subvol=@ $SYS_DEV /mnt && chroot /mnt useradd -m -G wheel 이름 && chroot /mnt passwd 이름" \
+      "The account could not be created. Use the command prompt:\n  mount -o subvol=@ $SYS_DEV /mnt && chroot /mnt useradd -m -G wheel NAME && chroot /mnt passwd NAME")" 10
+    umount "$MNT/home" 2>>"$LOG"
+  fi
+  run_box "$(t '부팅 파일 다시 만들기' 'Rebuilding the boot files')" delay-deploy --force boot "$MNT"; rc=$?
+  umount_all; boot_ok
+  if (( rc == 0 )); then
+    ask_restart "$title" "$(t '이 PC를 초기화했습니다.' 'This PC has been reset.')"
+  else
+    msgbox "$title" "$(t "초기화는 끝났지만 부팅 파일을 다시 만드는 데 실패했습니다. '시동 복구'를 실행하세요.\n기록: $LOG" \
+      "The reset is done but rebuilding the boot files failed. Run 'Startup Repair'.\nLog: $LOG")" 9
+  fi
+}
+
+# ------------------------------------------------------------------ 4.-7.
+shell_prompt() {
+  umount_all
+  clear
+  cat <<EOF
+$(t "DelayOS 복구: 명령 프롬프트 (root). 메뉴로 돌아가려면 exit 를 입력하세요." "DelayOS Recovery: command prompt (root). Type exit to return to the menu.")
+
+  $(t "시스템 장치" "System device"): ${SYS_DEV:-?}   $(t "기록" "Logs"): $(dirname "$LOG")
+  $(t "시스템 마운트" "Mount the system"):   mount -o subvol=@ ${SYS_DEV:-/dev/XXX} /mnt
+  $(t "부팅 복구" "Repair booting"):       delay-deploy --force boot /mnt
+  $(t "스냅샷 목록" "List snapshots"):     mount -o subvolid=5 ${SYS_DEV:-/dev/XXX} /mnt && delay-snapshot --top /mnt list
+  $(t "도움말" "Help"):              delay-deploy --help, delay-snapshot --help
+
+EOF
+  log "command prompt opened"
+  PS1='[DelayOS RE] \w # ' bash --norc -i
+  log "command prompt closed"
+}
+do_continue() {
+  umount_all; boot_ok
+  [[ -n $LUKS_NAME ]] && cryptsetup close "$LUKS_NAME" 2>>"$LOG"
+  log "restart"
+  sync
+  if [[ $TESTMODE == 1 ]]; then clear; echo "(test mode: restart skipped)"; exit 0; fi
+  clear; systemctl reboot; sleep 30
+}
+do_firmware() {
+  umount_all; boot_ok; sync
+  [[ $TESTMODE == 1 ]] && { msgbox "$BT" "(test mode)" 5; return; }
+  systemctl reboot --firmware-setup || msgbox "$BT" "$(t '이 PC의 펌웨어는 이 기능을 지원하지 않습니다. PC를 켤 때 Del 또는 F2 키를 누르세요.' 'The firmware does not support this. Press Del or F2 while the PC starts.')" 8
+  sleep 30
+}
+do_poweroff() { umount_all; boot_ok; sync; [[ $TESTMODE == 1 ]] && exit 0; clear; systemctl poweroff; sleep 30; }
+
+main_menu() {
+  local sel items
+  while :; do
+    items=(
+      1 "$(t '시동 복구                 DelayOS가 시작되지 않는 문제 해결' 'Startup Repair             fix problems that keep DelayOS from starting')"
+      2 "$(t '이전 상태로 되돌리기      스냅샷으로 시스템 복원' 'Go back to an earlier state  restore the system from a snapshot')"
+      3 "$(t '이 PC 초기화              내 파일 유지 또는 모두 제거' 'Reset this PC              keep my files or remove everything')"
+      4 "$(t '명령 프롬프트             고급 문제 해결용 root 셸' 'Command Prompt             root shell for advanced troubleshooting')"
+    )
+    [[ -d /sys/firmware/efi ]] && items+=(5 "$(t '펌웨어 설정(UEFI)으로 재부팅' 'Restart into firmware setup (UEFI)')")
+    items+=(6 "$(t '계속                      종료하고 DelayOS 시작' 'Continue                   exit and start DelayOS')"
+            7 "$(t 'PC 끄기' 'Turn off the PC')")
+    sel=$(D --title "$(t '옵션 선택' 'Choose an option')" --no-cancel --stdout --menu \
+      "$(t "↑↓ 키로 고르고 Enter 키를 누르세요.${SYS_NAME:+\n대상: $SYS_NAME}" "Use the arrow keys and press Enter.${SYS_NAME:+\nTarget: $SYS_NAME}")" 18 $W 8 "${items[@]}") || continue
+    case "$sel" in
+      1) startup_repair ;;
+      2) rollback ;;
+      3) reset_pc "" ;;
+      4) shell_prompt ;;
+      5) do_firmware ;;
+      6) do_continue ;;
+      7) do_poweroff ;;
+    esac
+  done
+}
+
+# ------------------------------------------------------------------ main
+[[ $EUID -eq 0 ]] || { echo "root only" >&2; exit 77; }
+command -v dialog >/dev/null || { echo "dialog is missing; starting a shell" >&2; exec bash; }
+trap '' INT TSTP QUIT
+init_log
+find_system || true
+case "$(arg delayos.re.action 2>/dev/null || true)" in
+  auto)
+    if yesno_y "$(t '자동 복구' 'Automatic Repair')" "$(t "DelayOS가 여러 번 연속으로 정상적으로 시작되지 못했습니다.\n\n시동 복구를 실행할까요? 개인 파일은 그대로 둡니다.\n('아니요'를 고르면 메뉴가 열립니다.)" \
+      "DelayOS did not start correctly several times in a row.\n\nRun Startup Repair? Personal files are kept.\n(No opens the menu.)")" 12; then startup_repair; fi ;;
+  repair) startup_repair ;;
+  rollback) rollback ;;
+  reset-keep) reset_pc keep ;;
+  reset-wipe) reset_pc wipe ;;
+esac
+main_menu

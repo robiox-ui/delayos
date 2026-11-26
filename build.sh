@@ -17,7 +17,15 @@ die()  { printf '\e[1;31m==> ERROR:\e[0m %s\n' "$*"; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Run as root: sudo $0"
 [[ -f /etc/arch-release ]] || die "This must run on Arch Linux (or Arch in WSL2/VM)."
-[[ ${1:-} == --clean ]] && { log "Cleaning $WORK"; rm -rf "$WORK"; }
+if [[ ${1:-} == --clean ]]; then
+  log "Cleaning $WORK"
+  # An interrupted mkarchiso/pacstrap leaves /proc, /sys (efivarfs!), /dev and /run of this machine
+  # mounted inside the work directory; rm -rf through them wipes device nodes and UEFI boot entries.
+  findmnt -rno TARGET | awk -v p="$WORK/" 'index($0, p) == 1' | sort -r | while read -r m; do umount -R "$m" 2>/dev/null || umount -R -l "$m" || true; done
+  findmnt -rno TARGET | awk -v p="$WORK/" 'index($0, p) == 1 { f = 1 } END { exit !f }' \
+    && die "$WORK still has mounted file systems inside (findmnt -R). Unmount them or reboot, then run again."
+  rm -rf --one-file-system "$WORK"
+fi
 
 # ---------------------------------------------------------------- host setup
 log "Preparing build host"
@@ -241,6 +249,24 @@ if (( ${#V3_FILES[@]} )); then
 fi
 # Signed GRUB + kernel image for Secure Boot next to the hidden Windows (delay-winsetup)
 (( SBG_BUILT )) && echo delayos-sb-general >> "$PROFILE/packages.x86_64"
+
+# Recovery environment "DelayOS 복구" (docs/recovery.md): a second, small archiso system (kernel +
+# initramfs + squashfs, about 400 MB) built in netboot mode from recovery/profile with the same
+# linux-delayos package. It rides in the image under /usr/share/delayos/recovery/image; the
+# installer copies it to the hidden recovery partition. Rebuilt only when recovery/, the three
+# tools it carries or the kernel package changed (a few minutes). DELAYOS_RECOVERY=0 skips it.
+if [[ ${DELAYOS_RECOVERY:-1} == 1 ]]; then
+  log "Building the recovery environment (DelayOS 복구)"
+  sed "s|@LOCALREPO@|$LOCALREPO|" "$HERE/profile/pacman.conf" > "$WORK/recovery-pacman.conf"
+  if RE_WORK="$WORK/recovery" RE_PACMAN_CONF="$WORK/recovery-pacman.conf" \
+     bash "$HERE/recovery/build-recovery.sh" "$WORK/recovery/image"; then
+    install -d "$PROFILE/airootfs/usr/share/delayos/recovery"
+    cp -a "$WORK/recovery/image" "$PROFILE/airootfs/usr/share/delayos/recovery/image"
+    rm -f "$PROFILE/airootfs/usr/share/delayos/recovery/image/delayos-re/.stamp"
+  else
+    warn "The recovery environment failed to build: this ISO installs DelayOS without the recovery partition"
+  fi
+fi
 
 # Boot splash: plymouth hook in the live initramfs, theme selected inside the image
 sed -i 's/\(HOOKS=([^)]*\bkms\b\)/\1 plymouth/' "$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf"

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Started by delay-recovery.service on tty1 of the recovery environment.
+# Korean text needs a terminal that can draw Hangul: kmscon with its built-in GNU Unifont (drawn by
+# the CPU on the firmware/DRM framebuffer, so it works without a GPU driver). When kmscon cannot
+# start (no usable display device), the menu runs on the plain console in English.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin
+export LANG=C.UTF-8 DIALOGRC=/etc/delayos-re/dialogrc
+MENU=/usr/local/bin/delay-recovery
+FAILS=/run/delay-recovery-kmscon.fails
+
+# wait a moment for a display device (simpledrm / efifb / the GPU driver)
+for _ in $(seq 50); do
+  [[ -n $(ls /dev/dri/card* /dev/fb0 2>/dev/null) ]] && break
+  sleep 0.1
+done
+
+# bigger text on high-resolution screens: kmscon scales its font by whole factors
+size=16
+h=$(cut -d, -f2 /sys/class/graphics/fb0/virtual_size 2>/dev/null || echo 0)
+(( h >= 1300 )) && size=32
+(( h >= 2800 )) && size=48
+
+n=$(cat "$FAILS" 2>/dev/null || echo 0)
+if command -v kmscon >/dev/null && (( n < 2 )) && [[ -n $(ls /dev/dri/card* /dev/fb0 2>/dev/null) ]]; then
+  start=$SECONDS
+  kmscon --vt=tty1 --no-switchvt --font-engine unifont --font-size "$size" --login -- \
+    /usr/bin/env DELAY_RE_LANG=ko DIALOGRC="$DIALOGRC" "$MENU"
+  rc=$?
+  # ended at once = it could not open the display: count it, fall back after two tries
+  if (( SECONDS - start < 5 )); then echo $(( n + 1 )) > "$FAILS"; fi
+  exit $rc
+fi
+setfont ter-v20b 2>/dev/null || true
+DELAY_RE_LANG=en exec "$MENU"

@@ -1,0 +1,95 @@
+#!/bin/sh
+# DelayOS: boot entry "DelayOS 복구" (recovery environment on the hidden partition DELAYOS-RE),
+# one-time start of it from Settings, and the automatic start after 3 failed boots. docs/recovery.md
+#
+# State lives in a GRUB environment block ON THE RECOVERY PARTITION (ext4), not in /boot/grub/grubenv:
+# /boot is btrfs and GRUB cannot write there. Variables:
+#   delay_next=recovery     start the recovery environment once (delay-recovery-ctl reboot)
+#   delay_re_action=...     what it should open (reset-keep, reset-wipe, rollback, repair)
+#   delay_boot_ok=1         written by the running system 90 s after a start or at a clean shutdown
+#   delay_boot_tries=N      starts in a row without delay_boot_ok
+set -e
+
+RE_LABEL=DELAYOS-RE
+RE_DIR=delayos-re
+
+# the recovery partition on the disk of this system (a second DelayOS on another disk has its own)
+root_dev="${GRUB_DEVICE:-$(grub-probe --target=device / 2>/dev/null || true)}"
+disk_of() { lsblk -lpnso NAME,TYPE "$1" 2>/dev/null | awk '$2 == "disk" { print $1; exit }'; }
+root_disk=""
+[ -n "$root_dev" ] && root_disk="$(disk_of "$root_dev")"
+re_dev=""
+for d in $(blkid -t "LABEL=$RE_LABEL" -o device 2>/dev/null); do
+  [ -z "$re_dev" ] && re_dev="$d"
+  if [ -n "$root_disk" ] && [ "$(disk_of "$d")" = "$root_disk" ]; then re_dev="$d"; break; fi
+done
+[ -n "$re_dev" ] || exit 0
+re_uuid="$(blkid -s UUID -o value "$re_dev" 2>/dev/null)"
+[ -n "$re_uuid" ] || exit 0
+root_uuid="$(blkid -s UUID -o value "$root_dev" 2>/dev/null || true)"
+
+echo "DelayOS 복구 환경: $re_dev" >&2
+
+cat <<EOF
+insmod part_gpt
+insmod part_msdos
+insmod ext2
+insmod loadenv
+if search --no-floppy --fs-uuid --set=delay_re ${re_uuid} ; then
+  set delay_env="(\${delay_re})/${RE_DIR}/grubenv"
+  set delay_next=
+  set delay_re_action=
+  set delay_boot_ok=
+  set delay_boot_tries=
+  if [ -s "\${delay_env}" ]; then
+    load_env --file "\${delay_env}" delay_next delay_re_action delay_boot_ok delay_boot_tries
+  fi
+  set delay_re_act="\${delay_re_action}"
+
+  menuentry 'DelayOS 복구' --class delayos --class recovery --id 'delayos-recovery' {
+    search --no-floppy --fs-uuid --set=root ${re_uuid}
+    load_video
+    set gfxpayload=keep
+    echo 'DelayOS 복구 환경을 불러오는 중...'
+    linux /${RE_DIR}/boot/vmlinuz archisobasedir=${RE_DIR} archisodevice=UUID=${re_uuid} nomodeset quiet loglevel=3 rd.udev.log_level=3 nowatchdog delayos.re=1 delayos.root=${root_uuid} "delayos.re.action=\${delay_re_act}"
+    initrd /${RE_DIR}/boot/initramfs.img
+  }
+
+  if [ "\${delay_next}" = "recovery" ]; then
+    # asked for by the running system: once
+    set delay_next=
+    set delay_re_action=
+    set delay_boot_ok=1
+    set delay_boot_tries=0
+    save_env --file "\${delay_env}" delay_next delay_re_action delay_boot_ok delay_boot_tries
+    set default="delayos-recovery"
+    set timeout=0
+  else
+    if [ "\${delay_boot_ok}" = "0" ]; then
+      if [ "\${delay_boot_tries}" = "1" ]; then set delay_boot_tries=2
+      elif [ "\${delay_boot_tries}" = "2" ]; then set delay_boot_tries=3
+      elif [ "\${delay_boot_tries}" = "3" ]; then set delay_boot_tries=3
+      else set delay_boot_tries=1
+      fi
+    else
+      set delay_boot_tries=0
+    fi
+    if [ "\${delay_boot_tries}" = "3" ]; then
+      # three starts in a row never reached the desktop: open the recovery environment
+      set delay_boot_tries=0
+      set delay_boot_ok=1
+      set delay_re_act=auto
+      set default="delayos-recovery"
+      set timeout=0
+    else
+      set delay_boot_ok=0
+    fi
+    save_env --file "\${delay_env}" delay_boot_ok delay_boot_tries
+  fi
+fi
+# Shift held down while the PC starts: show this menu (works where the firmware reports key state)
+if keystatus --shift ; then
+  set timeout_style=menu
+  set timeout=-1
+fi
+EOF

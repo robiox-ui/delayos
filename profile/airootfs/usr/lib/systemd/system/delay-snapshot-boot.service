@@ -1,0 +1,13 @@
+[Unit]
+Description=DelayOS: finish a snapshot rollback (remove the replaced system, refresh the boot menu)
+ConditionKernelCommandLine=!archisobasedir
+After=local-fs.target
+Before=grub-btrfsd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/delay-snapshot --quiet post-boot
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

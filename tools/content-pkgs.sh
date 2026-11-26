@@ -8,6 +8,7 @@
 #   tools/content-pkgs.sh list                     names of the content packages
 #   tools/content-pkgs.sh files <pkg>              files of one package (relative to airootfs)
 #   tools/content-pkgs.sh check                    every file is in exactly one package or live-only
+#                                                  (exit 1: a file is in two lists; exit 2: a file is in none)
 #   tools/content-pkgs.sh hash <pkg>               content hash (files, modes, PKGBUILD, files.list, install script)
 #   tools/content-pkgs.sh install <pkg> <destdir>  copy the files into <destdir> with their modes
 #   tools/content-pkgs.sh backup <pkg>             the /etc files for the PKGBUILD backup=() array
@@ -84,6 +85,7 @@ mode_of() { # $1 = path relative to airootfs
   case "$p" in
     /usr/bin/*|/usr/local/bin/*) echo 755 ;;
     /etc/sudoers.d/*) echo 440 ;;
+    /etc/grub.d/*) echo 755 ;;
     *) if [[ -x $TREE/$1 && ! -d $TREE/$1 ]] && head -c2 "$TREE/$1" 2>/dev/null | grep -q '^#!'; then echo 755; else echo 644; fi ;;
   esac
 }
@@ -109,7 +111,7 @@ cmd_check() {
   if comm -23 "$tmp/all" <(cut -f1 "$tmp/claimed" | sort -u) | grep -q .; then
     echo "Files in no package and not in delayos-live-only.list (they will not receive updates):"
     comm -23 "$tmp/all" <(cut -f1 "$tmp/claimed" | sort -u) | sed 's/^/  /'
-    rc=1
+    (( rc )) || rc=2
   fi
   for p in $(content_pkgs); do
     printf '%-24s %5d files\n' "$p" "$(grep -c $'\t'"$p"'$' "$tmp/claimed" || true)"
@@ -162,7 +164,7 @@ cmd_install() {
 # /etc files a user may edit are backup files (pacman keeps the user's version and writes .pacnew).
 # Hooks, units, sudoers and autostart entries are code, not configuration: always replaced.
 cmd_backup() {
-  pkg_files "$1" | grep '^etc/' | grep -Ev '^etc/(pacman\.d/hooks|systemd/system|sudoers\.d|xdg/autostart|xdg/menus|skel)/' || true
+  pkg_files "$1" | grep '^etc/' | grep -Ev '^etc/(pacman\.d/hooks|systemd/system|sudoers.d|grub.d|xdg/autostart|xdg/menus|skel)/' || true
 }
 
 cmd_strip() {

@@ -1,0 +1,7 @@
+# DelayOS recovery environment (build.sh renames this file when RE_KERNEL is another kernel)
+PRESETS=('archiso')
+
+ALL_kver='/boot/vmlinuz-linux-delayos'
+archiso_config='/etc/mkinitcpio.conf.d/archiso.conf'
+
+archiso_image="/boot/initramfs-linux-delayos.img"

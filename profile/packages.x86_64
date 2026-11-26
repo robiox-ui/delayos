@@ -46,6 +46,10 @@ mdadm
 smartmontools
 udisks2
 snapper
+# snapshots before every pacman transaction + GRUB submenu "이전 상태로 부팅" (docs/recovery.md)
+snap-pac
+grub-btrfs
+inotify-tools
 
 ## ───────── Memory / performance ─────────
 zram-generator

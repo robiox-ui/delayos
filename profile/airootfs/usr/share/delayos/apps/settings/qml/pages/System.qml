@@ -58,6 +58,7 @@ SPage {
     SRow { icon: "notifications"; title: "알림"; subtitle: "앱 알림, 방해 금지"; chevron: true; onClicked: pg.navigate("notifications") }
     SRow { icon: "battery-full"; title: "전원 및 배터리"; subtitle: "전원 모드, 화면 끄기 및 절전"; chevron: true; onClicked: pg.navigate("power") }
     SRow { icon: "drive-harddisk"; title: "저장소"; subtitle: "사용 공간, 임시 파일 정리"; chevron: true; onClicked: pg.navigate("storage") }
+    SRow { icon: "view-refresh"; title: "복구"; subtitle: "이 PC 초기화, 고급 시작 옵션, 시스템 스냅샷"; chevron: true; onClicked: pg.navigate("recovery") }
     SRow { icon: "help-about"; title: "정보"; subtitle: "장치 사양, PC 이름 바꾸기, DelayOS 버전"; chevron: true; onClicked: pg.navigate("about") }
 
     SDialog {

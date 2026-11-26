@@ -109,6 +109,8 @@ sudo pacman -Sy --overwrite '*' delayos-desktop
 
 **Secure Boot:** `delayos-sb-general`에는 특정 `linux-delayos` 빌드를 서명한 이미지가 들어 있습니다. 그래서 이 패키지는 `linux-delayos=<그 버전>`에 의존하고, `repo-build.sh kernel`은 일반 Secure Boot 키(`$DELAYOS_KEYS`)가 있으면 둘을 함께 빌드합니다. `repo-publish.sh`는 풀의 두 버전이 맞지 않으면 게시하지 않습니다. 키 없이 커널만 게시하면 `delayos-sb-general`이 설치된 PC는 pacman이 커널 업그레이드를 거부합니다(부팅 불가보다 안전한 쪽).
 
+수준별 커널 세 개(7.3.6-1)는 이미 빌드되어 있습니다(`BrookOS-vm/out/kernels/`). 다시 컴파일하지 말고 `repo-build.sh import`로 풀에 넣으세요. 이름으로 저장소를 찾습니다. 일반 `linux-delayos`와 `pahole`도 ISO 빌드가 만든 파일(`/home/delaybuilder/linux-delayos/`, `/home/delaybuilder/pahole/`)을 같은 방법으로 넣습니다. chroot 없이 호스트에서 바로 빌드하려면(이전 `kbuild.sh`와 같은 방식) `repo-build.sh --no-chroot --level v3,v4,znver4 kernel`입니다.
+
 `linux-delayos-eac`와 `delayos-sb-signed`는 아직 저장소에 넣지 않았습니다(ISO에 실려 가는 지금 방식 그대로). 안티치트 키로 서명해야 하고 NVIDIA 드라이버 버전에 묶여 있어 별도 작업입니다.
 
 ### 3. Proton (`proton-delayos`)
@@ -169,6 +171,7 @@ sudo tools/repo-build.sh pahole kernel                # linux-delayos (+ delayos
 sudo tools/repo-build.sh --level v3 kernel curated    # linux-delayos-v3 + 선별 재빌드
 sudo tools/repo-build.sh --level v3 pkg:zstd          # 패키지 하나
 sudo tools/repo-build.sh proton                       # 몇 시간
+sudo tools/repo-build.sh import /path/linux-delayos-v3-*.pkg.tar.zst   # 다른 곳에서 이미 빌드한 패키지를 풀에 넣기
 sudo tools/repo-build.sh list                         # 풀에 든 것
 
 # 게시 (키와 토큰은 실행할 때만 환경 변수로)
@@ -189,7 +192,7 @@ sudo DELAYOS_REPO_KEY=... GITHUB_TOKEN=... tools/repo-update.sh --publish
 | `delayos-*` 8개 | 약 1분 | 테스트 VM(4 vCPU)에서 측정: 20초 |
 | `linux-delayos` 하나 | 40~45분 | 빌드 VM의 이전 빌드 기록(clang ThinLTO, 전체 설정) |
 | 커널 4종 | 약 3시간 | 위의 4배 |
-| `zstd` (v3, 테스트 포함) | 아래 "검증" 참고 | 테스트 VM에서 측정 |
+| `zstd` (v3) | 38초(테스트 제외, chroot가 이미 있을 때). chroot를 처음 만들 때 3분 추가. 테스트 포함은 15분 이상 | 테스트 VM(4 vCPU)에서 측정 |
 | `mesa` + `lib32-mesa` | 수준당 30~45분 | 추정 |
 | `qt6-base` + `qt6-declarative` | 수준당 50~70분 | 추정 |
 | `kwin`, `pipewire`, `ffmpeg`, 나머지 | 수준당 40~60분 | 추정 |

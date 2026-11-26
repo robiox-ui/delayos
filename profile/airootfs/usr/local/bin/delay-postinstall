@@ -50,7 +50,18 @@ install -d -o sddm -g sddm -m750 /var/lib/sddm 2>/dev/null || mkdir -p /var/lib/
 printf '[Last]\nSession=/usr/share/wayland-sessions/plasma.desktop\n' > /var/lib/sddm/state.conf
 
 # Fast, quiet boot with gaming-friendly kernel options
-sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=3/' /etc/default/grub
+# The boot menu is hidden (docs/recovery.md): Esc during the one-second wait (or Shift held down, where
+# the firmware reports it) shows it with "DelayOS 복구" and "이전 상태로 부팅". With another operating
+# system next to DelayOS (os-prober finds it) the menu stays visible for 3 seconds.
+grub_set() { # KEY VALUE: set KEY=VALUE in /etc/default/grub (uncomment or append)
+  if grep -Eq "^#?$1=" /etc/default/grub; then sed -i "s|^#\?$1=.*|$1=$2|" /etc/default/grub
+  else printf '%s=%s\n' "$1" "$2" >> /etc/default/grub; fi
+}
+if [[ ${DELAYOS_WINGAMES:-0} != 1 ]] && os-prober 2>/dev/null | grep -q .; then
+  grub_set GRUB_TIMEOUT 3; grub_set GRUB_TIMEOUT_STYLE menu
+else
+  grub_set GRUB_TIMEOUT 1; grub_set GRUB_TIMEOUT_STYLE hidden
+fi
 sed -i 's/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
 grep -q '^GRUB_DISABLE_OS_PROBER' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 # Hidden Windows for anti-cheat games (delay-winsetup): it is started by "Windows 전환", never from the
@@ -113,3 +124,12 @@ case "$cpuopt" in
     /usr/local/bin/delay-cpu-opt enable "${cpuflags[@]}" || true
     ;;
 esac
+
+# ---- Snapshots and recovery (docs/recovery.md) ----
+# snapper configuration "root" for @ (snap-pac: a snapshot before/after every pacman transaction;
+# one automatic snapshot a day), /.snapshots = @snapshots, GRUB submenu "이전 상태로 부팅" (grub-btrfs).
+# Last step on purpose: the package work above must not fill the new system with snapshots.
+# On ext4/xfs installations this does nothing (exit 3).
+/usr/local/bin/delay-snapshot setup --install-time || true
+# Boot-failure counter for the automatic start of "DelayOS 복구" (etc/grub.d/45_delayos-recovery)
+systemctl enable delay-boot-ok.service delay-boot-ok.timer 2>/dev/null || true

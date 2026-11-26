@@ -11,6 +11,7 @@
 #   enable-service UNIT systemctl enable --now (whitelisted units only)
 #   cpu-opt enable|disable|kernel-install|kernel-remove   delay-cpu-opt (CPU-optimized packages)
 #   gpu-setup           delay-gpu-setup (drivers that match the GPUs)
+#   recovery SUB ...    snapshots (delay-snapshot) and restart into the recovery environment (delay-recovery-ctl)
 set -u
 export LC_ALL=C
 cmd="${1:-}"; shift || true
@@ -92,6 +93,37 @@ case "$cmd" in
     # make the installed graphics drivers match the GPUs in this PC
     exec /usr/local/bin/delay-gpu-setup
     ;;
+  recovery)
+    # 설정 > 시스템 > 복구 (docs/recovery.md): snapshots, restart into the recovery environment
+    sub="${1:-}"; shift || true
+    num() { [[ "${1:-}" =~ ^[0-9]{1,7}$ ]] || { echo "invalid snapshot number" >&2; exit 2; }; }
+    case "$sub" in
+      snapshot-create)
+        desc="${1:-수동 스냅샷}"
+        [[ ${#desc} -le 80 && "$desc" != *[[:cntrl:]]* ]] || { echo "invalid description" >&2; exit 2; }
+        exec /usr/local/bin/delay-snapshot create -d "$desc" ;;
+      snapshot-delete)   num "${1:-}"; exec /usr/local/bin/delay-snapshot delete "$1" ;;
+      snapshot-rollback) num "${1:-}"; exec /usr/local/bin/delay-snapshot rollback "$1" ;;
+      enable)
+        # turn snapshots on for an installation that has them off, with the boot menu entries
+        /usr/local/bin/delay-snapshot setup || exit $?
+        mkinitcpio -P || true
+        exec grub-mkconfig -o /boot/grub/grub.cfg ;;
+      reboot)
+        case "${1:-menu}" in
+          menu|repair|rollback|reset-keep|reset-wipe) exec /usr/local/bin/delay-recovery-ctl reboot --action "${1:-menu}" ;;
+          *) echo "invalid action" >&2; exit 2 ;;
+        esac ;;
+      firmware) exec /usr/local/bin/delay-recovery-ctl firmware ;;
+      install-re)
+        # make the recovery partition (when there is none) or refresh the environment on it
+        if /usr/local/bin/delay-deploy recovery status >/dev/null 2>&1; then /usr/local/bin/delay-deploy recovery install || exit $?
+        else /usr/local/bin/delay-deploy recovery create / || exit $?; fi
+        systemctl enable --now delay-boot-ok.service delay-boot-ok.timer >/dev/null 2>&1
+        exec grub-mkconfig -o /boot/grub/grub.cfg ;;
+      *) echo "usage: delay-sys-helper recovery snapshot-create|snapshot-delete|snapshot-rollback|enable|reboot|firmware|install-re" >&2; exit 2 ;;
+    esac
+    ;;
   enable-service)
     case "${1:-}" in
       waydroid-container.service|bluetooth.service|docker.service|libvirtd.service) exec systemctl enable --now "$1" ;;
@@ -99,5 +131,5 @@ case "$cmd" in
     esac
     ;;
   *)
-    echo "usage: delay-sys-helper install|remove|upgrade|clean-cache|flatpak-lang|enable-service|cpu-opt|gpu-setup ..." >&2; exit 2 ;;
+    echo "usage: delay-sys-helper install|remove|upgrade|clean-cache|flatpak-lang|enable-service|cpu-opt|gpu-setup|recovery ..." >&2; exit 2 ;;
 esac

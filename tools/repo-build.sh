@@ -14,6 +14,7 @@
 #   local:<dir>    a PKGBUILD directory below packages/                              -> [delayos]
 #   proton         proton-delayos (hours, 60 GB disk: see packages/proton-delayos)   -> [delayos]
 #   all            content pahole kernel curated
+#   import <file>...   put packages built elsewhere into the pool (no rebuild); must be the only target
 #   list           show what the pool holds
 #
 # Options
@@ -57,6 +58,30 @@ if [[ ${TARGETS[*]} == list ]]; then
   for l in "${LEVELS[@]}"; do
     echo "[$(repo_name "$l")]  $(pool_dir "$l")"
     db_list "$(db_file "$l")" | awk '{printf "  %-34s %s\n", $1, $2}'
+  done
+  exit 0
+fi
+
+# import <file>...: packages that were built elsewhere (an earlier kernel build, build.sh's local repo)
+# go into the pool without rebuilding. linux-delayos-v3/-v4/-znver4 find their repository by name;
+# everything else goes to [delayos] or to the one level given with --level.
+if [[ ${TARGETS[0]} == import ]]; then
+  (( ${#TARGETS[@]} > 1 )) || die "usage: repo-build.sh [--level L] import <file.pkg.tar.zst>..."
+  command -v repo-add >/dev/null || die "repo-add is missing (pacman)"
+  for f in "${TARGETS[@]:1}"; do
+    [[ -f $f ]] || die "no such file: $f"
+    n=$(pkg_field "$f" pkgname); v=$(pkg_field "$f" pkgver)
+    [[ -n $n && -n $v ]] || die "$f is not a pacman package"
+    case "$n" in
+      linux-delayos-v3|linux-delayos-v3-headers) l=v3 ;;
+      linux-delayos-v4|linux-delayos-v4-headers) l=v4 ;;
+      linux-delayos-znver4|linux-delayos-znver4-headers) l=znver4 ;;
+      *) l=${LEVELSEL:-generic}; valid_level "$l" || die "import takes one level (--level v3), got '$l'" ;;
+    esac
+    a=$(pkg_field "$f" arch)
+    [[ $l == generic && $a == x86_64_v* ]] && die "$n is built for $a: it does not belong in [delayos] (use --level)"
+    log "$n $v -> [$(repo_name "$l")]"
+    pool_add "$l" "$f"
   done
   exit 0
 fi
@@ -144,7 +169,11 @@ build_content() {
   ver="${DELAYOS_PKGVER:-$(date -u +%Y.%m.%d.%H%M)}"
   hashes="$(pool_dir generic)/content-hashes.txt"; touch "$hashes"
   mk=$(gen_makepkg_conf generic)
-  DELAYOS_REPO_ROOT="$SRC" bash "$SRC/tools/content-pkgs.sh" check || die "packages/*/files.list do not cover profile/airootfs exactly (see above)"
+  local crc=0
+  DELAYOS_REPO_ROOT="$SRC" bash "$SRC/tools/content-pkgs.sh" check || crc=$?
+  (( crc == 1 )) && die "A file is listed in two packages (see above): fix packages/delayos-*/files.list"
+  # in no list: the build goes on (the file stays in the ISO overlay as before), but say it loudly
+  (( crc == 2 )) && warn "Files without a package (see above) will not be updated on installed systems: add them to a files.list"
   for p in delayos-keyring delayos-mirrorlist $(DELAYOS_REPO_ROOT="$SRC" bash "$SRC/tools/content-pkgs.sh" list) delayos-desktop; do
     dir="$SRC/packages/$p"
     if [[ $p == delayos-keyring && ! -s $dir/delayos.gpg ]]; then

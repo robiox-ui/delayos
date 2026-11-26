@@ -1,0 +1,18 @@
+[Unit]
+Description=DelayOS: report a successful start to the boot loader (recovery after 3 failed starts)
+Documentation=file:///etc/grub.d/45_delayos-recovery
+ConditionKernelCommandLine=!archisobasedir
+After=local-fs.target
+# stopped (= ExecStop runs) before the file systems go away at shutdown
+DefaultDependencies=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+# a clean shutdown or restart counts as a good start too
+ExecStop=/usr/local/bin/delay-recovery-ctl boot-ok --quiet
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

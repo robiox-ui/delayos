@@ -1,0 +1,11 @@
+[Unit]
+Description=DelayOS: daily system snapshot
+Documentation=file:///usr/local/bin/delay-snapshot
+ConditionPathExists=/etc/snapper/configs/root
+ConditionKernelCommandLine=!archisobasedir
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/delay-snapshot --quiet daily
+Nice=10
+IOSchedulingClass=idle

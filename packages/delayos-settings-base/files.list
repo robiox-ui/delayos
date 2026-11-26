@@ -48,3 +48,11 @@ usr/share/X11/xorg.conf.d/20-touchpad.conf
 usr/share/delayos/eac/
 usr/share/delayos/trust/
 usr/share/polkit-1/actions/org.delayos.eac.policy
+# snapshots and recovery (docs/recovery.md)
+etc/grub.d/
+usr/local/bin/delay-deploy
+usr/local/bin/delay-recovery-ctl
+usr/local/bin/delay-snapshot
+etc/xdg/autostart/org.delayos.SnapshotBoot.desktop
+usr/lib/delayos/delay-recovery-info
+usr/share/polkit-1/actions/org.delayos.recovery.policy

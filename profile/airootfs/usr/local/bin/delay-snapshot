@@ -1,0 +1,579 @@
+#!/usr/bin/env bash
+# delay-snapshot: DelayOS 시스템 스냅샷 (btrfs). docs/recovery.md
+#
+# Layout (top level of the btrfs file system, see Calamares mount.conf):
+#   @            the system (mounted on /)          @home @cache @log @docker   data, never rolled back
+#   @snapshots   mounted on /.snapshots, snapper layout: <N>/snapshot + <N>/info.xml
+#   @factory     read-only copy of @ taken at the end of the installation ("이 PC 초기화")
+#
+# Snapshots are plain snapper snapshots (config "root"): snap-pac makes one before/after every
+# pacman transaction, delay-snapshot-daily.timer one per day, snapper-cleanup.timer applies the
+# limits, grub-btrfs lists them in GRUB under "이전 상태로 부팅".
+# This tool creates/lists/deletes them without talking to snapperd, so the same code works in the
+# running system, when booted from a snapshot, and offline in the recovery environment (--top).
+#
+# rollback = snapshot N -> new @ (the old @ is kept as a snapshot first). GRUB and fstab address
+# the system by the name "@", so nothing else has to change.
+set -u
+export LC_ALL=C.UTF-8 LANGUAGE=en
+PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin
+
+PROG=delay-snapshot
+RUN=/run/delayos
+TOP=""; TOP_OWNED=0; OFFLINE=0; JSON=0; QUIET=0; TSV=0
+SYS=@; SNAPS=@snapshots; FACTORY=@factory
+# subvolumes that hold data and are never part of a snapshot (name:mount point)
+DATA_SUBVOLS=("@home:/home" "@cache:/var/cache" "@log:/var/log" "@docker:/var/lib/docker")
+# what "이 PC 초기화 > 내 파일 유지" takes over from the old system into the fresh one
+CARRY=(etc/passwd etc/shadow etc/group etc/gshadow etc/subuid etc/subgid)
+CARRY_MISC=(etc/fstab etc/crypttab etc/hostname etc/hosts etc/machine-id etc/locale.conf etc/vconsole.conf
+            etc/localtime etc/NetworkManager/system-connections etc/delayos var/lib/bluetooth
+            var/lib/AccountsService etc/udev/rules.d/61-delayos-winsetup-local.rules etc/cryptsetup-keys.d
+            crypto_keyfile.bin)
+
+say()  { (( QUIET )) || printf '%s\n' "$*"; }
+warn() { printf '%s: %s\n' "$PROG" "$*" >&2; }
+die()  { local rc=1; [[ ${1:-} =~ ^[0-9]+$ ]] && { rc=$1; shift; }; printf '%s: %s\n' "$PROG" "$*" >&2; exit "$rc"; }
+need_root() { [[ $EUID -eq 0 ]] || die 77 "루트 권한이 필요합니다 (sudo $PROG ...)"; }
+
+usage() {
+  cat <<'EOF'
+delay-snapshot: DelayOS 시스템 스냅샷 관리
+
+사용법:
+  delay-snapshot status [--json]            스냅샷 기능 상태
+  delay-snapshot list [--json]              스냅샷 목록
+  delay-snapshot create [-d 설명]           지금 상태의 스냅샷 만들기
+  delay-snapshot delete <번호>...           스냅샷 삭제
+  delay-snapshot rollback <번호>            시스템을 그 스냅샷의 상태로 되돌리기 (다시 시작하면 적용)
+  delay-snapshot setup                      스냅샷 기능 켜기 (snapper 설정, /.snapshots, 타이머, GRUB 하위 메뉴)
+  delay-snapshot factory [--refresh]        초기화용 사본(@factory) 만들기 / 다시 만들기
+  delay-snapshot reset keep|wipe            @factory로 시스템을 초기화 (복구 환경 전용, --top 필요)
+  delay-snapshot daily                      하루 한 번의 자동 스냅샷 + 정리 (타이머가 실행)
+
+공통 옵션:
+  --top <디렉터리>   btrfs 최상위(subvolid=5)가 마운트된 곳. 복구 환경처럼 시스템 밖에서 작업할 때 씁니다.
+  --json             기계가 읽는 출력        -q, --quiet   메시지 줄이기
+
+홈 폴더(@home), 로그, 캐시, Docker 데이터는 스냅샷에 들어가지 않으며 되돌려도 그대로 남습니다.
+EOF
+}
+
+json_str() { # print a JSON string literal for $1
+  local s=${1//\\/\\\\}
+  s=${s//\"/\\\"}; s=${s//$'\n'/ }; s=${s//$'\t'/ }; s=${s//$'\r'/}
+  printf '"%s"' "$s"
+}
+xml_esc()   { local s=${1//&/&amp;}; s=${s//</&lt;}; s=${s//>/&gt;}; printf '%s' "$s"; }
+xml_unesc() { local s=${1//&lt;/<}; s=${s//&gt;/>}; s=${s//&quot;/\"}; s=${s//&apos;/\'}; s=${s//&amp;/&}; printf '%s' "$s"; }
+xml_get()   { sed -n "s:.*<$2>\(.*\)</$2>.*:\1:p" "$1" 2>/dev/null | head -n1; }
+
+# ------------------------------------------------------------------ locating the file system
+cmdline_subvol() { # subvolume named on the kernel command line (rootflags=subvol=...), without a leading /
+  local w v
+  for w in $(cat /proc/cmdline 2>/dev/null); do
+    case "$w" in rootflags=*)
+      v=$(printf '%s' "${w#rootflags=}" | tr ',' '\n' | sed -n 's/^subvol=//p' | head -n1); printf '%s' "${v#/}"; return ;;
+    esac
+  done
+}
+booted_snapshot() { # number of the snapshot the running system was started from, or nothing
+  local sv; sv=$(cmdline_subvol)
+  [[ $sv =~ ^$SNAPS/([0-9]+)/snapshot$ ]] && printf '%s' "${BASH_REMATCH[1]}"
+}
+sys_btrfs_dev() { # block device of the btrfs that holds the running system
+  local mp src fs
+  for mp in / /.snapshots /home /var/log /var/cache; do
+    src=$(findmnt -fno SOURCE "$mp" 2>/dev/null) || continue
+    fs=$(findmnt -fno FSTYPE "$mp" 2>/dev/null)
+    [[ $fs == btrfs ]] || continue
+    printf '%s' "${src%%\[*}"; return 0
+  done
+  return 1
+}
+close_top() { (( TOP_OWNED )) && { umount "$TOP" 2>/dev/null; rmdir "$TOP" 2>/dev/null; TOP_OWNED=0; }; return 0; }
+open_top() {
+  [[ -n $TOP ]] && { [[ -d $TOP ]] || die "$TOP: 디렉터리가 없습니다"; return 0; }
+  local dev; dev=$(sys_btrfs_dev) || return 1
+  TOP=$RUN/top.$$
+  mkdir -p "$TOP" && mount -o subvolid=5,noatime "$dev" "$TOP" 2>/dev/null || { rmdir "$TOP" 2>/dev/null; TOP=""; return 1; }
+  TOP_OWNED=1
+  trap close_top EXIT
+}
+supported() { # the running system is on btrfs and uses the DelayOS subvolume layout
+  local src; src=$(findmnt -fno FSTYPE,FSROOT / 2>/dev/null)
+  [[ $src == "btrfs /$SYS" ]] && return 0
+  [[ -n $(booted_snapshot) ]]
+}
+is_subvol() { [[ -d $1 ]] && [[ $(stat -c %i "$1" 2>/dev/null) == 256 ]]; }
+in_use() { # is subvolume path $1 (relative to the top level, e.g. @old-1) mounted anywhere?
+  awk -v p="/$1" '{ for (i = 1; i <= NF; i++) if ($i == "-") { fs = $(i + 1); break } }
+                  fs == "btrfs" && ($4 == p || index($4, p "/") == 1) { f = 1 } END { exit !f }' /proc/self/mountinfo
+}
+nested_of() { # paths (relative to the top level) of every subvolume inside subvolume $1
+  btrfs subvolume list "$TOP" 2>/dev/null | sed -n 's/.* path //p' | sed 's:^<FS_TREE>/::' | awk -v p="$1/" 'index($0, p) == 1'
+}
+del_subvol() { # delete a subvolume and everything nested in it
+  local sv=$1 rel line
+  is_subvol "$sv" || { [[ -e $sv ]] && rm -rf --one-file-system "$sv"; return 0; }
+  rel=${sv#"$TOP"/}
+  # nested subvolumes, deepest first
+  while read -r line; do
+    [[ -n $line ]] || continue
+    btrfs property set -ts "$TOP/$line" ro false >/dev/null 2>&1
+    btrfs subvolume delete "$TOP/$line" >/dev/null 2>&1
+  done < <(nested_of "$rel" | awk '{ print length($0) "\t" $0 }' | sort -rn | cut -f2-)
+  btrfs subvolume delete "$sv" >/dev/null 2>&1 || { btrfs property set -ts "$sv" ro false >/dev/null 2>&1; btrfs subvolume delete "$sv" >/dev/null; }
+}
+
+# ------------------------------------------------------------------ snapshots (snapper layout)
+snap_nums() { local d; for d in "$TOP/$SNAPS"/[0-9]*; do [[ -f $d/info.xml && -d $d/snapshot ]] && basename "$d"; done 2>/dev/null | sort -n; }
+snap_kind() { # $1 type $2 cleanup $3 description
+  case "$3" in
+    "되돌리기 전 상태"*) echo rollback ;; "초기화 전 상태"*) echo reset ;;
+    *) case "$1:$2" in pre:*) echo pacman-pre ;; post:*) echo pacman-post ;; *:timeline) echo timeline ;; *) echo manual ;; esac ;;
+  esac
+}
+snap_create() { # $1 description  $2 cleanup algorithm ("" = keep until deleted)  $3 important (yes|"")  -> prints the number
+  local desc=$1 cleanup=${2:-} imp=${3:-} n d
+  is_subvol "$TOP/$SYS" || { warn "시스템 하위 볼륨($SYS)이 없습니다"; return 1; }
+  is_subvol "$TOP/$SNAPS" || { warn "스냅샷 저장소($SNAPS)가 없습니다. 먼저 '$PROG setup'을 실행하세요."; return 1; }
+  n=$(snap_nums | tail -n1); n=$(( ${n:-0} + 1 ))
+  while ! mkdir "$TOP/$SNAPS/$n" 2>/dev/null; do n=$((n + 1)); (( n > 999999 )) && return 1; done
+  d=$TOP/$SNAPS/$n
+  if ! btrfs subvolume snapshot -r "$TOP/$SYS" "$d/snapshot" >/dev/null; then rmdir "$d"; return 1; fi
+  {
+    printf '<?xml version="1.0"?>\n<snapshot>\n  <type>single</type>\n  <num>%s</num>\n  <date>%s</date>\n' "$n" "$(date -u '+%Y-%m-%d %H:%M:%S')"
+    printf '  <description>%s</description>\n' "$(xml_esc "$desc")"
+    [[ -n $cleanup ]] && printf '  <cleanup>%s</cleanup>\n' "$cleanup"
+    [[ $imp == yes ]] && printf '  <userdata>\n    <key>important</key>\n    <value>yes</value>\n  </userdata>\n'
+    printf '</snapshot>\n'
+  } > "$d/info.xml"
+  chmod 600 "$d/info.xml" 2>/dev/null
+  printf '%s\n' "$n"
+}
+snap_delete() {
+  local n=$1 d=$TOP/$SNAPS/$1
+  [[ $n =~ ^[0-9]+$ && -d $d ]] || { warn "스냅샷 $n: 없습니다"; return 1; }
+  [[ $(booted_snapshot) == "$n" ]] && { warn "스냅샷 $n: 지금 이 스냅샷으로 부팅되어 있어 삭제할 수 없습니다"; return 1; }
+  in_use "$SNAPS/$n/snapshot" && { warn "스냅샷 $n: 사용 중입니다"; return 1; }
+  [[ -d $d/snapshot ]] && { del_subvol "$d/snapshot" || return 1; }
+  rm -rf "$d"
+}
+
+cmd_list() {
+  open_top || { (( JSON )) && echo '[]'; return 0; }
+  local n f first=1 date epoch type pre cleanup desc imp kind booted
+  booted=$(booted_snapshot)
+  (( JSON )) && printf '['
+  (( JSON || TSV )) || printf '%-5s %-17s %-12s %s\n' "번호" "날짜" "종류" "설명"
+  while read -r n; do
+    [[ -n $n ]] || continue
+    f=$TOP/$SNAPS/$n/info.xml
+    date=$(xml_get "$f" date); type=$(xml_get "$f" type); pre=$(xml_get "$f" pre_num); cleanup=$(xml_get "$f" cleanup)
+    desc=$(xml_unesc "$(xml_get "$f" description)")
+    imp=no; grep -q '<key>important</key>' "$f" 2>/dev/null && grep -q '<value>yes</value>' "$f" && imp=yes
+    epoch=$(date -u -d "$date" +%s 2>/dev/null || echo 0)
+    date=$(date -d "@$epoch" '+%Y-%m-%d %H:%M' 2>/dev/null)
+    kind=$(snap_kind "$type" "$cleanup" "$desc")
+    if (( JSON )); then
+      (( first )) || printf ','
+      first=0
+      printf '{"num":%s,"date":%s,"epoch":%s,"type":%s,"pre":%s,"cleanup":%s,"kind":%s,"important":%s,"booted":%s,"desc":%s}' \
+        "$n" "$(json_str "$date")" "$epoch" "$(json_str "$type")" "${pre:-0}" "$(json_str "$cleanup")" "$(json_str "$kind")" \
+        "$([[ $imp == yes ]] && echo true || echo false)" "$([[ $booted == "$n" ]] && echo true || echo false)" "$(json_str "$desc")"
+    else
+      case "$kind" in pacman-pre) kind="설치 전" ;; pacman-post) kind="설치 후" ;; timeline) kind="자동" ;;
+        rollback) kind="되돌리기 전" ;; reset) kind="초기화 전" ;; *) kind="수동" ;; esac
+      if (( TSV )); then printf '%s\t%s\t%s\t%s\n' "$n" "$date" "$kind" "$desc"; continue; fi
+      printf '%-5s %-17s %-12s %s%s\n' "$n" "$date" "$kind" "$desc" "$([[ $booted == "$n" ]] && echo '  [지금 부팅됨]')"
+    fi
+  done < <(snap_nums)
+  (( JSON )) && printf ']\n'
+  return 0
+}
+
+cmd_status() {
+  local sup=false en=false count=0 fac=false facdate="" booted pending=false b
+  if [[ -n $TOP ]] || supported; then sup=true; fi
+  if [[ $sup == true ]] && open_top; then
+    is_subvol "$TOP/$SNAPS" && { [[ -n ${TOP_ARG:-} ]] || [[ -f /etc/snapper/configs/root ]]; } && en=true
+    count=$(snap_nums | wc -l)
+    if is_subvol "$TOP/$FACTORY"; then
+      fac=true
+      facdate=$(btrfs subvolume show "$TOP/$FACTORY" 2>/dev/null | sed -n 's/^\s*Creation time:\s*//p' | head -n1)
+      facdate=$(date -d "$facdate" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "$facdate")
+    fi
+    for b in "$TOP"/@old-*; do [[ -d $b ]] && in_use "${b#"$TOP"/}" && pending=true; done
+  fi
+  booted=$(booted_snapshot)
+  if (( JSON )); then
+    printf '{"supported":%s,"enabled":%s,"count":%s,"factory":%s,"factoryDate":%s,"bootedSnapshot":%s,"pendingReboot":%s}\n' \
+      "$sup" "$en" "$count" "$fac" "$(json_str "$facdate")" "${booted:-0}" "$pending"
+  else
+    [[ $sup == true ]] || { echo "이 시스템은 btrfs(@ 하위 볼륨) 설치가 아니어서 스냅샷을 쓸 수 없습니다."; return 3; }
+    echo "스냅샷 기능: $([[ $en == true ]] && echo 켜짐 || echo "꺼짐 ('sudo $PROG setup'으로 켭니다)")"
+    echo "스냅샷 수: $count"
+    echo "초기화용 사본(@factory): $([[ $fac == true ]] && echo "있음 ($facdate)" || echo 없음)"
+    [[ -n $booted ]] && echo "지금 스냅샷 $booted 상태로 부팅되어 있습니다 (바뀐 내용은 다시 시작하면 사라집니다)."
+    [[ $pending == true ]] && echo "되돌리기가 예약되어 있습니다. 다시 시작하면 적용됩니다."
+  fi
+  return 0
+}
+
+cmd_create() {
+  need_root
+  local desc="" cleanup="" imp=""
+  while (( $# )); do
+    case "$1" in
+      -d|--description) desc=${2:-}; shift ;;
+      -c|--cleanup) cleanup=${2:-}; shift ;;
+      --important) imp=yes ;;
+      *) die 2 "알 수 없는 옵션: $1" ;;
+    esac; shift
+  done
+  [[ -n $desc ]] || desc="수동 스냅샷"
+  open_top || die 3 "btrfs 시스템을 찾지 못했습니다"
+  local n; n=$(snap_create "$desc" "$cleanup" "$imp") || die "스냅샷을 만들지 못했습니다"
+  if (( JSON )); then printf '{"ok":true,"num":%s}\n' "$n"; else say "스냅샷 $n을(를) 만들었습니다: $desc"; fi
+}
+
+cmd_delete() {
+  need_root
+  (( $# )) || die 2 "삭제할 스냅샷 번호를 지정하세요"
+  open_top || die 3 "btrfs 시스템을 찾지 못했습니다"
+  local n rc=0
+  for n in "$@"; do snap_delete "$n" && say "스냅샷 $n을(를) 삭제했습니다" || rc=1; done
+  return $rc
+}
+
+# Move subvolumes nested inside the old system (systemd's /var/lib/machines, /var/lib/portables,
+# Docker's btrfs driver on installations without @docker ...) into the new one: a snapshot does not
+# contain them, and deleting the old system would delete them.
+move_nested() { # $1 old (abs)  $2 new (abs)
+  local old=$1 new=$2 rel line orel=${1#"$TOP"/}
+  while read -r line; do
+    [[ -n $line ]] || continue
+    rel=${line#"$orel"/}
+    [[ $rel == .snapshots* ]] && continue
+    [[ -d $old/$rel ]] || continue
+    if [[ -d $new/$rel ]]; then rmdir "$new/$rel" 2>/dev/null || continue; fi
+    mkdir -p "$(dirname "$new/$rel")" && mv "$old/$rel" "$new/$rel" 2>/dev/null
+  done < <(nested_of "$orel" | awk '{ print length($0) "\t" $0 }' | sort -n | cut -f2-)
+}
+# swap $TOP/@.new in as the system; the previous one is removed now (offline) or at the next boot
+swap_in() { # $1 = keep nested subvolumes (1|0)
+  local ts old; ts=$(date +%Y%m%d-%H%M%S); old=$TOP/@old-$ts
+  if [[ -e $TOP/$SYS ]]; then
+    mv "$TOP/$SYS" "$old" || { warn "$SYS 이름을 바꾸지 못했습니다"; return 1; }
+  fi
+  if ! mv "$TOP/@.new" "$TOP/$SYS"; then
+    [[ -e $old ]] && mv "$old" "$TOP/$SYS"
+    warn "새 시스템을 제자리에 놓지 못했습니다"; return 1
+  fi
+  [[ -e $old ]] || return 0
+  [[ ${1:-1} == 1 ]] && move_nested "$old" "$TOP/$SYS"
+  if in_use "@old-$ts"; then
+    PENDING=1          # the running system: delay-snapshot daily / post-boot removes it after the restart
+  else
+    del_subvol "$old" || warn "이전 시스템($old)을 지우지 못했습니다. 다음 정리 때 다시 시도합니다."
+  fi
+  return 0
+}
+PENDING=0
+
+cmd_rollback() {
+  need_root
+  local n="" backup=1
+  while (( $# )); do
+    case "$1" in --no-backup) backup=0 ;; -*) die 2 "알 수 없는 옵션: $1" ;; *) n=$1 ;; esac; shift
+  done
+  [[ $n =~ ^[0-9]+$ ]] || die 2 "되돌릴 스냅샷 번호를 지정하세요 ('$PROG list'로 확인)"
+  open_top || die 3 "btrfs 시스템을 찾지 못했습니다"
+  local src=$TOP/$SNAPS/$n/snapshot b
+  is_subvol "$src" || die "스냅샷 $n: 없습니다"
+  [[ -x $src/usr/bin/bash || -L $src/usr/bin/bash || -e $src/usr/lib/os-release ]] || die "스냅샷 $n: 시스템 스냅샷이 아닙니다"
+  for b in "$TOP"/@old-*; do
+    [[ -d $b ]] && in_use "${b#"$TOP"/}" && die 4 "이미 되돌리기가 예약되어 있습니다. 먼저 다시 시작하세요."
+  done
+  del_subvol "$TOP/@.new"
+  if (( backup )) && is_subvol "$TOP/$SYS"; then
+    b=$(snap_create "되돌리기 전 상태 (스냅샷 $n(으)로 되돌림)" number yes) && say "지금 상태를 스냅샷 $b(으)로 남겼습니다"
+  fi
+  btrfs subvolume snapshot "$src" "$TOP/@.new" >/dev/null || die "스냅샷 $n에서 새 시스템을 만들지 못했습니다"
+  mkdir -p "$TOP/@.new/var/lib/delay" && printf 'rollback %s %s\n' "$n" "$(date '+%F %T')" > "$TOP/@.new/var/lib/delay/snapshot-restored"
+  swap_in 1 || { del_subvol "$TOP/@.new"; die "되돌리지 못했습니다. 시스템은 바뀌지 않았습니다."; }
+  sync
+  if (( JSON )); then printf '{"ok":true,"num":%s,"reboot":%s}\n' "$n" "$( (( PENDING )) && echo true || echo false)"
+  elif (( PENDING )); then say "스냅샷 $n(으)로 되돌렸습니다. 다시 시작하면 적용됩니다."
+  else say "스냅샷 $n(으)로 되돌렸습니다."; fi
+}
+
+cmd_factory() {
+  need_root
+  local refresh=0 src=""
+  while (( $# )); do
+    case "$1" in --refresh) refresh=1 ;; --from) src=${2:-}; shift ;; *) die 2 "알 수 없는 옵션: $1" ;; esac; shift
+  done
+  open_top || die 3 "btrfs 시스템을 찾지 못했습니다"
+  is_subvol "$TOP/$SYS" || die "시스템 하위 볼륨($SYS)이 없습니다"
+  if is_subvol "$TOP/$FACTORY"; then
+    (( refresh )) || { say "초기화용 사본이 이미 있습니다 (--refresh로 다시 만듭니다)"; return 0; }
+    del_subvol "$TOP/$FACTORY" || die "이전 초기화용 사본을 지우지 못했습니다"
+  fi
+  btrfs subvolume snapshot -r "$TOP/$SYS" "$TOP/$FACTORY" >/dev/null || die "초기화용 사본을 만들지 못했습니다"
+  sync
+  say "초기화용 사본(@factory)을 만들었습니다"
+}
+
+# ------------------------------------------------------------------ reset ("이 PC 초기화")
+carry_ok() { # the account files of the old system look usable
+  local r=$1
+  [[ -s $r/etc/passwd && -s $r/etc/shadow && -s $r/etc/group ]] && grep -q '^root:' "$r/etc/passwd" && grep -q '^root:' "$r/etc/shadow"
+}
+cmd_reset() {
+  need_root
+  local mode=${1:-}
+  [[ $mode == keep || $mode == wipe ]] || die 2 "사용법: $PROG reset keep|wipe --top <디렉터리>"
+  [[ -n ${TOP_ARG:-} ]] || die 2 "초기화는 복구 환경에서만 할 수 있습니다 (--top 필요). 설정 > 시스템 > 복구에서 시작하세요."
+  open_top
+  is_subvol "$TOP/$FACTORY" || die 5 "초기화용 사본(@factory)이 없습니다. DelayOS 설치 USB로 다시 설치해야 합니다."
+  in_use "$SYS" && die 4 "시스템이 사용 중입니다. 복구 환경에서 실행하세요."
+  local stash; stash=$(mktemp -d /tmp/delay-reset.XXXXXX) || die "임시 폴더를 만들지 못했습니다"
+  local old=$TOP/$SYS f n e
+  del_subvol "$TOP/@.new"
+  # 1. what survives from the old system
+  if [[ -d $old ]]; then
+    for f in "${CARRY_MISC[@]}"; do
+      [[ $mode == wipe ]] && case "$f" in etc/machine-id|var/lib/AccountsService|var/lib/bluetooth) continue ;; esac
+      [[ -e $old/$f ]] && ( cd "$old" && cp -a --parents "$f" "$stash/" 2>/dev/null )
+    done
+    if [[ $mode == keep ]] && carry_ok "$old"; then
+      for f in "${CARRY[@]}"; do [[ -e $old/$f ]] && ( cd "$old" && cp -a --parents "$f" "$stash/" ); done
+    fi
+    # an fstab without the system itself is worse than the one from installation time
+    grep -Eq '^[^#]+[[:space:]]/[[:space:]]+btrfs[[:space:]]' "$stash/etc/fstab" 2>/dev/null || rm -f "$stash/etc/fstab"
+  fi
+  # 2. undo point (keep) or remove every trace (wipe)
+  if [[ $mode == keep ]]; then
+    is_subvol "$old" && is_subvol "$TOP/$SNAPS" && { n=$(snap_create "초기화 전 상태" number yes) && say "지금 상태를 스냅샷 $n(으)로 남겼습니다"; }
+  else
+    if is_subvol "$TOP/$SNAPS"; then
+      while read -r n; do [[ -n $n ]] && snap_delete "$n"; done < <(snap_nums)
+    fi
+    for e in "${DATA_SUBVOLS[@]}"; do
+      f=${e%%:*}
+      is_subvol "$TOP/$f" || continue
+      say "$f 지우는 중…"
+      del_subvol "$TOP/$f" || die "$f을(를) 지우지 못했습니다"
+      btrfs subvolume create "$TOP/$f" >/dev/null || die "$f을(를) 다시 만들지 못했습니다"
+    done
+  fi
+  # 3. fresh system from the factory copy
+  say "새 시스템을 만드는 중…"
+  btrfs subvolume snapshot "$TOP/$FACTORY" "$TOP/@.new" >/dev/null || die "초기화용 사본에서 새 시스템을 만들지 못했습니다"
+  ( cd "$stash" && cp -a . "$TOP/@.new/" ) || warn "일부 설정을 옮기지 못했습니다"
+  rm -rf "$stash"
+  rm -f "$TOP/@.new/var/lib/delay/firstboot.done"
+  mkdir -p "$TOP/@.new/var/lib/delay" && printf 'reset-%s %s\n' "$mode" "$(date '+%F %T')" > "$TOP/@.new/var/lib/delay/snapshot-restored"
+  if [[ $mode == wipe ]]; then
+    : > "$TOP/@.new/etc/machine-id"       # empty = first boot, systemd writes a new one
+    rm -rf "$TOP/@.new/var/lib/systemd/random-seed" "$TOP/@.new/var/lib/NetworkManager"/*.lease 2>/dev/null
+  fi
+  swap_in 0 || { del_subvol "$TOP/@.new"; die "초기화하지 못했습니다. 시스템은 바뀌지 않았습니다."; }
+  sync
+  say "시스템을 초기화했습니다 ($([[ $mode == keep ]] && echo '내 파일 유지' || echo '모두 제거'))."
+}
+
+# ------------------------------------------------------------------ setup
+fstab_has() { awk -v m="$1" '$1 !~ /^#/ && $2 == m { f = 1 } END { exit !f }' /etc/fstab 2>/dev/null; }
+fstab_add_subvol() { # $1 subvolume  $2 mount point : same device/options as the / entry
+  local sub=$1 mp=$2 line dev opts
+  fstab_has "$mp" && return 0
+  line=$(awk '$1 !~ /^#/ && $2 == "/" && $3 == "btrfs" { print; exit }' /etc/fstab 2>/dev/null)
+  [[ -n $line ]] || return 1
+  dev=$(awk '{ print $1 }' <<<"$line")
+  opts=$(awk '{ print $4 }' <<<"$line" | tr ',' '\n' | grep -v '^subvol\(id\)\?=' | paste -sd,)
+  printf '%-41s %-14s btrfs  subvol=/%s%s 0 0\n' "$dev" "$mp" "$sub" "${opts:+,$opts}" >> /etc/fstab
+}
+cmd_setup() {
+  need_root
+  local install_time=0
+  [[ ${1:-} == --install-time ]] && install_time=1
+  supported || die 3 "이 시스템은 btrfs(@ 하위 볼륨) 설치가 아니어서 스냅샷을 쓸 수 없습니다."
+  command -v snapper >/dev/null || die 3 "snapper가 설치되어 있지 않습니다 (sudo pacman -S snapper snap-pac grub-btrfs inotify-tools)"
+  open_top || die 3 "btrfs 최상위를 마운트하지 못했습니다"
+
+  # /.snapshots = @snapshots (outside @, so a rollback keeps every snapshot)
+  if ! is_subvol "$TOP/$SNAPS"; then
+    btrfs subvolume create "$TOP/$SNAPS" >/dev/null || die "$SNAPS 하위 볼륨을 만들지 못했습니다"
+  fi
+  if ! findmnt -fno FSROOT /.snapshots 2>/dev/null | grep -qx "/$SNAPS"; then
+    if is_subvol /.snapshots && ! mountpoint -q /.snapshots; then
+      # snapper's own nested layout: move what is there, then drop the nested subvolume
+      local d
+      for d in /.snapshots/[0-9]*; do [[ -d $d ]] && mv "$d" "$TOP/$SNAPS/" 2>/dev/null; done
+      btrfs subvolume delete /.snapshots >/dev/null 2>&1
+    fi
+    mkdir -p /.snapshots
+    fstab_add_subvol "$SNAPS" /.snapshots || warn "/etc/fstab에 /.snapshots 항목을 추가하지 못했습니다"
+    mountpoint -q /.snapshots || mount /.snapshots 2>/dev/null || mount -o "subvol=/$SNAPS,noatime" "$(sys_btrfs_dev)" /.snapshots \
+      || die "/.snapshots를 마운트하지 못했습니다"
+  fi
+  chmod 750 /.snapshots 2>/dev/null
+  # Docker data stays out of the snapshots (only when nothing is there yet; new installations get it from Calamares)
+  if ! is_subvol "$TOP/@docker" && [[ -z $(ls -A /var/lib/docker 2>/dev/null) ]]; then
+    btrfs subvolume create "$TOP/@docker" >/dev/null && mkdir -p /var/lib/docker && fstab_add_subvol @docker /var/lib/docker \
+      && { (( install_time )) || mount /var/lib/docker 2>/dev/null; }
+  fi
+
+  # snapper configuration "root": cleanup limits only, snapshots are made by snap-pac and delay-snapshot
+  mkdir -p /etc/snapper/configs
+  if [[ ! -f /etc/snapper/configs/root ]]; then
+    cat > /etc/snapper/configs/root <<'EOF'
+# DelayOS: snapshots of the system (@). Written by delay-snapshot setup; see docs/recovery.md.
+SUBVOLUME="/"
+FSTYPE="btrfs"
+QGROUP=""
+SPACE_LIMIT="0.5"
+FREE_LIMIT="0.2"
+ALLOW_USERS=""
+ALLOW_GROUPS=""
+SYNC_ACL="no"
+BACKGROUND_COMPARISON="no"
+
+# snap-pac (before/after every pacman transaction) and "되돌리기 전 상태": keep the newest ones
+NUMBER_CLEANUP="yes"
+NUMBER_MIN_AGE="1800"
+NUMBER_LIMIT="10"
+NUMBER_LIMIT_IMPORTANT="6"
+
+# one automatic snapshot a day (delay-snapshot-daily.timer): keep 5 days and 2 weeks
+TIMELINE_CREATE="no"
+TIMELINE_CLEANUP="yes"
+TIMELINE_MIN_AGE="1800"
+TIMELINE_LIMIT_HOURLY="0"
+TIMELINE_LIMIT_DAILY="5"
+TIMELINE_LIMIT_WEEKLY="2"
+TIMELINE_LIMIT_MONTHLY="0"
+TIMELINE_LIMIT_QUARTERLY="0"
+TIMELINE_LIMIT_YEARLY="0"
+
+EMPTY_PRE_POST_CLEANUP="yes"
+EMPTY_PRE_POST_MIN_AGE="1800"
+EOF
+    chmod 640 /etc/snapper/configs/root
+  fi
+  if [[ -f /etc/conf.d/snapper ]]; then
+    grep -Eq '^SNAPPER_CONFIGS=.*\broot\b' /etc/conf.d/snapper || sed -i 's/^SNAPPER_CONFIGS=.*/SNAPPER_CONFIGS="root"/' /etc/conf.d/snapper
+    grep -q '^SNAPPER_CONFIGS=' /etc/conf.d/snapper || echo 'SNAPPER_CONFIGS="root"' >> /etc/conf.d/snapper
+  else
+    mkdir -p /etc/conf.d && echo 'SNAPPER_CONFIGS="root"' > /etc/conf.d/snapper
+  fi
+
+  # GRUB submenu "이전 상태로 부팅" (grub-btrfs). A snapshot is read-only: it is started with a
+  # RAM overlay on top (systemd.volatile=overlay, needs the sd-volatile hook in the initramfs).
+  local gb=/etc/default/grub-btrfs/config
+  if [[ -f $gb ]]; then
+    set_gb() { # key value(with quotes/parentheses)
+      if grep -Eq "^#?$1=" "$gb"; then sed -i "s|^#\?$1=.*|$1=$2|" "$gb"; else printf '%s=%s\n' "$1" "$2" >> "$gb"; fi
+    }
+    set_gb GRUB_BTRFS_SUBMENUNAME '"이전 상태로 부팅"'
+    set_gb GRUB_BTRFS_LIMIT '"12"'
+    set_gb GRUB_BTRFS_SHOW_TOTAL_SNAPSHOTS_FOUND '"false"'
+    set_gb GRUB_BTRFS_SNAPSHOT_KERNEL_PARAMETERS '"systemd.volatile=overlay"'
+    set_gb GRUB_BTRFS_TITLE_FORMAT '("date" "description")'
+    set_gb GRUB_BTRFS_IGNORE_SPECIFIC_PATH '("@" "@factory")'
+    set_gb GRUB_BTRFS_IGNORE_PREFIX_PATH '("var/lib/docker" "@var/lib/docker" "@/var/lib/docker" "@docker" "@old-" "@.new")'
+  fi
+  mkdir -p /etc/mkinitcpio.conf.d
+  cat > /etc/mkinitcpio.conf.d/delayos-snapshots.conf <<'EOF'
+# DelayOS (delay-snapshot setup): "이전 상태로 부팅" starts a read-only snapshot with a RAM overlay
+# (systemd.volatile=overlay). That needs systemd-volatile-root and overlayfs in the initramfs.
+case " ${HOOKS[*]} " in
+  *" systemd "*) case " ${HOOKS[*]} " in *" sd-volatile "*) ;; *) HOOKS+=(sd-volatile) ;; esac ;;
+esac
+MODULES+=(overlay)
+EOF
+
+  systemctl enable snapper-cleanup.timer delay-snapshot-daily.timer delay-snapshot-boot.service >/dev/null 2>&1
+  systemctl disable snapper-timeline.timer >/dev/null 2>&1
+  [[ -f /usr/lib/systemd/system/grub-btrfsd.service ]] && systemctl enable grub-btrfsd.service >/dev/null 2>&1
+  if (( ! install_time )); then
+    systemctl start snapper-cleanup.timer delay-snapshot-daily.timer >/dev/null 2>&1
+    [[ -f /usr/lib/systemd/system/grub-btrfsd.service ]] && systemctl restart grub-btrfsd.service >/dev/null 2>&1
+    say "스냅샷 기능을 켰습니다. GRUB 하위 메뉴까지 적용하려면: sudo mkinitcpio -P && sudo grub-mkconfig -o /boot/grub/grub.cfg"
+  fi
+  return 0
+}
+
+# ------------------------------------------------------------------ housekeeping
+cleanup_old() { # leftovers of a rollback/reset that could not be removed while they were mounted
+  local b
+  for b in "$TOP"/@old-* "$TOP"/@.new; do
+    [[ -d $b ]] || continue
+    in_use "${b#"$TOP"/}" && continue
+    del_subvol "$b"
+  done
+}
+cmd_post_boot() { # delay-snapshot-boot.service: once after every start
+  need_root
+  supported || return 0
+  open_top || return 0
+  cleanup_old
+  if [[ -f /var/lib/delay/snapshot-restored && -z $(booted_snapshot) ]]; then
+    # the restored system carries the boot menu of its own time: list today's snapshots again
+    command -v grub-mkconfig >/dev/null && grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1
+    mv -f /var/lib/delay/snapshot-restored /var/lib/delay/snapshot-restored.done 2>/dev/null
+  fi
+  return 0
+}
+cmd_daily() {
+  need_root
+  supported || return 0
+  [[ -n $(booted_snapshot) ]] && return 0
+  [[ -f /etc/snapper/configs/root ]] || return 0
+  open_top || return 0
+  cleanup_old
+  is_subvol "$TOP/$SNAPS" || return 0
+  # one per calendar day
+  local today n f
+  today=$(date -u +%Y-%m-%d)
+  while read -r n; do
+    f=$TOP/$SNAPS/$n/info.xml
+    [[ $(xml_get "$f" cleanup) == timeline && $(xml_get "$f" date) == "$today"* ]] && return 0
+  done < <(snap_nums)
+  snap_create "자동 스냅샷 ($(date '+%m월 %d일'))" timeline "" >/dev/null
+}
+
+# ------------------------------------------------------------------ main
+args=()
+TOP_ARG=""
+while (( $# )); do
+  case "$1" in
+    --top) TOP=${2:-}; TOP_ARG=$TOP; OFFLINE=1; shift ;;
+    --json) JSON=1 ;;
+    --tsv) TSV=1 ;;
+    -q|--quiet) QUIET=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) args+=("$1") ;;
+  esac
+  shift
+done
+set -- "${args[@]+"${args[@]}"}"
+cmd=${1:-}; (( $# )) && shift
+mkdir -p "$RUN" 2>/dev/null
+case "$cmd" in
+  status)    cmd_status "$@" ;;
+  list|ls)   cmd_list "$@" ;;
+  create)    cmd_create "$@" ;;
+  delete|rm) cmd_delete "$@" ;;
+  rollback)  cmd_rollback "$@" ;;
+  setup)     cmd_setup "$@" ;;
+  factory)   cmd_factory "$@" ;;
+  reset)     cmd_reset "$@" ;;
+  daily)     cmd_daily "$@" ;;
+  post-boot) cmd_post_boot "$@" ;;
+  ""|help)   usage ;;
+  *)         usage >&2; exit 2 ;;
+esac

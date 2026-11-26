@@ -1,0 +1,8 @@
+# DelayOS "이 PC 초기화" (docs/recovery.md): last step before "umount".
+---
+type:       "job"
+name:       "delayos_factory"
+interface:  "python"
+script:     "main.py"
+noconfig:   true
+weight:     1

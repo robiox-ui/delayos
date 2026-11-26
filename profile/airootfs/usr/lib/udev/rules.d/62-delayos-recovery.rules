@@ -1,0 +1,4 @@
+# DelayOS recovery partition (docs/recovery.md): never shown or auto-mounted on the desktop
+# (udisks2: Dolphin, Files, device notifier). Matched by file system label and by GPT partition name.
+SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="DELAYOS-RE", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"
+SUBSYSTEM=="block", ENV{ID_PART_ENTRY_NAME}=="DELAYOS-RE", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"

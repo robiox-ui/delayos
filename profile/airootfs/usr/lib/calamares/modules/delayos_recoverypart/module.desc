@@ -1,0 +1,8 @@
+# DelayOS recovery partition (docs/recovery.md): runs after "partition" / "delayos_winparts", before "mount".
+---
+type:       "job"
+name:       "delayos_recoverypart"
+interface:  "python"
+script:     "main.py"
+noconfig:   true
+weight:     2

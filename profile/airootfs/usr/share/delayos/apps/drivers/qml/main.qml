@@ -35,7 +35,7 @@ Window {
     function loadOpt() { call("cpuopt.status", [], function(r) { if (r && !r.error) win.opt = r }) }
     function runOpt(what) {
         optJob = what; optLine = "준비하는 중…"
-        sys.spawn("opt", what === "proton" ? ["pkexec", sys.helper(), "install", "proton-cachyos-slr"] : ["pkexec", sys.helper(), "cpu-opt", what])
+        sys.spawn("opt", what === "proton" ? ["pkexec", sys.helper(), "install", (win.opt && win.opt.protonPkg) || "proton-delayos"] : ["pkexec", sys.helper(), "cpu-opt", what])
     }
     function installAll() { var p = []; missing.forEach(function(d) { p = p.concat(d.missing) }); if (p.length) install("__all__", p) }
     Component.onCompleted: { var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = sys.dark(); load(); loadOpt() }
@@ -55,7 +55,9 @@ Window {
                 win.loadOpt(); win.load()
                 toast.show(code === 0 ? ({ "enable": "CPU 최적화 패키지로 바꿨습니다. 다시 시작하면 적용됩니다.", "disable": "기본 패키지로 되돌렸습니다. 다시 시작하세요.",
                                            "kernel-install": "최적화 커널을 설치했습니다. 다시 시작하면 사용됩니다.", "kernel-remove": "기본 커널로 되돌렸습니다.",
-                                           "proton": "Proton-CachyOS를 설치했습니다. Steam을 다시 시작하면 기본 호환 도구로 쓰입니다." })[what]
+                                           "proton": "Proton을 설치했습니다. Steam을 다시 시작하면 기본 호환 도구로 쓰입니다." })[what]
+                                      // delay-cpu-opt exits 3 when no DelayOS repository is published for this CPU level yet
+                                      : code === 3 && what === "enable" ? "이 CPU용 DelayOS 최적화 저장소가 아직 없습니다. 기본 패키지를 그대로 사용합니다."
                                       : "작업을 완료하지 못했습니다", code === 0 ? "g:check" : "g:cross")
                 return
             }
@@ -121,9 +123,9 @@ Window {
                 title: "CPU 맞춤 패키지"
                 subtitle: !win.opt ? "" : win.optJob === "enable" || win.optJob === "disable" ? win.optLine
                     : (win.opt.cpu + "\n" + (!win.opt.supported ? "이 CPU는 기본 패키지를 사용합니다 (x86-64-v3 미지원)"
-                       : win.opt.enabled ? "사용 중: " + win.opt.enabledName + " 최적화 빌드 (CachyOS 저장소)"
+                       : win.opt.enabled ? "사용 중: " + win.opt.enabledName + " 최적화 빌드 (" + (win.opt.source === "cachyos" ? "CachyOS" : "DelayOS") + " 저장소)"
                        : win.opt.pending ? "네트워크에 연결되면 자동으로 적용됩니다: " + win.opt.levelName
-                       : "사용 가능: " + win.opt.levelName + " · 시스템 패키지를 이 CPU용 빌드로 바꿉니다 (약 2GB 다운로드)"))
+                       : "사용 가능: " + win.opt.levelName + " · 그래픽·데스크톱 핵심 패키지를 이 CPU용 DelayOS 빌드로 바꿉니다"))
                 Row { spacing: 8
                     SButton { visible: !!win.opt && win.opt.supported && !win.opt.enabled; kind: "accent"; text: "켜기"; implicitWidth: 72
                         busy: win.optJob === "enable"; enabled: win.optJob === "" && win.job === ""; onClicked: optOn.open() }
@@ -150,12 +152,13 @@ Window {
                 icon: "g:gamepad"; title: "Proton (Windows 게임 호환 도구)"
                 subtitle: !win.opt ? "" : win.optJob === "proton" ? win.optLine
                     : win.opt.proton.preferred !== "" ? "Steam Play 기본 도구: " + (win.opt.proton.default || win.opt.proton.preferred + " (다음 로그인부터)")
-                    : win.opt.enabled ? "Proton-CachyOS를 설치하면 Steam Play 기본 도구로 지정됩니다"
-                    : "CPU 맞춤 패키지를 켜면 Proton-CachyOS를, 그렇지 않으면 ProtonUp-Qt로 GE-Proton을 설치할 수 있습니다"
+                    : win.opt.protonPkg !== "" ? (win.opt.protonPkg === "proton-delayos" ? "Proton DelayOS" : "Proton-CachyOS") + "를 설치하면 Steam Play 기본 도구로 지정됩니다"
+                    : "ProtonUp-Qt로 GE-Proton을 설치할 수 있습니다"
                 Row { spacing: 8
-                    SButton { visible: !!win.opt && !!win.opt.enabled && win.opt.proton.available.indexOf("proton-cachyos-slr") < 0; kind: "accent"; text: "설치"; implicitWidth: 72
+                    // protonPkg: the Proton package the enabled repositories offer ("" = none), syskit/cpuopt.py
+                    SButton { visible: !!win.opt && win.opt.protonPkg !== "" && win.opt.proton.available.indexOf(win.opt.protonPkg) < 0; kind: "accent"; text: "설치"; implicitWidth: 72
                         busy: win.optJob === "proton"; enabled: win.optJob === "" && win.job === ""; onClicked: win.runOpt("proton") }
-                    SButton { visible: !!win.opt && !win.opt.enabled && win.opt.proton.preferred === ""; text: "ProtonUp-Qt"; onClicked: sys.detach(["protonup-qt"]) }
+                    SButton { visible: !!win.opt && win.opt.protonPkg === "" && win.opt.proton.preferred === ""; text: "ProtonUp-Qt"; onClicked: sys.detach(["protonup-qt"]) }
                 }
             }
             SHeader { text: "관련 설정" }
@@ -168,7 +171,7 @@ Window {
         id: optOn
         cardWidth: 460
         title: "CPU 맞춤 패키지를 켤까요?"
-        text: "이 PC의 CPU(" + (win.opt ? win.opt.levelName : "") + ")에 맞게 빌드된 CachyOS 저장소를 추가하고, 설치된 패키지를 그 빌드로 바꿉니다. 약 2GB를 내려받으며 10~30분 걸립니다.\n\nCachyOS는 DelayOS가 아닌 외부 저장소입니다. 언제든지 [끄기]로 Arch 기본 패키지로 되돌릴 수 있습니다."
+        text: "이 PC의 CPU(" + (win.opt ? win.opt.levelName : "") + ")에 맞게 DelayOS가 다시 빌드한 패키지 저장소를 추가하고, 그래픽·데스크톱 핵심 패키지(Mesa, Qt, KWin 등)를 그 빌드로 바꿉니다. 수백 MB를 내려받습니다.\n\n언제든지 [끄기]로 Arch 기본 패키지로 되돌릴 수 있습니다."
         acceptText: "켜기"
         onAccepted: { close(); win.runOpt("enable") }
     }
@@ -176,7 +179,7 @@ Window {
         id: optOff
         cardWidth: 460
         title: "기본 패키지로 되돌릴까요?"
-        text: "CachyOS 저장소를 제거하고 모든 패키지를 Arch 기본 빌드로 다시 설치합니다. 약 2GB를 내려받습니다."
+        text: "CPU 맞춤 저장소를 제거하고 그 패키지를 Arch 기본 빌드로 다시 설치합니다."
         acceptText: "되돌리기"
         onAccepted: { close(); win.runOpt("disable") }
     }
