@@ -1,0 +1,59 @@
+#!/bin/sh
+# DelayOS: send KDE's "open this settings module" calls to DelayOS Settings.
+#   delay-kcm-route systemsettings|kcmshell6 [args...]      (called by the wrappers in /usr/local/bin)
+#   delay-kcm-route --page <module>                         prints the DelayOS Settings page, exit 1 if none
+#
+# Plasma opens a module with "systemsettings kcm_x" (KCMLauncher.openSystemSettings, the kcm_*.desktop
+# files, tray "configure" buttons, notifications) or "kcmshell6 kcm_x". /usr/local/bin comes first
+# in PATH, so both land here. A module with a DelayOS page opens that page; anything else (no
+# module, several modules, options, a module without a page) runs the real KDE tool unchanged.
+# DELAY_KCM_DIRECT=1 skips the routing: DelayOS Settings sets it, because its "추가 ... 설정" rows
+# open the KDE module on purpose.
+
+page_of() {
+    m=${1##*/}; m=${m%.desktop}
+    case "$m" in kcm_*) ;; *) m="kcm_$m" ;; esac
+    case "$m" in
+        kcm_kscreen)                              echo display ;;
+        kcm_nightlight|kcm_nightcolor)            echo 'display#d-night' ;;
+        kcm_wallpaper)                            echo background ;;
+        kcm_colors)                               echo colours ;;
+        kcm_lookandfeel|kcm_desktoptheme|kcm_style) echo personalisation ;;
+        kcm_pulseaudio)                           echo sound ;;
+        kcm_networkmanagement|kcm_mobile_wifi|kcm_mobile_wired) echo network ;;
+        kcm_bluetooth)                            echo bluetooth ;;
+        kcm_powerdevilprofilesconfig|kcm_mobile_power) echo power ;;
+        kcm_mouse)                                echo mouse ;;
+        kcm_touchpad)                             echo 'mouse#t-tap' ;;
+        kcm_keyboard)                             echo 'time#kbd' ;;
+        kcm_clock)                                echo 'time#tz' ;;
+        kcm_regionandlang)                        echo 'time#lang' ;;
+        kcm_users)                                echo accounts ;;
+        kcm_componentchooser)                     echo defaultapps ;;
+        kcm_notifications)                        echo notifications ;;
+        kcm_about-distro)                         echo about ;;
+        kcm_autostart)                            echo startup ;;
+        kcm_updates)                              echo update ;;
+        *) return 1 ;;
+    esac
+}
+
+if [ "$1" = --page ]; then
+    page_of "$2"
+    exit
+fi
+
+tool=$1
+shift
+case "$tool" in systemsettings|kcmshell6) ;; *) echo "usage: delay-kcm-route systemsettings|kcmshell6 [args]" >&2; exit 2 ;; esac
+
+# exactly one module, optionally followed by "--args ..." (which DelayOS Settings does not need)
+if [ -z "$DELAY_KCM_DIRECT" ] && [ $# -ge 1 ] && { [ $# -eq 1 ] || [ "$2" = --args ]; }; then
+    case "$1" in
+        -*) ;;
+        *) if page=$(page_of "$1") && command -v delay-settings >/dev/null 2>&1; then
+               exec delay-settings "$page"
+           fi ;;
+    esac
+fi
+exec "/usr/bin/$tool" "$@"

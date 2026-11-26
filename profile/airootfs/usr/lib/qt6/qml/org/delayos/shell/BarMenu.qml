@@ -46,6 +46,7 @@ DS.PopupWindow {
 
     function trigger(i, rowItem) {
         var e = entries[i]
+        if (e.enabled === false) return
         if (e.submenu) { openSub(i, rowItem); return }
         close()
         done()
@@ -65,6 +66,19 @@ DS.PopupWindow {
         s.open()
     }
     onClosed: if (subMenu && subMenu.visible) subMenu.close()
+
+    // like Windows: resting on a "▸" row opens its flyout, resting on another row closes it
+    property Item _hoverRow: null
+    Timer {
+        id: hoverTimer
+        interval: 280
+        onTriggered: {
+            var r = menu._hoverRow
+            if (!r || !menu.visible || r.off || r.sep) return
+            if (r.modelData.submenu) { if (menu.subIndex !== r.index) menu.openSub(r.index, r) }
+            else if (menu.subMenu && menu.subMenu.visible) menu.subMenu.close()
+        }
+    }
 
     Loader {
         id: subLoader
@@ -93,6 +107,8 @@ DS.PopupWindow {
                     required property var modelData
                     readonly property bool sep: !!modelData.separator
                     readonly property string glyph: modelData.glyph || ""
+                    readonly property bool off: modelData.enabled === false      // greyed out, not clickable
+                    opacity: off ? 0.4 : 1
                     width: parent ? parent.width : menu.panelWidth
                     height: sep ? menu.sepHeight : menu.rowHeight
 
@@ -107,7 +123,7 @@ DS.PopupWindow {
                         anchors.fill: parent
                         anchors.leftMargin: 4; anchors.rightMargin: 4
                         radius: 6
-                        color: ma.pressed ? Theme.pressed
+                        color: row.off ? "transparent" : ma.pressed ? Theme.pressed
                              : (ma.containsMouse || menu.subIndex === row.index) ? Theme.hoverStrong : "transparent"
                     }
                     DS.Glyph {
@@ -142,9 +158,9 @@ DS.PopupWindow {
                         anchors.right: parent.right; anchors.rightMargin: 14
                         anchors.verticalCenter: parent.verticalCenter
                     }
-                    DS.Glyph {
+                    Glyph {
                         visible: !row.sep && !!row.modelData.submenu
-                        name: "chevron-right"; size: 12
+                        name: "chevron-right"; size: 13; stroke: 1.6
                         color: Theme.text2
                         anchors.right: parent.right; anchors.rightMargin: 12
                         anchors.verticalCenter: parent.verticalCenter
@@ -155,6 +171,7 @@ DS.PopupWindow {
                         enabled: !row.sep
                         hoverEnabled: true
                         onClicked: menu.trigger(row.index, row)
+                        onContainsMouseChanged: if (containsMouse && !menu.isSubmenu) { menu._hoverRow = row; hoverTimer.restart() }
                     }
                 }
             }

@@ -27,4 +27,7 @@ reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent" /v DisableWindow
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent" /v DisableTailoredExperiencesWithDiagnosticData /t REG_DWORD /d 1 /f >> %LOG% 2>&1
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v EnableActivityFeed /t REG_DWORD /d 0 /f >> %LOG% 2>&1
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" /v Value /t REG_SZ /d Deny /f >> %LOG% 2>&1
+rem Gaming cleanup of an official image (docs/windows-switch.md); only when DelayOS staged "cleanup.on"
+if exist C:\ProgramData\DelayOS\winsetup\cleanup.on powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\DelayOS\winsetup\cleanup.ps1 -Phase Machine >> %LOG% 2>&1
+echo %date% %time% specialize end >> %LOG%
 exit /b 0

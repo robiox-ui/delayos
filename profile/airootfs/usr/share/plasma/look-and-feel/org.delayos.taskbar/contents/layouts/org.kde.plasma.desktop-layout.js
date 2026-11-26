@@ -21,25 +21,10 @@ for (var i = 0; i < allDesktops.length; i++) {
     d.writeConfig("toolTips", false);
     d.writeConfig("selectionMarkers", false);
     d.writeConfig("popups", false);
-    // right-click: only the DelayOS-relevant entries of the desktop context menu
-    d.currentConfigGroup = ["ActionPlugins", "0", "RightButton;NoModifier"];
-    d.writeConfig("_add panel", false);
-    d.writeConfig("_context", true);
-    d.writeConfig("_display_settings", true);
-    d.writeConfig("_lock_screen", false);
-    d.writeConfig("_logout", false);
-    d.writeConfig("_open_terminal", false);
-    d.writeConfig("_run_command", false);
-    d.writeConfig("_sep1", true);
-    d.writeConfig("_sep2", false);
-    d.writeConfig("_sep3", false);
-    d.writeConfig("_wallpaper", false);
-    d.writeConfig("add widgets", false);
-    d.writeConfig("configure", true);
-    d.writeConfig("configure shortcuts", false);
-    d.writeConfig("edit mode", false);
-    d.writeConfig("manage activities", false);
-    d.writeConfig("remove", false);
+    // right-click on the empty desktop: the DelayOS menu (containment action org.delayos.desktopmenu).
+    // A layout script cannot choose the mouse actions; they are the root group [ActionPlugins][0] of
+    // plasma-org.kde.plasma.desktop-appletsrc, which ships in /etc/skel and is written for existing or
+    // reset layouts by /etc/xdg/plasma-workspace/env/delay-desktop-menu.sh.
 }
 
 // ---- Full-width taskbar ----

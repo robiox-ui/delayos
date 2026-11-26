@@ -35,13 +35,15 @@ options=('!strip' '!debug')
 
 # GRUB under shim lock cannot load modules from disk, so everything grub.cfg uses is built in
 # (including what /etc/grub.d/05_delayos-winsetup needs: regexp, loadenv, chain, fat).
+# The same binary starts the live/install medium behind shim (tools/iso-secureboot.sh,
+# docs/secure-boot.md): iso9660, udf, probe, search_fs_file, regexp, font, gfxterm are for that.
 _grub_modules=(
     all_video bli boot btrfs cat chain configfile cpuid cryptodisk echo efifwsetup exfat ext2
     f2fs fat font gcry_rijndael gcry_sha256 gcry_sha512 gettext gfxmenu gfxterm gfxterm_background
     gzio halt help iso9660 jpeg keystatus linux loadenv loopback ls lsefi lsefimmap lsefisystab
     luks luks2 lvm mdraid09 mdraid1x memdisk minicmd normal ntfs part_gpt part_msdos password_pbkdf2
-    pbkdf2 png probe reboot regexp search search_fs_file search_fs_uuid search_label sleep smbios
-    test tpm true video xfs zstd
+    pbkdf2 png probe read reboot regexp search search_fs_file search_fs_uuid search_label sleep smbios
+    test tpm true udf video xfs zstd
 )
 
 # Must match delay-winsetup (sb_setup): GRUB reads <ESP>/EFI/DelayOS/grub.cfg
@@ -80,6 +82,20 @@ build() {
             'sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md' \
             "grub,5,Free Software Foundation,grub,${grubver#*:},https://www.gnu.org/software/grub/" \
             > sbat.csv
+    fi
+    # Arch's sbat.csv still says "grub,4". shim's SBAT level 2025051000 ("latest" in shim 16; a PC
+    # gets it from a newer shim, `mokutil --set-sbat-policy latest` or a firmware/Windows update)
+    # revokes everything below grub,5, and such a PC would refuse this GRUB. GRUB knows the
+    # generation its sources stand for (the "Global SBAT level" it was built with) and grub-mkimage
+    # warns when the file says something else: use GRUB's own number.
+    # Check docs/secure-boot.md ("SBAT") whenever shim or GRUB are updated.
+    local lvl
+    lvl="$(grub-mkimage -O x86_64-efi -p "$_esp_prefix" --sbat sbat.csv -o sbat-probe.efi normal 2>&1 \
+           | sed -n -E 's/.*build-time Global SBAT level ([0-9]+).*/\1/p' | head -n1)"
+    rm -f sbat-probe.efi
+    if [ -n "$lvl" ]; then
+        msg2 "SBAT: this GRUB is generation ${lvl} (Arch's sbat.csv said $(sed -n -E 's/^grub,([0-9]+),.*/\1/p' sbat.csv))"
+        sed -i -E "s/^grub,[0-9]+,/grub,${lvl},/" sbat.csv
     fi
     printf '%s\n' "grub.delayos,1,DelayOS,grub,${grubver},${url}" >> sbat.csv
     local mods=() m

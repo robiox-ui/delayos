@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_keyboard.desktop: opens DelayOS Settings.
+Type=Application
+Name=Keyboard
+Name[ko]=키보드
+Icon=delayos-settings
+Exec=delay-settings "time#kbd"
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

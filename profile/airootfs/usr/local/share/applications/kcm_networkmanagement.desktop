@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_networkmanagement.desktop: opens DelayOS Settings.
+Type=Application
+Name=Network & Internet
+Name[ko]=네트워크 및 인터넷
+Icon=delayos-settings
+Exec=delay-settings network
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

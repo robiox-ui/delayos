@@ -1,0 +1,4 @@
+#!/bin/sh
+# DelayOS wrapper in front of /usr/bin/kcmshell6: a module that has a page in DelayOS Settings opens
+# there, everything else runs KDE's kcmshell6 as before (see /usr/lib/delayos/delay-kcm-route).
+exec /usr/lib/delayos/delay-kcm-route kcmshell6 "$@"

@@ -309,8 +309,10 @@ done
 # plymouth.use-simpledrm: the live initramfs has no GPU drivers (they load from the squashfs), and
 # Plymouth otherwise waits for one before it shows anything: splash on the firmware framebuffer
 # at once. show_status=false: no "[ OK ] ..." console lines flashing between splash and desktop.
+# The same options go into the GRUB entry of the Secure Boot path (tools/iso-secureboot.sh below).
+LIVE_OPTS='quiet splash plymouth.use-simpledrm systemd.show_status=false rd.systemd.show_status=false loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0 nowatchdog split_lock_detect=off module_blacklist=pcspkr i915.modeset=1 amdgpu.modeset=1 nvme_load=yes copytoram=auto cow_spacesize=10G'
 for f in $(grep -rl 'archisobasedir' "$PROFILE/efiboot" "$PROFILE/syslinux" "$PROFILE/grub"); do
-  sed -i 's/\(archisosearchuuid=%ARCHISO_UUID%\)/\1 quiet splash plymouth.use-simpledrm systemd.show_status=false rd.systemd.show_status=false loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0 nowatchdog split_lock_detect=off module_blacklist=pcspkr i915.modeset=1 amdgpu.modeset=1 nvme_load=yes copytoram=auto cow_spacesize=10G/' "$f"
+  sed -i "s/archisosearchuuid=%ARCHISO_UUID%/& $LIVE_OPTS/" "$f"
 done
 
 # Services (releng uses systemd-networkd/iwd; we use NetworkManager + SDDM)
@@ -372,6 +374,35 @@ log "Building ISO (this takes a while)"
 mkarchiso -v -r -w "$WORK/archiso-tmp" -o "$OUT" "$PROFILE"
 
 ISO=$(ls -t "$OUT"/delayos-*.iso | head -1)
+
+# ------------------------------------------- Secure Boot for the live/install medium itself
+# docs/secure-boot.md. mkarchiso wrote an ISO that starts through the unsigned systemd-boot (UEFI
+# with Secure Boot off) and syslinux (BIOS). With the general keys, its EFI boot path becomes
+#   shim (Microsoft-signed, shim-signed) -> GRUB -> linux-delayos, both signed with the DelayOS
+#   general key (the files of delayos-sb-general built above: no private key is used here),
+# so the same medium starts with Secure Boot on or off; BIOS boot stays as it is. Only the public
+# CA certificate (delayos-general-ca.cer) goes onto the medium, for MokManager's "Enroll key from disk".
+ISO_SB=0
+if (( SBG_BUILT )); then
+  SHIM_PKG=$(ls -t "$LOCALREPO"/shim-signed*.pkg.tar.zst 2>/dev/null | head -n1)
+  SBG_PKG=$(ls -t "$LOCALREPO"/delayos-sb-general-*.pkg.tar.zst | head -n1)
+  if [[ -f $SHIM_PKG ]]; then
+    log "Making the ISO start with Secure Boot on (shim + DelayOS general key)"
+    if ! bash "$HERE/tools/iso-secureboot.sh" --iso "$ISO" --out "$ISO.sb" --sb-pkg "$SBG_PKG" --shim-pkg "$SHIM_PKG" --opts "$LIVE_OPTS" --work "$WORK/iso-secureboot"; then
+      rm -f "$ISO.sb"
+      die "The Secure Boot boot path could not be put on the ISO. $ISO is left as mkarchiso wrote it: it starts with Secure Boot off only."
+    fi
+    mv -f "$ISO.sb" "$ISO"
+    rm -rf "$WORK/iso-secureboot"
+    ISO_SB=1
+  else
+    warn "shim-signed was not built (aur-packages.txt): the ISO starts with Secure Boot OFF only"
+  fi
+else
+  warn "No general Secure Boot keys: the ISO is not signed and starts with Secure Boot OFF only (docs/secure-boot.md)"
+fi
+
 ( cd "$OUT" && sha256sum "$(basename "$ISO")" > "$(basename "$ISO").sha256" )
 log "Done: $ISO"
+(( ISO_SB )) && log "Secure Boot: the ISO starts with Secure Boot on. First start on a PC: MokManager > Enroll key from disk > delayos-general-ca.cer"
 log "Write it to a USB stick with Rufus/Ventoy (Windows) or: dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync"

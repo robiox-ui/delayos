@@ -1,2 +1,5 @@
+[ActionPlugins][0]
+RightButton;NoModifier=org.delayos.desktopmenu
+
 [ActionPlugins][1]
 MiddleButton;MetaModifier=org.kde.contextmenu

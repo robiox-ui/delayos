@@ -5,8 +5,12 @@
 #      in the PC firmware (ACPI MSDM). Without either, Windows activates by itself once it is online
 #      if this PC has a digital license for this edition; otherwise it stays unactivated.
 #   3. install the DelayOS <-> Windows helper without questions (install.ps1 -Unattended)
+#   3b. gaming cleanup, user part (cleanup.ps1 -Phase User), only when DelayOS staged "cleanup.on"
 #   4. tell DelayOS the result (done.json on the EFI system partition), remove the "pending" marker
 #   5. restart into DelayOS
+# Every step is independent and guarded: a custom Windows image may lack a component used here
+# (licensing WMI classes, the ScheduledTasks module, Device Guard, ...). A missing piece is logged,
+# listed in done.json ("skipped") and skipped; only a missing helper makes the result "not ok".
 $ErrorActionPreference = 'Continue'
 $Base = Join-Path $env:ProgramData 'DelayOS\winsetup'
 $Log = Join-Path $Base 'finish.log'
@@ -30,7 +34,24 @@ function Install-Key([string]$key, [string]$source) {
 
 Write-Log 'finish.ps1 start'
 $result = [ordered]@{ ok = $true; version = 1; key_source = 'none'; key_installed = $false; activated = $false
-                      oem_key = $false; oem_description = ''; helper = $false; hvci = $false; edition = ''; build = '' }
+                      oem_key = $false; oem_description = ''; helper = $false; hvci = $false; edition = ''; build = ''
+                      cleanup = $false; cleanup_apps = 0; skipped = @() }
+
+function Skip([string]$what, $err) {
+    $result.skipped += $what
+    Write-Log "$what skipped: $err"
+}
+
+# CIM first, classic WMI when the CIM cmdlets or WinRM pieces are missing in the image
+function Get-Wmi([string]$class, [string]$filter = '', [string]$namespace = 'root\cimv2') {
+    try {
+        if ($filter) { return Get-CimInstance -Namespace $namespace -ClassName $class -Filter $filter -ErrorAction Stop }
+        return Get-CimInstance -Namespace $namespace -ClassName $class -ErrorAction Stop
+    } catch {
+        if ($filter) { return Get-WmiObject -Namespace $namespace -Class $class -Filter $filter -ErrorAction Stop }
+        return Get-WmiObject -Namespace $namespace -Class $class -ErrorAction Stop
+    }
+}
 
 # ---- 1. logon and power ------------------------------------------------------------------------
 try {
@@ -45,7 +66,7 @@ try {
 
 # ---- 2. activation -----------------------------------------------------------------------------
 try {
-    $svc = Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction Stop
+    $svc = Get-Wmi 'SoftwareLicensingService'
     $oem = [string]$svc.OA3xOriginalProductKey
     $result.oem_key = [bool]$oem
     $result.oem_description = [string]$svc.OA3xOriginalProductKeyDescription
@@ -64,29 +85,41 @@ try {
     }
     # online activation; fails quietly without a network connection (Windows retries on its own)
     [void](Invoke-Quiet ('cscript.exe //B //Nologo "{0}" /ato' -f (Join-Path $env:SystemRoot 'System32\slmgr.vbs')))
-    $lic = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' AND PartialProductKey IS NOT NULL" -ErrorAction Stop
+    $lic = Get-Wmi 'SoftwareLicensingProduct' "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' AND PartialProductKey IS NOT NULL"
     $result.activated = [bool]($lic | Where-Object { $_.LicenseStatus -eq 1 })
-} catch { Write-Log "activation: $_" }
+} catch { Skip 'activation' $_ }
 try {
     $cv = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
     $result.edition = [string]$cv.EditionID
     $result.build = ('{0}.{1}' -f $cv.CurrentBuild, $cv.UBR)
 } catch {}
 try {
-    $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+    $dg = Get-Wmi 'Win32_DeviceGuard' '' 'root\Microsoft\Windows\DeviceGuard'
     $result.hvci = [bool]($dg.SecurityServicesConfigured -contains 2)
-} catch { Write-Log "deviceguard: $_" }
+} catch { Skip 'deviceguard' $_ }
 Write-Log ("activation: source={0} installed={1} activated={2} oem='{3}'" -f $result.key_source, $result.key_installed, $result.activated, $result.oem_description)
 
 # ---- 3. DelayOS <-> Windows helper -------------------------------------------------------------
 try {
     $inst = Join-Path $Base 'helper\install.ps1'
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $inst -Unattended *>> (Join-Path $Base 'helper-install.log')
+    # schtasks.exe, not Get-ScheduledTask: also works without the ScheduledTasks PowerShell module
     $result.helper = (Test-Path -LiteralPath (Join-Path $env:ProgramData 'DelayOS\winboot\agent.ps1')) -and
-                     [bool](Get-ScheduledTask -TaskPath '\DelayOS\' -TaskName 'WinBoot-Agent' -ErrorAction SilentlyContinue)
+                     ((Invoke-Quiet 'schtasks.exe /Query /TN "\DelayOS\WinBoot-Agent"') -eq 0)
 } catch { Write-Log "helper: $_" }
 Write-Log "helper installed: $($result.helper)"
 if (-not $result.helper) { $result.ok = $false }
+
+# ---- 3b. gaming cleanup (official image; DelayOS does not stage "cleanup.on" for a custom image) ----
+if (Test-Path -LiteralPath (Join-Path $Base 'cleanup.on')) {
+    try {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Base 'cleanup.ps1') -Phase User *>> (Join-Path $Base 'cleanup-run.log')
+        $cs = [IO.File]::ReadAllText((Join-Path $Base 'cleanup-state.json'), $Utf8) | ConvertFrom-Json
+        $result.cleanup = (@($cs.phases) -contains 'User')
+        $result.cleanup_apps = @($cs.appx).Count
+    } catch { Skip 'cleanup' $_ }
+    Write-Log "gaming cleanup: applied=$($result.cleanup) apps removed=$($result.cleanup_apps)"
+} else { Write-Log 'gaming cleanup: not requested' }
 
 # ---- 4. report to DelayOS on the EFI system partition ------------------------------------------
 $guid = $null

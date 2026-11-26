@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_mouse.desktop: opens DelayOS Settings.
+Type=Application
+Name=Mouse & Touchpad
+Name[ko]=마우스 및 터치패드
+Icon=delayos-settings
+Exec=delay-settings mouse
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

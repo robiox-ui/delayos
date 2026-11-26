@@ -99,9 +99,27 @@ function New-TaskXml([string]$mode, [bool]$elevated, [bool]$triggers, [string]$u
     ) -join "`n"
 }
 
+# Register one task from its XML. The ScheduledTasks PowerShell module is missing in some trimmed
+# Windows images: schtasks.exe (always there with the Task Scheduler itself) is the fallback.
+function Register-LinkTask([string]$name, [string]$xml) {
+    try {
+        Register-ScheduledTask -TaskPath $TaskPath -TaskName $name -Xml $xml -Force -ErrorAction Stop | Out-Null
+        return
+    } catch { $first = $_ }
+    $tmp = Join-Path $Base ($name + '.task.xml')
+    try {
+        [IO.File]::WriteAllText($tmp, $xml, [Text.Encoding]::Unicode)
+        $rc = Invoke-Quiet ('schtasks.exe /Create /TN "{0}{1}" /XML "{2}" /F' -f $TaskPath, $name, $tmp)
+        if ($rc -ne 0) { throw "$($first.Exception.Message) / schtasks.exe rc=$rc" }
+    } finally {
+        try { Remove-Item -LiteralPath $tmp -Force -ErrorAction Stop } catch {}
+    }
+}
+
 function Remove-Link {
     foreach ($t in $Tasks) {
-        try { Unregister-ScheduledTask -TaskPath $TaskPath -TaskName $t -Confirm:$false -ErrorAction Stop } catch {}
+        try { Unregister-ScheduledTask -TaskPath $TaskPath -TaskName $t -Confirm:$false -ErrorAction Stop }
+        catch { [void](Invoke-Quiet ('schtasks.exe /Delete /TN "{0}{1}" /F' -f $TaskPath, $t)) }
     }
     try { if (Test-Path -LiteralPath (Get-ShortcutPath)) { Remove-Item -LiteralPath (Get-ShortcutPath) -Force } } catch {}
     if (Test-Path -LiteralPath (Join-Path $Base 'agent.ps1')) {
@@ -161,9 +179,9 @@ if ($Unattended) { $cfg | Add-Member -NotePropertyName delayos_first -NoteProper
 Say 'i_tasks'
 $ok = $true
 try {
-    Register-ScheduledTask -TaskPath $TaskPath -TaskName 'WinBoot-Agent' -Xml (New-TaskXml 'Agent' $true $true $id.Name) -Force -ErrorAction Stop | Out-Null
-    Register-ScheduledTask -TaskPath $TaskPath -TaskName 'WinBoot-Launch' -Xml (New-TaskXml 'Launch' $false $false $id.Name) -Force -ErrorAction Stop | Out-Null
-    Register-ScheduledTask -TaskPath $TaskPath -TaskName 'WinBoot-Return' -Xml (New-TaskXml 'Return' $true $false $id.Name) -Force -ErrorAction Stop | Out-Null
+    Register-LinkTask 'WinBoot-Agent' (New-TaskXml 'Agent' $true $true $id.Name)
+    Register-LinkTask 'WinBoot-Launch' (New-TaskXml 'Launch' $false $false $id.Name)
+    Register-LinkTask 'WinBoot-Return' (New-TaskXml 'Return' $true $false $id.Name)
 } catch {
     $ok = $false
     Say 'i_tasks_failed' $_.Exception.Message

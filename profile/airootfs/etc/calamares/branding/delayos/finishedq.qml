@@ -14,10 +14,12 @@ Rectangle {
     property string winResult: ""
     property string winError: ""
     property bool winSb: false
+    property string winNote: ""
     function winRefresh() {
         winResult = Global.contains("delayos_win_result") ? Global.value("delayos_win_result") : ""
         winError = Global.contains("delayos_win_error") ? Global.value("delayos_win_error") : ""
         winSb = Global.contains("delayos_win_sb") && Global.value("delayos_win_sb") === "1"
+        winNote = Global.contains("delayos_win_note") ? Global.value("delayos_win_note") : ""
     }
     Timer { interval: 700; running: true; repeat: true; triggeredOnStart: true; onTriggered: page.winRefresh() }
 
@@ -61,6 +63,14 @@ Rectangle {
                   + (page.winSb ? "\nSecure Boot(발로란트에 필요)는 그 뒤에 켭니다. DelayOS에 로그인하면 안내가 나오고, 그다음에 다시 시작할 때 나오는 파란 화면(MOK 관리)에서 Enroll MOK → Continue → Yes → 암호 delayos 입력 → Reboot." : "")
             color: ts.text1
             font.family: ts.font; font.pixelSize: 13
+        }
+        Text {
+            visible: page.winResult === "ok" && page.winNote !== ""
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 620; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; lineHeight: 1.2
+            text: page.winNote
+            color: "#F2C89A"
+            font.family: ts.font; font.pixelSize: 12
         }
         Text {
             visible: page.winResult !== "ok" && page.winError !== ""

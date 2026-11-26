@@ -295,7 +295,7 @@ Windows로 가는 길은 시작 메뉴의 Windows 게임(= 위의 Windows 전환
 | UEFI 부팅 | 레거시 BIOS에서는 설치하지 않습니다 |
 | TPM 2.0 (`/sys/class/tpm/tpm0`, `tpm_version_major` = 2) | Windows 11과 Vanguard(발로란트)의 요구 사항. 없으면 옵션을 켤 수 없습니다. BIOS에서 fTPM/PTT를 켜세요 |
 | GPT 디스크, Windows + 10GB + DelayOS 20GB 이상의 공간 | |
-| 인터넷 (또는 직접 받은 Windows 11 ISO) | 설치 파일 다운로드 |
+| 인터넷 (또는 직접 가지고 있는 Windows ISO, 아래 "직접 가지고 있는 Windows ISO 쓰기") | 설치 파일 다운로드 |
 | 디스크 암호화(LUKS)를 쓰지 않는 설치 | 암호화된 설치에서는 이 옵션을 건너뜁니다 |
 | **Secure Boot** | 발로란트(Vanguard)는 Windows 11에서 Secure Boot가 **켜져 있어야** 실행됩니다. 아래 "Secure Boot" 참고 |
 
@@ -323,7 +323,7 @@ DelayOS는 KMS 에뮬레이터나 인증 우회 도구를 쓰지 않으며 앞�
 ## 설치 과정
 
 1. 설치 프로그램 › 소프트웨어 단계 다음의 **"Windows 게임도 하시나요?"** 에서 스위치를 켭니다(기본은 끔).
-   Windows에 줄 공간, 에디션(Home/Pro, 한국어), 선택 사항인 제품 키와 직접 받은 ISO 경로를 정합니다.
+   Windows에 줄 공간, 에디션(Home/Pro, 한국어), 선택 사항인 제품 키, 게이밍 정리(기본 켬), 직접 가지고 있는 ISO 경로를 정합니다.
 2. "지금 설치"를 누르면 DelayOS가 평소처럼 설치되고, 그 과정에서
    - 새로 만든(아직 비어 있는) DelayOS 파티션의 **끝부분**을 줄여 `DelayOS-WinSetup`(FAT32, 10GB)과 `DelayOS-Windows` 파티션을 만들고,
    - Windows 11 ISO를 내려받아 임시 파티션에 풀고(4GB가 넘는 `install.wim`은 wimlib으로 나눔), 자동 설치 스크립트를 넣고,
@@ -352,6 +352,90 @@ DelayOS는 KMS 에뮬레이터나 인증 우회 도구를 쓰지 않으며 앞�
 그 밖의 프로그램은 설정 › 앱 지원 › Windows 전환으로 Windows에 들어가 설치하세요. 그 Windows에는 메인보드/그래픽 드라이버도 Windows 업데이트나
 제조사 사이트에서 설치해야 합니다(유선 LAN 드라이버가 없는 메인보드는 처음에 인터넷이 안 될 수 있습니다).
 
+## 게이밍 정리
+
+Microsoft 공식 Windows 11 이미지는 게임과 상관없는 앱과 백그라운드 기능이 많습니다. 숨은 Windows는 안티치트 게임을 돌리는 것이 유일한 일이므로,
+설치 프로그램의 **"게이밍 정리"**(기본 켬)가 자동 설치 도중에 이를 정리합니다. 이미지 파일 자체는 건드리지 않고(Microsoft가 준 그대로 적용),
+설치된 Windows 안에서 **문서화된 설정만** 바꿉니다: 정책 레지스트리 값, 사용자 설정, 서비스 시작 유형, 예약된 작업, 프로비저닝된 Store 앱 제거.
+시스템 파일을 지우거나 구성 요소 저장소에서 기능을 뜯어내지 않습니다. 그래서 Windows 업데이트와 안티치트가 그대로 동작하고, 되돌릴 수 있습니다.
+
+끄거나 지우는 것 (`/usr/share/delayos/winsetup/cleanup.ps1`):
+
+| 분류 | 내용 |
+|---|---|
+| 기본 앱 (프로비저닝된 Store 앱 제거) | Clipchamp, 뉴스, 날씨, Bing 검색, 도움말, 팁, Microsoft 365(Office 허브), 솔리테어, 스티커 메모, 피플, Power Automate, To Do, 피드백 허브, 지도, 영화 및 TV, 휴대폰과 연결, Cortana, Copilot, Dev Home, 새 Outlook, 메일/일정, Teams(개인용), 가족, 빠른 지원, 위젯(Web Experience) 등. 목록에 **정확히 있는 이름만** 지웁니다 |
+| 소비자 기능 | 추천 앱 자동 설치(캔디 크러시류), 시작 메뉴·설정·잠금 화면의 추천/광고/팁, "장치 설정 마무리" 안내, 맞춤형 환경, 광고 ID |
+| OneDrive | 새 계정에 설치되지 않게 함(기본 프로필의 `OneDriveSetup` 시작 항목 제거 + 정책 `DisableFileSyncNGSC`) |
+| Copilot · Recall · Click to Do | 정책으로 끔 (`TurnOffWindowsCopilot`, `DisableAIDataAnalysis`, `AllowRecallEnablement=0`, `DisableClickToDo`) |
+| 위젯 · 뉴스 · 채팅 아이콘 | 정책으로 끔 (`AllowNewsAndInterests=0` 등), 검색의 웹 결과와 "검색 하이라이트" 끔 |
+| 진단 데이터 | 이 에디션이 허용하는 **최소 수준**(`AllowTelemetry=0`; Home/Pro에서는 "필수 진단 데이터"), 피드백 알림·CEIP 끔, 서비스 `DiagTrack`·`dmwappushservice` 사용 안 함 |
+| 잠금 화면 · 첫 로그인 애니메이션 | 끔 (자동 로그인이라 필요 없음) |
+| 시작 프로그램 | OneDrive, Edge 자동 실행, Teams 시작 항목 제거. Edge의 시작 부스트/백그라운드 실행 끔(Edge와 WebView2는 **그대로 설치되어 있음**). 시작 프로그램 지연 제거 |
+| 예약된 작업 | CEIP(Consolidator, UsbCeip), 호환성 평가(Compatibility Appraiser, ProgramDataUpdater, MareBackup), 디스크 진단 데이터 수집, 피드백(Siuf), 지도 업데이트 |
+| 서비스 (사용 안 함) | `DiagTrack`, `dmwappushservice`, `MapsBroker`, `RetailDemo`, `Fax`, `WMPNetworkSvc`. 이 여섯 개뿐입니다 |
+| 저장 공간 | 최대 절전 끔(`hiberfil.sys` 없음), 예약된 저장소(약 7GB) 만들지 않음, 배달 최적화의 다른 PC로 업로드 끔 |
+| Game Bar | 백그라운드 녹화/캡처 끔(`AllowGameDVR=0`). Game Bar 앱과 **게임 모드는 그대로** |
+
+건드리지 않는 것 (스크립트 맨 위에 적혀 있고, 앱 제거에는 이중 안전장치 `$AppxKeep`가 있습니다):
+
+- **TPM, Secure Boot, VBS/메모리 무결성(HVCI)**: 위의 설치 설정대로 켜진 채.
+- **Windows 보안(Microsoft Defender), SmartScreen, 방화벽**: 일부 안티치트가 상태를 확인하므로 손대지 않습니다. 예외 경로도 추가하지 않습니다.
+- **Windows 업데이트**와 그 서비스(`wuauserv`, `UsoSvc`, `WaaSMedicSvc`, `BITS`, `DoSvc`): 보안 업데이트와 안티치트가 요구하는 빌드를 받아야 합니다.
+- **WMI(`Winmgmt`), 작업 스케줄러, 이벤트 로그** 등 기본 서비스 전부. Vanguard(`vgc`/`vgk`), Easy Anti-Cheat, BattlEye 서비스는 게임이 설치하며 영향을 받지 않습니다.
+- **Microsoft Store, Xbox 앱(Game Pass), Xbox 서비스, Gaming Services, 앱 설치 관리자(winget)**, VC++/.NET/DirectX/WebView2/Edge.
+- 메모장, 계산기, 그림판, 사진, 터미널, 캡처 도구, 미디어 플레이어 같은 기본 도구.
+
+확인과 되돌리기 (Windows에서):
+
+- 무엇을 바꿨는지: `C:\ProgramData\DelayOS\winsetup\cleanup-state.json`(바꾸기 전 값 포함), `cleanup.log`.
+- 현재 상태(디스크·메모리·프로세스 수, TPM/Secure Boot/VBS/Defender 상태)를 JSON으로:
+  `powershell -ExecutionPolicy Bypass -File C:\ProgramData\DelayOS\winsetup\cleanup.ps1 -Phase Report`
+- **되돌리기**: `C:\ProgramData\DelayOS\winsetup\cleanup-undo.cmd`를 실행(관리자 권한을 묻습니다). 레지스트리 값·서비스·예약된 작업을 바꾸기 전 값으로
+  되돌리고, 지운 앱의 목록을 보여 줍니다. 지운 앱은 Microsoft Store에서 다시 설치합니다. 최대 절전과 빠른 시작은 듀얼 부팅 때문에 꺼진 채로 둡니다.
+- 설치할 때 건너뛰었는데 나중에 적용하려면 관리자 PowerShell에서 같은 스크립트를 `-Phase Machine`, 이어서 `-Phase User`로 실행하고 다시 시작합니다.
+- DelayOS에서: `delay-winsetup status`가 "게이밍 정리: 적용됨/적용 안 함"을 보여 줍니다.
+
+게이밍 정리를 적용하지 않는 경우: 설치 프로그램에서 스위치를 끈 경우(`--cleanup off`), 그리고 **Microsoft 공식 파일로 확인되지 않은 ISO**를 쓴 경우(아래).
+
+## 직접 가지고 있는 Windows ISO 쓰기
+
+설치 프로그램의 "Windows ISO 파일을 이미 가지고 있다면" 칸이나 `sudo delay-winsetup retry --iso <경로>`에 다음 중 하나를 줄 수 있습니다.
+
+- ISO 파일 (`/run/media/…/Win11.iso`)
+- 디스크가 들어 있는 광학 드라이브나 ISO를 기록한 USB 파티션 (`/dev/sr1`). 설치 프로그램은 찾은 드라이브를 버튼으로 보여 줍니다.
+- ISO 내용을 풀어 둔 폴더 (`sources/`가 있는 폴더)
+
+직접 지정한 ISO에는 **Microsoft의 SHA-256을 요구하지 않습니다.** 대신 인터넷이 되면 Microsoft 다운로드 페이지에 공개된 SHA-256 목록(모든 언어)과
+비교해서:
+
+- 일치하면 **공식 파일로 확인됨** → 내려받은 것과 똑같이 취급하고 게이밍 정리를 적용합니다.
+- 일치하지 않거나 비교할 수 없으면(수정된 ISO, 직접 만든 ISO, 드라이브/폴더, 오프라인) **확인 없이 그대로 사용**하고, 설치 프로그램의 마지막 화면과
+  `/var/log/delayos-winsetup.log`, `delay-winsetup status`에 그 사실을 경고로 남깁니다. 그 이미지가 믿을 만한지는 사용자가 판단해야 합니다.
+  이런 이미지는 이미 만든 사람이 정리해 둔 것으로 보고 **게이밍 정리를 건너뜁니다**(설치 프로그램의 "확인되지 않은 ISO에도 게이밍 정리 적용" 또는 `--cleanup on`으로 켤 수 있음).
+
+수정된(커스텀) ISO에서 달라지는 점과 DelayOS가 처리하는 방식:
+
+| 상황 | 처리 |
+|---|---|
+| `install.wim` / `install.esd` / 이미 나뉜 `install.swm` | 모두 지원. 4GB가 넘는 `install.wim`은 나누고, 4GB가 넘는 `install.esd`(나눌 수 없음)나 준비 파티션에 다 들어가지 않는 ISO는 설치할 이미지 하나만 임시로 내보내서 씁니다 |
+| 이미지가 하나뿐이거나 에디션 이름이 다른 ISO | 고른 에디션(Home/Pro)의 `EDITIONID`가 있으면 그것, 없고 이미지가 하나뿐이면 그 이미지, 그다음 이미지 이름으로 고릅니다. 직접 고르려면 `--index <번호>` 또는 `--image-name <이름>`. 고르지 못하면 들어 있는 이미지 목록을 보여 주고 멈춥니다 |
+| 에디션이 Home/Pro가 아닌 이미지 | 자동 설치 파일에 설치용 일반 키를 넣지 않습니다(다른 에디션의 키를 넣으면 Windows 설치가 실패하므로). 이미지에 들어 있는 키/에디션 그대로 설치됩니다 |
+| ISO에 들어 있는 `autounattend.xml`, `sources\$OEM$` | 쓰지 않습니다. DelayOS는 Windows 설치 프로그램(setup.exe)을 실행하지 않고 이미지를 직접 적용하기 때문입니다 |
+| 이미지 **안에** 들어 있는 응답 파일 (`Windows\Panther\Unattend\`, `Windows\Panther\unattend.xml`, `Windows\System32\Sysprep\unattend.xml`, `C:\unattend.xml`, 레지스트리의 `Setup\UnattendFile`) | Windows가 DelayOS의 응답 파일보다 먼저 읽을 수 있으므로 `*.iso-bak`으로 이름을 바꿔 **옆에 보관**하고 DelayOS의 응답 파일(계정 `DelayOS`, 자동 로그인, 연동 도우미)이 쓰이게 합니다 |
+| 이미지의 `SetupComplete.cmd`, `OOBE.cmd`, 레지스트리에 미리 넣어 둔 설정, 미리 설치된 프로그램 | **그대로 동작합니다.** 이미지 고유의 설정과 DelayOS의 설정이 함께 적용됩니다 |
+| PowerShell 모듈, Defender, 정품 인증 WMI 등이 빠진 이미지 | `finish.ps1`과 연동 도우미는 단계마다 따로 실패를 넘깁니다(예: 작업 등록은 `schtasks.exe`로 대체). 건너뛴 단계는 `done.json`의 `skipped`와 `delay-winsetup status`에 나옵니다. 연동 도우미만 설치되면 성공으로 봅니다 |
+| PowerShell 자체가 없는 이미지, 64비트가 아닌 이미지 | 준비 단계에서 거부합니다 |
+| 한국어가 아닌 이미지 | 설치는 됩니다. 부팅 파일 언어와 표시 언어는 이미지의 것을 따릅니다 |
+
+주의할 점:
+
+- 수정된 ISO에서 **Windows 업데이트, Defender, 메모리 무결성 등을 뺀 경우** 그 상태가 그대로 설치됩니다. 안티치트(특히 Vanguard)는 그런 Windows를
+  거부할 수 있습니다. DelayOS는 빠진 것을 되살리지 않습니다.
+- sysprep으로 일반화되지 않은 이미지(이미 사용자가 만들어진 이미지)는 자동 설치가 끝나지 않을 수 있습니다. 그러면 DelayOS가 몇 번 넘겨준 뒤
+  "설치 실패"로 표시하고 켜진 채로 남습니다(`sudo delay-winsetup retry --iso …` 또는 `remove`).
+- 수정된 Windows 이미지의 재배포는 Microsoft 라이선스가 허용하지 않습니다. 이 기능은 **자기 PC에 자기 ISO를 쓰는 경우**를 위한 것이고,
+  DelayOS는 어떤 Windows 이미지도 포함하거나 배포하지 않습니다.
+
 ## Secure Boot
 
 Secure Boot는 PC 전체에 하나뿐인 펌웨어 설정입니다. 발로란트를 하려면 켜야 하고, 켜면 DelayOS도 서명된 부트로더와 커널로 부팅해야 합니다.
@@ -369,7 +453,7 @@ Secure Boot는 PC 전체에 하나뿐인 펌웨어 설정입니다. 발로란트
 - **Secure Boot 미지원 빌드**: 설치 프로그램에 "Secure Boot 미지원 빌드"라고 나옵니다. 설치는 되지만 Secure Boot를 켜면 DelayOS가
   부팅되지 않으므로 꺼 둔 채 써야 하고, 그러면 **발로란트는 Windows 11에서 실행을 거부합니다**(Vanguard 오류 VAN9001/9003 등).
   리그 오브 레전드, 포트나이트, 배틀그라운드 등은 대부분 Secure Boot 없이 실행됩니다.
-- DelayOS **설치 USB 자체는 서명되어 있지 않습니다.** 설치할 때는 Secure Boot를 끄고 부팅한 뒤, 설치가 끝나고 MOK 등록까지 마친 다음 켜세요.
+- DelayOS **설치 USB도 같은 키로 서명되어 있어 Secure Boot를 켠 채로 부팅됩니다**([secure-boot.md](secure-boot.md)). USB로 처음 부팅할 때 파란 화면에서 `Enroll key from disk` → `delayos-general-ca.cer`로 DelayOS 키를 등록하면, 그 PC에서는 위의 MOK 등록(암호 `delayos`)을 다시 하지 않아도 되고 설치 뒤에 BIOS에서 할 일도 없습니다. Secure Boot를 끈 채로 설치했다면 위 순서(등록 → BIOS에서 켜기)를 따릅니다.
 
 **EAC Linux v2(안티치트 모드, `docs/eac-linux-v2.md`)와의 관계:** 일반 키는 안티치트 키와 **다른 CA**입니다. 안티치트 키는 잠금 모드가 강제된
 `linux-delayos-eac`만 서명한다는 약속을 지키기 위해서입니다. 그 대신 Epic의 "등록된 MOK는 모두 잘 알려진 키여야 한다"는 규칙 때문에,
@@ -387,7 +471,7 @@ Linux에서 EAC v2 게임을 하려면 `sudo mokutil --delete /usr/share/delayos
   `delay-winsetup-finalize.service`가 로그인 화면이 뜨기 전에 "다음 한 번만 Windows로"(`BootNext`, Windows 전환과 같은 방식)를 지정하고
   바로 다시 시작합니다. 이 넘겨주기는 최대 6번까지만 하므로, Windows가 끝내지 못하면 **DelayOS가 켜진 채로 멈춥니다.**
 - 실패하면 DelayOS 로그인 때 알림이 나옵니다. DelayOS는 정상입니다.
-  - 다시 시도: `sudo delay-winsetup retry` (필요하면 `--iso /경로/Win11.iso`, `--edition pro`) 후 다시 시작
+  - 다시 시도: `sudo delay-winsetup retry` (필요하면 `--iso /경로/Win11.iso`, `--edition pro`, `--index N`, `--image-name 이름`, `--cleanup on|off`) 후 다시 시작
   - 제거하고 공간 되돌리기: `sudo delay-winsetup remove`
   - 상태: `delay-winsetup status` / 미리 보기(아무것도 바꾸지 않음): `sudo delay-winsetup --dry-run retry`
 - Windows 화면에서 멈춘 채 DelayOS로 돌아오지 않으면 전원 버튼으로 끄고 다시 켜세요. 몇 번 안에 DelayOS가 켜집니다.
@@ -402,7 +486,7 @@ Linux에서 EAC v2 게임을 하려면 `sudo mokutil --delete /usr/share/delayos
 | `/usr/local/bin/delay-winsetup` | 전체 로직(Python 표준 라이브러리). `probe`, `parts`, `stage`, `finalize`, `retry`, `remove`, `status`, `sb-setup`, `--dry-run` |
 | `/etc/calamares/branding/delayos/wingames.qml`, `modules/wingames.conf` | 설치 프로그램 페이지 (`notesqml@wingames`) |
 | `/usr/lib/calamares/modules/delayos_winparts`, `delayos_winsetup` | 설치 단계(파티션 직후 / 부트로더 직후) |
-| `/usr/share/delayos/winsetup/` | Windows 쪽 파일: `install.cmd.in`(Windows PE), `unattend.xml.in`, `specialize.cmd`, `finish.ps1`, `winpeshl.ini` 등 |
+| `/usr/share/delayos/winsetup/` | Windows 쪽 파일: `install.cmd.in`(Windows PE), `unattend.xml.in`, `specialize.cmd`, `finish.ps1`, `cleanup.ps1`(게이밍 정리), `cleanup-undo.cmd`, `winpeshl.ini` 등 |
 | `/etc/systemd/system/delay-winsetup-finalize.service` | 부팅 시: 설치 중이면 Windows로 넘겨주기, 끝났으면 마무리, 아니면 실패 처리 |
 | `/usr/lib/udev/rules.d/61-delayos-winsetup.rules` | Windows 파티션을 파일 탐색기에서 숨김(`UDISKS_IGNORE`) |
 | `/etc/delayos/winsetup.conf` | 상태(`STATE=pending|done|failed|removed`)와 파티션 GUID |

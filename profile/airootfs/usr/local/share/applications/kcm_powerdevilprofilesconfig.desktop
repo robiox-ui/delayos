@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_powerdevilprofilesconfig.desktop: opens DelayOS Settings.
+Type=Application
+Name=Power & Battery
+Name[ko]=전원 및 배터리
+Icon=delayos-settings
+Exec=delay-settings power
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

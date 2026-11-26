@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_autostart.desktop: opens DelayOS Settings.
+Type=Application
+Name=Startup Apps
+Name[ko]=시작 프로그램
+Icon=delayos-settings
+Exec=delay-settings startup
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

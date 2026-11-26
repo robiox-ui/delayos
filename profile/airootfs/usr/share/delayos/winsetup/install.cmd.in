@@ -52,12 +52,23 @@ if errorlevel 1 (set ERR=E05 dism-apply& goto fail)
 echo [%time%] image applied >> %LOG%
 
 echo   [3/3] 마무리하는 중...
+if not exist %TGT%:\Windows\System32\config\SYSTEM (set ERR=E05 not-a-windows-image& goto fail)
+rem ---- A custom image can carry its own answer files, and Windows reads some of them BEFORE
+rem      \Windows\Panther\unattend.xml (search order: registry, Panther\Unattend, Panther, ...,
+rem      System32\Sysprep, root of the drive). The DelayOS answer file must be the one that is used
+rem      (account, auto-logon, helper): the others are kept next to the original as *.iso-bak.
+for %%f in (Windows\Panther\Unattend\Unattend.xml Windows\Panther\Unattend\Autounattend.xml Windows\Panther\Unattend.xml Windows\Panther\Autounattend.xml Windows\System32\Sysprep\Unattend.xml Windows\System32\Sysprep\Panther\Unattend.xml Unattend.xml Autounattend.xml) do call :setaside %%f
+if exist X:\Windows\System32\reg.exe call :regunattend
 if not exist %TGT%:\Windows\Panther mkdir %TGT%:\Windows\Panther
 copy /y %STG%:\delayos\unattend.xml %TGT%:\Windows\Panther\unattend.xml >nul
 if errorlevel 1 (set ERR=E06 unattend& goto fail)
 xcopy %STG%:\delayos\payload %TGT%:\ProgramData\DelayOS\winsetup\ /E /I /Y /Q >nul
 if errorlevel 1 (set ERR=E06 payload& goto fail)
 bcdboot %TGT%:\Windows /s S: /f UEFI /l ko-KR >> %LOG% 2>&1
+if errorlevel 1 (
+  echo [%time%] bcdboot with ko-KR failed, trying the image's own language >> %LOG%
+  bcdboot %TGT%:\Windows /s S: /f UEFI >> %LOG% 2>&1
+)
 if errorlevel 1 (set ERR=E07 bcdboot& goto fail)
 bcdedit /store S:\EFI\Microsoft\Boot\BCD /set {bootmgr} timeout 0 >nul 2>&1
 echo [%time%] OK >> %LOG%
@@ -106,4 +117,23 @@ exit /b 1
 :trytgt
 call :checktag %1:\DelayOS-WinTarget.tag
 if not errorlevel 1 set TGT=%1
+exit /b 0
+
+rem ---- %1 = answer file of the image (path below the Windows drive): keep it as *.iso-bak
+:setaside
+if not exist %TGT%:\%1 exit /b 0
+echo [%time%] answer file of the image set aside: %1 >> %LOG%
+move /y %TGT%:\%1 %TGT%:\%1.iso-bak >nul 2>&1
+exit /b 0
+
+rem ---- an image can also name an answer file in its registry (first place Windows looks): remove
+:regunattend
+reg load HKLM\DELAYOSSYS %TGT%:\Windows\System32\config\SYSTEM >nul 2>&1
+if errorlevel 1 exit /b 0
+reg query HKLM\DELAYOSSYS\Setup /v UnattendFile >nul 2>&1
+if errorlevel 1 goto regdone
+echo [%time%] the image names an answer file in its registry (Setup\UnattendFile): removed >> %LOG%
+reg delete HKLM\DELAYOSSYS\Setup /v UnattendFile /f >nul 2>&1
+:regdone
+reg unload HKLM\DELAYOSSYS >nul 2>&1
 exit /b 0

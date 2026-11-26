@@ -18,11 +18,15 @@ etc/xdg/mimeapps.list
 etc/xdg/plasma-localerc
 etc/xdg/plasma-welcomerc
 etc/xdg/plasmarc
+etc/xdg/plasma-workspace/env/delay-desktop-menu.sh
 etc/xdg/spectaclerc
 usr/bin/delay-darkmode
 usr/bin/delay-run-in-terminal
 usr/bin/delay-shell
+usr/lib/delayos/delay-desktop-menu
+usr/lib/delayos/delay-kcm-route
 usr/lib/delayos/qml/
+usr/lib/qt6/plugins/plasma/containmentactions/org.delayos.desktopmenu.so
 usr/lib/qt6/qml/DelayShell/
 usr/lib/qt6/qml/DelayUI/
 usr/lib/qt6/qml/org/delayos/
@@ -33,6 +37,10 @@ usr/local/bin/delay-open
 usr/local/bin/delay-shell-activate
 usr/local/bin/delay-shell-layout
 usr/local/bin/delay-winx
+usr/local/bin/kcmshell6
+usr/local/bin/systemsettings
+usr/local/share/applications/kcm_*.desktop
+usr/local/share/applications/systemsettings.desktop
 usr/share/applications/delay-*.desktop
 !usr/share/applications/delay-android.desktop
 usr/share/aurorae/themes/

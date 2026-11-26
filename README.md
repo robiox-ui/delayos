@@ -22,6 +22,25 @@ sudo ./build.sh
 ```
 결과물은 `out/delayos-YYYY.MM.DD-x86_64.iso`입니다. USB에는 Rufus나 Ventoy로 굽습니다. 빌드할 때 약 4GB를 받고, 1~2시간 걸립니다.
 
+## Secure Boot
+
+DelayOS 설치 USB와 설치된 DelayOS는 **Secure Boot를 켠 채로 부팅됩니다.** BIOS에서 Secure Boot를 껐다 켤 필요가 없습니다.
+PC마다 처음 한 번만, USB로 부팅했을 때 나오는 파란 화면에서 DelayOS 키를 등록합니다(약 1분, 암호 없음):
+
+1. `Verification failed: (0x1A) Security Violation` → **Enter**
+2. `Shim UEFI key management` → 10초 안에 **아무 키**
+3. **`Enroll key from disk`** 선택
+4. DelayOS USB(`ARCHISO_EFI`) → **`delayos-general-ca.cer`** 선택
+5. **`Continue` → `Yes` → `Reboot`**
+
+다시 시작하면 DelayOS가 부팅되고, 이 USB로 설치한 DelayOS도 같은 키로 Secure Boot에서 부팅됩니다(다시 묻지 않음).
+화면 사진과 문제 해결, 동작 원리는 [docs/secure-boot.md](docs/secure-boot.md)에 있습니다.
+
+<p>
+  <img alt="Enroll key from disk" src="docs/assets/secure-boot/03-enroll-key-from-disk.png" width="49%">
+  <img alt="delayos-general-ca.cer 선택" src="docs/assets/secure-boot/05-select-cer.png" width="49%">
+</p>
+
 ## 주요 기능
 
 | 기능 | 구현 |
@@ -62,7 +81,8 @@ aur-packages.txt      AUR 패키지 (?로 표시한 것은 선택)
 kernel/               linux-delayos, linux-delayos-eac
 packages/             pahole, delayos-sb-signed, delayos-* (airootfs를 패키지로 묶는 PKGBUILD와 files.list),
                       proton-delayos, repo/curated.list (CPU 수준별 재빌드 목록)
-tools/                저장소 빌드·게시(repo-build.sh, repo-publish.sh, repo-update.sh), 키 생성
+tools/                저장소 빌드·게시(repo-build.sh, repo-publish.sh, repo-update.sh), 키 생성,
+                      iso-secureboot.sh (ISO를 Secure Boot에서 부팅되게: shim + 서명된 GRUB/커널)
 profile/              archiso 프로필
   packages.x86_64     공식 저장소 패키지
   airootfs/           시스템 설정, 셸 위젯, 앱, 테마

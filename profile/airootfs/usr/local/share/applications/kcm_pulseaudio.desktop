@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_pulseaudio.desktop: opens DelayOS Settings.
+Type=Application
+Name=Sound
+Name[ko]=소리
+Icon=delayos-settings
+Exec=delay-settings sound
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

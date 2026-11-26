@@ -1,0 +1,21 @@
+#!/bin/sh
+# Actions of the DelayOS desktop right-click menu that need a shell
+# (/usr/share/delayos/shell/desktopmenu/DesktopMenu.qml).
+#   delay-desktop-menu new-folder | new-text | terminal
+d=$(xdg-user-dir DESKTOP 2>/dev/null)
+[ -n "$d" ] && [ "$d" != "$HOME" ] || d="$HOME/Desktop"
+mkdir -p "$d"
+
+# first free "<base><ext>", "<base> (2)<ext>", ... in the desktop folder
+free_name() {
+    n="$1$2"; i=2
+    while [ -e "$d/$n" ]; do n="$1 ($i)$2"; i=$((i + 1)); done
+    printf '%s' "$d/$n"
+}
+
+case "$1" in
+    new-folder) mkdir -- "$(free_name "새 폴더" "")" ;;
+    new-text)   : > "$(free_name "새 텍스트 문서" ".txt")" ;;
+    terminal)   cd "$d" && exec setsid -f delay-terminal --workdir "$d" ;;
+    *)          echo "usage: delay-desktop-menu new-folder|new-text|terminal" >&2; exit 2 ;;
+esac

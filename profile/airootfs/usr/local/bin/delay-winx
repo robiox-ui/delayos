@@ -7,14 +7,14 @@ choice=$(kdialog --title "Quick tools" --menu "" \
     game "Gaming mode" out "Sign out" reboot "Restart" off "Shut down" desk "Desktop")
 case "$choice" in
   apps)   exec plasma-discover --mode installed ;;
-  power)  exec systemsettings kcm_powerdevilprofilesconfig ;;
+  power)  exec delay-settings kcm_powerdevilprofilesconfig ;;
   sys)    exec kinfocenter ;;
   drv)    exec konsole --hold -e sh -c 'echo "== GPU =="; lspci -k | grep -A3 -E "VGA|3D"; echo; echo "Update everything: sudo pacman -Syu"' ;;
-  net)    exec systemsettings kcm_networkmanagement ;;
+  net)    exec delay-settings kcm_networkmanagement ;;
   disk)   exec partitionmanager ;;
   term)   exec konsole ;;
   tm)     exec plasma-systemmonitor ;;
-  set)    exec systemsettings ;;
+  set)    exec delay-settings ;;
   files)  exec dolphin ;;
   search) exec krunner ;;
   game)   exec /usr/local/bin/delay-gamemode toggle ;;

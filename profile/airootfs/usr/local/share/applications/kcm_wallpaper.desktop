@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_wallpaper.desktop: opens DelayOS Settings.
+Type=Application
+Name=Background
+Name[ko]=배경
+Icon=delayos-settings
+Exec=delay-settings background
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_style.desktop: opens DelayOS Settings.
+Type=Application
+Name=Personalisation
+Name[ko]=개인 설정
+Icon=delayos-settings
+Exec=delay-settings personalisation
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

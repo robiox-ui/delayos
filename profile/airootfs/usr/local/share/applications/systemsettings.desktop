@@ -1,0 +1,21 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/systemsettings.desktop.
+# The everyday settings app is DelayOS Settings (org.delayos.Settings); KDE System Settings stays
+# available for power users under this name. Exec is the real binary, not the /usr/local/bin wrapper.
+Type=Application
+Name=Advanced Settings (KDE)
+Name[ko]=고급 설정 (KDE)
+GenericName=KDE System Settings
+GenericName[ko]=KDE 시스템 설정
+Comment=All KDE Plasma settings modules, for advanced users
+Comment[ko]=KDE Plasma의 모든 설정 모듈 (고급 사용자용)
+Icon=preferences-system
+Exec=/usr/bin/systemsettings
+Terminal=false
+SingleMainWindow=true
+StartupNotify=true
+X-DBUS-StartupType=Unique
+X-DBUS-ServiceName=org.kde.systemsettings
+Categories=Qt;KDE;Settings;
+Keywords=systemsettings;kde;advanced;settings;
+Keywords[ko]=고급;설정;시스템 설정;KDE;제어판;

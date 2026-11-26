@@ -9,16 +9,24 @@
 #   parts --root-dev DEV --win-gb N stage 1 (Calamares, after "partition", before "mount"):
 #                                   shrink the new, empty DelayOS root from its end and create
 #                                   "DelayOS-WinSetup" (FAT32 staging) + "DelayOS-Windows" (NTFS)
-#   stage --root DIR [--iso FILE] [--edition home|pro] [--key-file F]
+#   stage --root DIR [--iso SRC] [--edition home|pro] [--index N | --image-name S]
+#         [--cleanup auto|on|off] [--key-file F]
 #                                   stage 2 (Calamares, before "umount"; also used by retry):
-#                                   get the Windows ISO from Microsoft, fill the staging
-#                                   partition, write the unattended files, boot entry + BootNext
+#                                   get the Windows ISO from Microsoft (SHA-256 checked) or use the
+#                                   local medium SRC (ISO file, optical drive, folder; may be a
+#                                   custom image, used without a required hash), fill the staging
+#                                   partition, write the unattended files, boot entry + BootNext.
+#                                   "Gaming cleanup" (cleanup.ps1) is staged for an unmodified
+#                                   Microsoft image, or with --cleanup on
 #   finalize                        boot service on the installed system: clean up when Windows
 #                                   is ready, or mark the attempt as failed
-#   retry | remove                  after a failed attempt (root)
+#   retry [same options] | remove   after a failed attempt (root)
 #   status [--json]                 state for Settings / the login notification
 #   session-notify                  login hook: tell the user about a failed attempt
 #   sb-setup | sb-kernel            Secure Boot chain (shim + DelayOS general key), see the doc
+#   sb-install --root DIR [--force] installer (Calamares, every installation): when the PC runs with
+#                                   Secure Boot ON, boot the new system through the same chain
+#                                   (docs/secure-boot.md); does nothing with Secure Boot off
 #   iso-url                         only resolve the Microsoft download link (test)
 #
 # Safety rules: only the disk that holds the DelayOS root is touched; only space taken from the
@@ -42,6 +50,7 @@ import uuid
 
 os.environ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin"
 os.environ["LC_ALL"] = "C"
+os.environ["WIMLIB_IMAGEX_IGNORE_CASE"] = "1"      # Windows paths inside WIM images
 
 CONF = "/etc/delayos/winsetup.conf"
 LOG = "/var/log/delayos-winsetup.log"
@@ -87,8 +96,12 @@ MSG = {
     "download": "Microsoft에서 Windows 설치 파일을 받지 못했습니다. 인터넷 연결을 확인하거나, 직접 받은 Windows 11 ISO 파일을 지정해 다시 시도하세요.",
     "download_api": "Microsoft 다운로드 서버가 요청을 거부했습니다. 잠시 후 다시 시도하거나, microsoft.com/software-download/windows11 에서 직접 받은 ISO 파일을 지정하세요.",
     "sha": "받은 Windows 설치 파일의 SHA-256이 Microsoft가 공개한 값과 다릅니다. 파일을 버렸습니다.",
-    "iso": "Windows 11 설치 ISO가 아니거나 읽을 수 없는 파일입니다.",
-    "edition": "이 ISO에 선택한 Windows 에디션이 없습니다.",
+    "iso": "Windows 설치 ISO가 아니거나 읽을 수 없는 파일입니다.",
+    "iso_arch": "이 ISO의 Windows 이미지는 64비트(x64)가 아니어서 설치할 수 없습니다.",
+    "iso_nops": "이 ISO의 Windows 이미지에는 PowerShell이 없어 자동 설치를 마칠 수 없습니다.",
+    "iso_pe": "이 ISO의 설치 환경(Windows PE)은 자체 설치 프로그램을 실행하도록 바뀌어 있고, DelayOS가 이를 안전하게 대신할 수 없어 사용하지 않았습니다. 디스크는 건드리지 않았습니다.",
+    "edition": "이 ISO에서 설치할 Windows 이미지를 고르지 못했습니다. 들어 있는 이미지: {0}. 'sudo delay-winsetup retry --iso <경로> --index <번호>'로 직접 고를 수 있습니다.",
+    "iso_unverified": "직접 지정한 Windows ISO는 Microsoft가 공개한 SHA-256과 일치하지 않거나 대조할 수 없어, 확인 없이 그대로 사용했습니다. 믿을 수 있는 파일인지는 직접 확인해야 합니다.",
     "space": "Windows 설치 파일을 받을 공간이 부족합니다.",
     "stage_small": "Windows 설치 파일이 준비 파티션보다 큽니다.",
     "bootentry": "Windows 설치용 부팅 항목을 만들지 못했습니다.",
@@ -104,7 +117,10 @@ class Fail(Exception):
     def __init__(self, code, *args, detail=""):
         super().__init__(code)
         self.code, self.detail = code, detail
-        self.message = MSG.get(code, code).format(*args)
+        try:
+            self.message = MSG.get(code, code).format(*args)
+        except IndexError:
+            self.message = MSG.get(code, code).format(*(list(args) + [detail or "?"] * 3))
 
 
 def log(msg):
@@ -362,12 +378,20 @@ def facts():
         disks.append({"path": d["path"], "size_gb": round(int(d.get("size") or 0) / GIB, 1),
                       "model": (d.get("model") or "").strip(), "removable": bool(d.get("rm")) or d.get("tran") == "usb"})
     existing = any((d.get("fstype") in ("ntfs", "BitLocker")) and int(d.get("size") or 0) >= 30 * GIB for d in lsblk())
+    # optical drives / USB partitions that hold a disc-format medium (a Windows ISO written to a disc
+    # or attached as a virtual drive): offered on the installer page as "use this medium"
+    media = []
+    for d in lsblk():
+        p = d.get("path") or ""
+        if d.get("fstype") in ("udf", "iso9660") and p and not p.startswith("/dev/loop") and not (live_src and (live_src.startswith(p) or p.startswith(live_src))):
+            media.append({"path": p, "label": (d.get("label") or "").strip(), "size_gb": round(int(d.get("size") or 0) / GIB, 1)})
     t = tpm_facts()
     return {
         "schema": 1,
+        "win_media": media,
         "uefi": os.path.isdir("/sys/firmware/efi"),
         "tpm": t, "tpm_ok": (t["present"] and t["version"] >= 2) or tpm_bypass(), "tpm_bypass": tpm_bypass(),
-        "secure_boot": secure_boot(), "sb_build": sb_available(),
+        "secure_boot": secure_boot(), "sb_build": sb_available(), "sb_enrolled": sb_available() and sb_enrolled(),
         "oem_key": bool(msdm_key()) if os.geteuid() == 0 else os.path.exists("/sys/firmware/acpi/tables/MSDM"),
         "existing_windows": existing,
         "disks": disks, "stage_gb": STAGE_GB, "min_win_gb": MIN_WIN_GB, "min_root_gb": MIN_ROOT_GB,
@@ -632,25 +656,195 @@ def cmd_iso_url(a):
 
 
 # ---- WIM helpers ---------------------------------------------------------------------------------
-def wim_editions(path):
-    """{EDITIONID: image index} of a WIM/ESD."""
+def wim_images(path):
+    """Images of a WIM/ESD (or the first part of a split WIM), in index order:
+    [{index, name, display, edition, arch, build, lang, type}]."""
     try:
         raw = subprocess.run(["wimlib-imagex", "info", path, "--xml"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=120).stdout
     except Exception:
-        return {}
+        return []
     txt = raw.decode("utf-16", "replace") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8", "replace")
-    res = {}
+    res = []
     for m in re.finditer(r'<IMAGE INDEX="(\d+)">(.*?)</IMAGE>', txt, re.S):
-        e = re.search(r"<EDITIONID>([^<]+)</EDITIONID>", m.group(2))
-        if e:
-            res.setdefault(e.group(1), int(m.group(1)))
+        body = m.group(2)
+
+        def tag(t, body=body):
+            x = re.search(r"<%s>([^<]*)</%s>" % (t, t), body)
+            return x.group(1).strip() if x else ""
+        ver = re.search(r"<VERSION>.*?<BUILD>(\d+)</BUILD>", body, re.S)
+        lang = re.search(r"<LANGUAGES>.*?<DEFAULT>([^<]+)</DEFAULT>", body, re.S)
+        res.append({"index": int(m.group(1)), "name": tag("NAME"), "display": tag("DISPLAYNAME"), "edition": tag("EDITIONID"),
+                    "arch": tag("ARCH"), "build": ver.group(1) if ver else "", "lang": lang.group(1) if lang else "",
+                    "type": tag("INSTALLATIONTYPE"), "flags": tag("FLAGS")})
     return res
+
+
+def image_label(im):
+    # a rebuilt image may have lost its EDITIONID and only carry the edition name in FLAGS
+    ed = im["edition"] or im.get("flags", "")
+    return "%d: %s%s" % (im["index"], im["name"] or im["display"] or "?", " [%s]" % ed if ed else "")
+
+
+def select_image(images, edition, index=0, name=""):
+    """The image to install. Official ISO: the one whose EDITIONID is the chosen edition. A custom
+    ISO may have one image only, other names, or no EDITIONID: an explicit index / name comes first,
+    then the edition, then "the only image", then the image name. Returns (image, how)."""
+    if not images:
+        raise Fail("iso", detail="no image in install.wim/esd")
+    listing = ", ".join(image_label(i) for i in images)
+    if index:
+        im = next((i for i in images if i["index"] == index), None)
+        if not im:
+            raise Fail("edition", listing, detail="no image index %d" % index)
+        return im, "index given"
+    if name:
+        n = name.strip().lower()
+        hits = [i for i in images if n in (i["name"].lower(), i["display"].lower(), i["edition"].lower())] or \
+               [i for i in images if n in i["name"].lower() or n in i["display"].lower()]
+        if len(hits) != 1:
+            raise Fail("edition", listing, detail="image name '%s' matches %d images" % (name, len(hits)))
+        return hits[0], "name given"
+    want = EDITION_IDS.get(edition, edition)
+    im = next((i for i in images if i["edition"].lower() == want.lower()), None) or \
+        next((i for i in images if not i["edition"] and i.get("flags", "").lower() == want.lower()), None)
+    if im:
+        return im, "edition"
+    usable = [i for i in images if i["type"].lower() != "windowspe"]
+    if len(usable) == 1:
+        return usable[0], "only image"
+    words = {"home": r"\bhome\b", "pro": r"\bpro(fessional)?\b"}.get(edition, re.escape(edition.lower()))
+    other = r"\b(n|single language|education|workstations?)\b"
+    hits = [i for i in usable if re.search(words, (i["name"] + " " + i["display"]).lower())
+            and not re.search(other, (i["name"] + " " + i["display"]).lower())]
+    if len(hits) == 1:
+        return hits[0], "image name"
+    raise Fail("edition", listing, detail="requested %s" % edition)
+
+
+def wim_has(path, index, rel):
+    """Does the image contain this file or folder? None when it cannot be told."""
+    rc, out = run(["wimlib-imagex", "dir", path, str(index), "--path=" + rel], quiet=True, timeout=300)
+    if rc == 0:
+        return True
+    return False if re.search(r"not found|does not exist|no such", out, re.I) else None
 
 
 def wim_boot_index(path):
     rc, out = run(["wimlib-imagex", "info", path, "--header"], quiet=True)
     m = re.search(r"Boot Index\s*[:=]\s*(\d+)", out)
-    return int(m.group(1)) if m and int(m.group(1)) > 0 else 2
+    c = re.search(r"Image Count\s*[:=]\s*(\d+)", out)
+    count = int(c.group(1)) if c else 2
+    boot = int(m.group(1)) if m else 0
+    # official media: image 2 (Windows Setup) is the boot image; a rebuilt boot.wim may have only one
+    return boot if 0 < boot <= count else min(2, max(1, count))
+
+
+# ---- WinPE shell ---------------------------------------------------------------------------------
+# Windows PE starts ONE program: HKLM\SYSTEM\Setup\CmdLine of its registry, normally "winpeshl.exe",
+# which reads winpeshl.ini (that is where DelayOS puts its own script). A custom medium can ship its
+# own installer there instead (seen: winpeshl.exe replaced by a 9 MB installer that ignores
+# winpeshl.ini and wants to partition a disk by itself). DelayOS must be the only thing that runs:
+# when the shell is not the genuine small winpeshl.exe, the CmdLine value is rewritten in place to
+# start the DelayOS script through cmd.exe. If that is not possible the medium is refused.
+PE_CMDLINE = "cmd /c d.cmd"            # 12 characters: fits wherever "winpeshl.exe" was stored
+
+
+def hive_find_value(data, key, value):
+    """(vk offset, data cell offset, capacity in bytes, data length, text) of REG_SZ <root>\\key\\value in
+    a registry hive file (regf), or None. Read-only parser for exactly this lookup."""
+    import struct
+    if data[:4] != b"regf" or len(data) < 0x2000:
+        return None
+    cell = lambda off: 0x1000 + off + 4            # start of the cell contents
+
+    def subkeys(list_off):
+        c = cell(list_off)
+        sig, n = data[c:c + 2], struct.unpack_from("<H", data, c + 2)[0]
+        if sig in (b"lf", b"lh"):
+            return [struct.unpack_from("<I", data, c + 4 + 8 * i)[0] for i in range(n)]
+        if sig == b"li":
+            return [struct.unpack_from("<I", data, c + 4 + 4 * i)[0] for i in range(n)]
+        if sig == b"ri":
+            res = []
+            for i in range(n):
+                res += subkeys(struct.unpack_from("<I", data, c + 4 + 4 * i)[0])
+            return res
+        return []
+
+    def name_of(c, len_at, name_at, flags):
+        n = struct.unpack_from("<H", data, c + len_at)[0]
+        raw = data[c + name_at:c + name_at + n]
+        return (raw.decode("latin-1") if flags & (0x20 if len_at == 0x48 else 1) else raw.decode("utf-16le", "replace")).lower()
+    try:
+        nk = cell(struct.unpack_from("<I", data, 0x24)[0])
+        if data[nk:nk + 2] != b"nk":
+            return None
+        nsub, sublist = struct.unpack_from("<I", data, nk + 0x14)[0], struct.unpack_from("<I", data, nk + 0x1C)[0]
+        target = None
+        for off in (subkeys(sublist) if nsub else []):
+            k = cell(off)
+            if data[k:k + 2] == b"nk" and name_of(k, 0x48, 0x4C, struct.unpack_from("<H", data, k + 2)[0]) == key.lower():
+                target = k
+                break
+        if target is None:
+            return None
+        nval, vlist = struct.unpack_from("<I", data, target + 0x24)[0], struct.unpack_from("<I", data, target + 0x28)[0]
+        for i in range(nval):
+            vk = cell(struct.unpack_from("<I", data, cell(vlist) + 4 * i)[0])
+            if data[vk:vk + 2] != b"vk":
+                continue
+            dlen, doff, typ, flags = struct.unpack_from("<IIIH", data, vk + 4)
+            if name_of(vk, 2, 0x14, flags) != value.lower() or typ not in (1, 2) or dlen & 0x80000000:
+                continue
+            dc = 0x1000 + doff
+            size = -struct.unpack_from("<i", data, dc)[0]
+            if size < 8 or dc + size > len(data) or dlen > size - 4:
+                return None
+            return vk, dc + 4, size - 4, dlen, data[dc + 4:dc + 4 + dlen].decode("utf-16le", "replace").rstrip("\0")
+    except Exception:           # struct.error / IndexError on a damaged hive
+        return None
+    return None
+
+
+def pe_shell_takeover(bw, idx, tmp):
+    """Make sure the DelayOS script is what the boot image starts. Returns extra "wimlib update"
+    lines (empty when the image already uses the genuine winpeshl.exe)."""
+    import struct
+    for f in ("SYSTEM", "winpeshl.exe"):
+        remove_file(os.path.join(tmp, f))
+    run(["wimlib-imagex", "extract", bw, str(idx), "/Windows/System32/config/SYSTEM", "--dest-dir=" + tmp, "--no-acls"], quiet=True, timeout=300)
+    run(["wimlib-imagex", "extract", bw, str(idx), "/Windows/System32/winpeshl.exe", "--dest-dir=" + tmp, "--no-acls"], quiet=True, timeout=300)
+    hive_file, shell_file = os.path.join(tmp, "SYSTEM"), os.path.join(tmp, "winpeshl.exe")
+    try:
+        with open(hive_file, "rb") as f:
+            data = bytearray(f.read())
+    except OSError:
+        raise Fail("iso_pe", detail="no registry in the boot image")
+    v = hive_find_value(bytes(data), "Setup", "CmdLine")
+    cmdline = v[4] if v else ""
+    shell_size = os.path.getsize(shell_file) if os.path.isfile(shell_file) else 0
+    genuine = cmdline.strip().lower() in ("winpeshl.exe", "winpeshl") and 0 < shell_size < MIB
+    log("boot image: Setup\\CmdLine = '%s', winpeshl.exe %d bytes: %s" % (cmdline, shell_size, "standard shell" if genuine else "NOT the standard shell"))
+    if genuine:
+        return ""
+    if not v:
+        raise Fail("iso_pe", detail="Setup\\CmdLine not found in the boot image registry")
+    vk, dpos, cap, dlen, _t = v
+    new = PE_CMDLINE.encode("utf-16le")
+    if len(new) + 2 <= cap:
+        new += b"\0\0"
+    if len(new) > cap:
+        raise Fail("iso_pe", detail="Setup\\CmdLine '%s' cannot be replaced in place (%d bytes)" % (cmdline, cap))
+    data[dpos:dpos + cap] = new + b"\0" * (cap - len(new))
+    struct.pack_into("<I", data, vk + 4, len(new))
+    with open(hive_file, "wb") as f:
+        f.write(data)
+    check = hive_find_value(bytes(data), "Setup", "CmdLine")
+    if not check or check[4] != PE_CMDLINE:
+        raise Fail("iso_pe", detail="registry edit could not be verified")
+    write_file(os.path.join(tmp, "d.cmd"), template("delayos-start.cmd"))
+    log("boot image: the medium's own installer is bypassed, Setup\\CmdLine is now '%s' (DelayOS script)" % PE_CMDLINE)
+    return "add '%s' '/Windows/System32/config/SYSTEM'\nadd '%s' '/Windows/System32/d.cmd'\n" % (hive_file, os.path.join(tmp, "d.cmd"))
 
 
 def copy_progress(src, dst, cb):
@@ -879,11 +1073,46 @@ def cmd_sb_setup(a):
         conf["SB"] = "1"
         conf["SB_MOK"] = "enrolled" if sb_enrolled() else "queued"
         save_conf(conf)
-        print("Secure Boot 준비가 끝났습니다. 다시 시작하면 파란 화면(MOK 관리)이 나옵니다: "
-              "Enroll MOK > Continue > Yes > 암호 '%s' 입력 > Reboot. 그다음 BIOS에서 Secure Boot를 켜세요." % MOK_PASSWORD)
+        if conf["SB_MOK"] == "enrolled":
+            print("Secure Boot 준비가 끝났습니다. DelayOS 키는 이 PC에 이미 등록되어 있으므로 더 할 일이 없습니다."
+                  + ("" if secure_boot() else " BIOS에서 Secure Boot를 켜도 DelayOS가 그대로 시작됩니다."))
+        else:
+            print("Secure Boot 준비가 끝났습니다. 다시 시작하면 파란 화면(MOK 관리)이 나옵니다: "
+                  "Enroll MOK > Continue > Yes > 암호 '%s' 입력 > Reboot. 그다음 BIOS에서 Secure Boot를 켜세요." % MOK_PASSWORD)
         return 0
     print("이 DelayOS 빌드에는 Secure Boot용 서명 파일이 없습니다 (Secure Boot 미지원 빌드).")
     return 1
+
+
+def cmd_sb_install(a):
+    """Installer step for every installation (Calamares module delayos_winsetup, after "bootloader").
+    The PC was started with Secure Boot ON from the signed live medium (docs/secure-boot.md), so the
+    installed system has to start the same way: shim -> signed GRUB -> signed linux-delayos. The
+    DelayOS general CA is this PC's MOK already (the live medium could not have started without
+    it), so normally nothing is queued. With Secure Boot off nothing is changed (--force: do it
+    anyway); "sudo delay-winsetup sb-setup" does the same on the installed system later."""
+    root = a.root
+    res = {"ok": True, "sb": False, "sb_mok": "", "secure_boot": secure_boot(), "sb_build": sb_available(root)}
+    if not res["sb_build"] or not os.path.isdir("/sys/firmware/efi") or not (res["secure_boot"] or a.force):
+        if res["secure_boot"] and not res["sb_build"]:
+            log("sb-install: Secure Boot is on, but this build has no signed boot files: the installed system "
+                "will only start with Secure Boot off")
+        print(json.dumps(res, ensure_ascii=False))
+        return 0
+    esp, esp_dev = find_esp(root)
+    info = next((d for d in lsblk(esp_dev) if d.get("path") == esp_dev), {})
+    if not info.get("pkname"):
+        raise Fail("esp", detail="no parent disk for " + esp_dev)
+    if sb_setup(root, esp, "/dev/" + info["pkname"], partnum(esp_dev), enroll=False):
+        conf = load_conf(root)
+        conf["SB"] = "1"
+        conf["SB_MOK"] = "enrolled" if sb_enrolled(root) else sb_enroll(root)
+        if not DRY:
+            save_conf(conf, root)
+        res.update(sb=True, sb_mok=conf["SB_MOK"])
+        log("sb-install: Secure Boot chain installed, DelayOS general CA: %s" % conf["SB_MOK"])
+    print(json.dumps(res, ensure_ascii=False))
+    return 0
 
 
 # ---- stage 2 -------------------------------------------------------------------------------------
@@ -911,14 +1140,46 @@ def find_local_iso():
     return hits[0] if hits else ""
 
 
+def published_hashes():
+    """Every SHA-256 on Microsoft's Windows 11 download page (all languages), or an empty set."""
+    try:
+        page = MsDownload().get(MsDownload.PAGE, timeout=20)
+        return set(h.lower() for h in re.findall(r"<td[^>]*>\s*([A-Fa-f0-9]{64})\s*</td>", page))
+    except Exception as e:  # noqa
+        log("Microsoft hash list not available: %s" % e)
+        return set()
+
+
+def local_iso_verified(path, p0, p1):
+    """A local ISO needs no Microsoft SHA-256. It is still compared with the published list when that
+    is possible: a match means "official, unmodified" (and the gaming cleanup applies by default)."""
+    if not os.path.isfile(path):
+        return False            # optical drive / folder: nothing to hash
+    known = published_hashes()
+    if not known:
+        return False
+    progress(p0, "지정한 ISO 파일을 확인하는 중 (SHA-256)…")
+    got = sha256_file(path, lambda a_, b_: progress(p0 + (p1 - p0) * a_ / b_, "지정한 ISO 파일을 확인하는 중 (SHA-256)…"))
+    ok = got in known
+    log("local ISO sha256 %s: %s" % (got, "matches a value Microsoft publishes" if ok else "not in Microsoft's published list"))
+    return ok
+
+
 def obtain_iso(root, iso_arg, p0, p1):
-    """Returns (iso path, downloaded?). Downloads only from Microsoft."""
+    """Returns (source, downloaded?, verified?). source is an ISO file, or for a local source also an
+    optical drive (/dev/sr1) or a folder with the contents of the medium. Downloads only from
+    Microsoft; a local source is used as it is (no SHA-256 is required, see local_iso_verified)."""
     span = p1 - p0
     if iso_arg:
-        if not os.path.isfile(iso_arg):
+        iso_arg = os.path.realpath(os.path.expanduser(iso_arg))
+        if os.path.isdir(iso_arg):
+            if not find_ci(iso_arg, "sources"):
+                raise Fail("iso", detail="%s has no 'sources' folder" % iso_arg)
+        elif not (os.path.isfile(iso_arg) or (os.path.exists(iso_arg) and iso_arg.startswith("/dev/"))):
             raise Fail("iso", detail=iso_arg)
-        log("using the ISO given by the user: " + iso_arg)
-        return iso_arg, False
+        log("using the Windows medium given by the user: " + iso_arg)
+        verified = False if DRY else local_iso_verified(iso_arg, p0, p0 + span * 0.5)
+        return iso_arg, False, verified
     cache = os.path.join(root, "var/cache/delayos/winsetup")
     dest = os.path.join(cache, "windows.iso")
     if DRY:
@@ -928,7 +1189,7 @@ def obtain_iso(root, iso_arg, p0, p1):
             log("would download %s (sha256 %s)" % (url.split("?")[0], sha or "not published"))
         except Fail as e:
             log("download link could not be resolved in dry-run: %s" % e.detail)
-        return dest, True
+        return dest, True, True
     os.makedirs(cache, exist_ok=True)
     d = MsDownload()
     progress(p0, "Microsoft에서 Windows 11 다운로드 주소를 확인하는 중…")
@@ -938,7 +1199,7 @@ def obtain_iso(root, iso_arg, p0, p1):
         local = find_local_iso()
         if local:
             log("download API failed, using local ISO " + local)
-            return local, False
+            return local, False, local_iso_verified(local, p0, p0 + span * 0.5)
         raise
     st = os.statvfs(cache)
     if st.f_bavail * st.f_frsize < 9 * GIB:
@@ -959,39 +1220,139 @@ def obtain_iso(root, iso_arg, p0, p1):
     else:
         log("Microsoft did not publish a SHA-256 for this download in the page; size %d, TLS download from %s"
             % (size, urllib.parse.urlparse(url).hostname))
-    return dest, True
+    return dest, True, True
 
 
-def fill_staging(iso, stg_dev, win_dev, st, edition, key, p0, p1):
-    """ISO -> staging partition (boot files, boot.wim, split install.wim) + unattended payload."""
+class IsoSource:
+    """The Windows medium, mounted read-only: an ISO file (loop), an optical drive / USB partition,
+    or a folder that already holds the files."""
+    def __init__(self, src):
+        self.src, self.m = src, None
+
+    def __enter__(self):
+        if os.path.isdir(self.src):
+            return self.src
+        opts = "ro" if self.src.startswith("/dev/") else "loop,ro"
+        try:
+            self.m = Mount(self.src, "udf", opts)
+            return self.m.__enter__()
+        except Fail:
+            self.m = Mount(self.src, None, opts)
+            return self.m.__enter__()
+
+    def __exit__(self, *a):
+        if self.m:
+            self.m.__exit__()
+        return False
+
+
+# Answer files inside an image that Windows Setup would read (some of them before ours)
+IMAGE_ANSWER_FILES = ("Windows/Panther/Unattend/Unattend.xml", "Windows/Panther/Unattend/Autounattend.xml",
+                      "Windows/Panther/Unattend.xml", "Windows/System32/Sysprep/Unattend.xml", "Unattend.xml", "Autounattend.xml")
+
+
+def inspect_medium(im, inst, image):
+    """What a (custom) medium brings along. Nothing of it stops the installation; it is logged, and the
+    WinPE script sets the image's own answer files aside so that the DelayOS answer file is the one
+    Windows uses. Returns a list of short notes."""
+    notes = []
+    for f in ("autounattend.xml", "unattend.xml"):
+        if find_ci(im, f):
+            notes.append("medium has its own %s (not used: DelayOS does not run Windows Setup)" % f)
+    if find_ci(im, "sources/$OEM$"):
+        notes.append("medium has sources/$OEM$ (not copied)")
+    if not find_ci(im, "sources/setup.exe") and not find_ci(im, "setup.exe"):
+        notes.append("medium has no setup.exe (rebuilt medium)")
+    for f in IMAGE_ANSWER_FILES:
+        if wim_has(inst, image["index"], "/" + f):
+            notes.append("image has its own answer file %s (set aside at install time)" % f)
+    for f, what in (("Windows/Setup/Scripts/SetupComplete.cmd", "its own SetupComplete.cmd (still runs, before the first logon)"),
+                    ("Windows/Setup/Scripts/OOBE.cmd", "its own OOBE.cmd (still runs)")):
+        if wim_has(inst, image["index"], "/" + f):
+            notes.append("image has " + what)
+    for f, what in (("Windows/System32/SecurityHealthService.exe", "Windows Security"), ("Program Files/Windows Defender/MsMpEng.exe", "Microsoft Defender"),
+                    ("Windows/System32/wuaueng.dll", "Windows Update"), ("Windows/System32/WindowsPowerShell/v1.0/Modules/ScheduledTasks", "the ScheduledTasks PowerShell module")):
+        if wim_has(inst, image["index"], "/" + f) is False:
+            notes.append("image has no " + what)
+    return notes
+
+
+def run_progress(cmd, watch, total, cb):
+    """Run a wimlib command; cb(bytes written so far, total) every two seconds. watch() -> bytes."""
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+    while proc.poll() is None:
+        time.sleep(2)
+        try:
+            cb(min(watch(), total), total)
+        except OSError:
+            pass
+    tail = (proc.stdout.read() or "")[-400:]
+    if proc.returncode != 0:
+        raise Fail("internal", detail="%s: %s" % (" ".join(cmd[:2]), tail))
+
+
+def fill_staging(iso, stg_dev, win_dev, st, edition, key, opts, p0, p1):
+    """Windows medium -> staging partition (boot files, boot.wim, install image) + unattended payload.
+    opts: index, image_name (explicit image choice), cleanup ("auto"/"on"/"off"), verified (the medium
+    is an unmodified Microsoft ISO), cache (folder on the DelayOS root for temporary files).
+    Returns {image, edition, cleanup, notes}."""
     span = p1 - p0
     nonce = st["nonce"]
+    verified = bool(opts.get("verified"))
+    # gaming cleanup: by default only for an unmodified Microsoft image; a custom image is already
+    # the way its author wants it
+    cleanup = opts.get("cleanup") == "on" or (opts.get("cleanup", "auto") == "auto" and verified)
+    info = {"image": {}, "edition": edition, "cleanup": cleanup, "notes": []}
     if DRY:
-        log("would extract %s to %s, add the unattended files (edition %s) and mark %s" % (iso, stg_dev, edition, win_dev))
-        return
+        log("would extract %s to %s, add the unattended files (edition %s, gaming cleanup %s) and mark %s"
+            % (iso, stg_dev, edition, "on" if cleanup else "off", win_dev))
+        return info
     run(["wipefs", "-a", stg_dev], mutate=True)
     run(["mkfs.vfat", "-F", "32", "-n", "DELAYWINSET", stg_dev], mutate=True, check=True)
-    try:
-        isom = Mount(iso, "udf", "loop,ro")
-        im = isom.__enter__()
-    except Fail:
-        isom = Mount(iso, None, "loop,ro")
-        im = isom.__enter__()
+    medium = IsoSource(iso)
+    im = medium.__enter__()
+    tmp_wim = ""
     try:
         boot_wim = find_ci(im, "sources/boot.wim")
-        inst = find_ci(im, "sources/install.wim") or find_ci(im, "sources/install.esd")
+        sdir = find_ci(im, "sources")
+        inst = find_ci(im, "sources/install.wim") or find_ci(im, "sources/install.esd") or find_ci(im, "sources/install.swm")
         if not boot_wim or not inst or not find_ci(im, "efi/boot/bootx64.efi"):
-            raise Fail("iso", detail="no sources/boot.wim, install.wim or efi/boot/bootx64.efi")
-        eds = wim_editions(inst)
-        index = eds.get(EDITION_IDS[edition])
-        log("editions in the ISO: %s" % eds)
-        if not index:
-            raise Fail("edition", detail=str(eds))
+            raise Fail("iso", detail="no sources/boot.wim, sources/install.wim|esd|swm or efi/boot/bootx64.efi")
+        kind = inst.lower().rsplit(".", 1)[-1]
+        parts = [inst]
+        if kind == "swm":       # already split by whoever made the medium: install.swm, install2.swm, ...
+            parts = sorted(os.path.join(sdir, f) for f in os.listdir(sdir) if re.match(r"(?i)^install\d*\.swm$", f))
+        images = wim_images(inst)
+        log("images on the medium (%s): %s" % (os.path.basename(inst), "; ".join(image_label(i) for i in images) or "none"))
+        image, how = select_image(images, edition, int(opts.get("index") or 0), opts.get("image_name") or "")
+        index = image["index"]
+        log("installing image %s (chosen by: %s; build %s, language %s)" % (image_label(image), how, image["build"] or "?", image["lang"] or "?"))
+        if image["arch"] not in ("", "9"):
+            raise Fail("iso_arch", detail="ARCH=%s" % image["arch"])
+        if kind != "swm":
+            if wim_has(inst, index, "/Windows/System32/WindowsPowerShell/v1.0/powershell.exe") is False:
+                raise Fail("iso_nops")
+            info["notes"] = inspect_medium(im, inst, image)
+            for n in info["notes"]:
+                log("medium: " + n)
+        info["image"] = image
+        # the edition that is really installed decides the generic installation key (none for other editions)
+        real = image["edition"] or image.get("flags", "")
+        info["edition"] = {v: k for k, v in EDITION_IDS.items()}.get(real, real or "custom")
+        if info["edition"] != edition:
+            log("the image is edition '%s', not the requested '%s'" % (info["edition"], edition))
         with Mount(stg_dev, "vfat", "rw,utf8") as sm:
             fs = os.statvfs(sm)
-            need = os.path.getsize(boot_wim) + os.path.getsize(inst) + 300 * MIB
-            if fs.f_bavail * fs.f_frsize < need:
-                raise Fail("stage_small", detail="need %d MiB" % (need // MIB))
+            free = fs.f_bavail * fs.f_frsize
+            isize = sum(os.path.getsize(p) for p in parts)
+            need = os.path.getsize(boot_wim) + isize + 300 * MIB
+            if free < need and kind != "swm" and len(images) > 1:
+                need = os.path.getsize(boot_wim) + isize // 2 + 300 * MIB      # only one image will be exported
+                kind_export = True
+            else:
+                kind_export = False
+            if free < need:
+                raise Fail("stage_small", detail="need %d MiB, have %d MiB" % (need // MIB, free // MIB))
             progress(p0, "Windows 설치 파일을 준비하는 중…")
             for d in ("efi", "boot"):
                 src = find_ci(im, d)
@@ -1004,34 +1365,64 @@ def fill_staging(iso, stg_dev, win_dev, st, edition, key, p0, p1):
             os.makedirs(os.path.join(sm, "sources"), exist_ok=True)
             bw = os.path.join(sm, "sources", "boot.wim")
             copy_progress(boot_wim, bw, lambda a_, b_: progress(p0 + span * 0.12 * a_ / b_, "Windows 설치 파일을 준비하는 중…"))
-            isize = os.path.getsize(inst)
-            if inst.lower().endswith(".wim") and isize > 3800 * MIB:
+            ssrc = os.path.join(sm, "sources")
+            img_msg = lambda a_, b_: progress(p0 + span * (0.12 + 0.75 * (a_ / b_ if b_ else 0)),
+                                              "Windows 이미지를 복사하는 중… %.1f / %.1f GB" % (a_ / GIB, b_ / GIB))
+            swm_size = lambda: sum(os.path.getsize(os.path.join(ssrc, f)) for f in os.listdir(ssrc) if f.lower().endswith(".swm"))
+            # FAT32 holds files below 4 GiB only. A big install.wim is split; a big install.esd (solid
+            # compression, cannot be split) or a medium that does not fit is first reduced to the one
+            # image that is installed (temporary file on the DelayOS root).
+            if kind != "swm" and (kind_export or (kind == "esd" and isize > 3800 * MIB)):
+                cache = opts.get("cache") or RUN
+                os.makedirs(cache, exist_ok=True)
+                cs = os.statvfs(cache)
+                if cs.f_bavail * cs.f_frsize < isize * (2 if kind == "esd" else 1) + GIB:
+                    raise Fail("space", detail="temporary export of the image")
+                tmp_wim = os.path.join(cache, "install-export.wim")
+                remove_file(tmp_wim)
+                log("exporting image %d of %s to a temporary WIM" % (index, os.path.basename(inst)))
+                cmd = ["wimlib-imagex", "export", inst, str(index), tmp_wim] + (["--compress=LZX"] if kind == "esd" else [])
+                run_progress(cmd, lambda: os.path.getsize(tmp_wim) if os.path.exists(tmp_wim) else 0, isize,
+                             lambda a_, b_: progress(p0 + span * (0.12 + 0.35 * a_ / b_), "Windows 이미지를 변환하는 중… (몇 분 걸릴 수 있습니다)"))
+                inst, kind, index, isize, parts = tmp_wim, "wim", 1, os.path.getsize(tmp_wim), [tmp_wim]
+                if os.path.getsize(boot_wim) + isize + 300 * MIB > free:
+                    raise Fail("stage_small", detail="exported image %d MiB" % (isize // MIB))
+            if kind == "swm":
                 wimfile, swm = "install.swm", "/SWMFile:%STG%:\\sources\\install*.swm"
-                proc = subprocess.Popen(["wimlib-imagex", "split", inst, os.path.join(sm, "sources", "install.swm"), "3800"],
-                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
-                tail = ""
-                while proc.poll() is None:
-                    time.sleep(2)
-                    done = sum(os.path.getsize(os.path.join(sm, "sources", f)) for f in os.listdir(os.path.join(sm, "sources")) if f.lower().endswith(".swm"))
-                    progress(p0 + span * (0.12 + 0.75 * min(1.0, done / isize)), "Windows 이미지를 복사하는 중… %.1f / %.1f GB" % (done / GIB, isize / GIB))
-                tail = (proc.stdout.read() or "")[-400:]
-                if proc.returncode != 0:
-                    raise Fail("internal", detail="wimlib split: " + tail)
+                done = 0
+                for p in parts:
+                    copy_progress(p, os.path.join(ssrc, os.path.basename(p).lower()), lambda a_, b_, d=done: img_msg(d + a_, isize))
+                    done += os.path.getsize(p)
+            elif kind == "wim" and isize > 3800 * MIB:
+                wimfile, swm = "install.swm", "/SWMFile:%STG%:\\sources\\install*.swm"
+                run_progress(["wimlib-imagex", "split", inst, os.path.join(ssrc, "install.swm"), "3800"], swm_size, isize, img_msg)
             else:
-                wimfile, swm = os.path.basename(inst).lower(), ""
-                copy_progress(inst, os.path.join(sm, "sources", wimfile),
-                              lambda a_, b_: progress(p0 + span * (0.12 + 0.75 * a_ / b_), "Windows 이미지를 복사하는 중… %.1f / %.1f GB" % (a_ / GIB, b_ / GIB)))
+                wimfile, swm = "install." + kind, ""
+                copy_progress(inst, os.path.join(ssrc, wimfile), img_msg)
             progress(p0 + span * 0.88, "자동 설치를 구성하는 중…")
             # payload that WinPE copies to C:\ProgramData\DelayOS\winsetup
             dd = os.path.join(sm, "delayos")
             pay = os.path.join(dd, "payload")
             os.makedirs(os.path.join(pay, "helper"), exist_ok=True)
             write_file(os.path.join(dd, "staging.tag"), nonce + "\r\n")
-            sub = {"NONCE": nonce, "INDEX": index, "WIMFILE": wimfile, "SWM": swm, "GENERIC_KEY": GENERIC_KEYS[edition]}
+            # Microsoft's generic installation key only when it is the key of the edition that is really
+            # installed: a key for another edition makes the "specialize" pass fail. No key = the image
+            # keeps whatever it has (custom images, other editions).
+            # An image whose metadata has no EDITIONID (rebuilt image) gets no key either.
+            gkey = GENERIC_KEYS.get(info["edition"], "") if image["edition"] else ""
+            log("answer file: " + ("generic installation key for edition " + info["edition"] if gkey else "no product key (the image keeps its own)"))
+            sub = {"NONCE": nonce, "INDEX": index, "WIMFILE": wimfile, "SWM": swm,
+                   "PRODUCT_KEY": "<ProductKey>%s</ProductKey>" % gkey if gkey else "<!-- no generic key for this edition -->"}
             write_file(os.path.join(dd, "install.cmd"), template("install.cmd.in", sub, encoding="cp949"))
             write_file(os.path.join(dd, "unattend.xml"), template("unattend.xml.in", sub, encoding="utf-8"))
             write_file(os.path.join(pay, "specialize.cmd"), template("specialize.cmd"))
             write_file(os.path.join(pay, "finish.ps1"), template("finish.ps1"))
+            # gaming cleanup: the script is always there (report / undo / applying it later by hand);
+            # the marker file decides whether the unattended setup runs it
+            write_file(os.path.join(pay, "cleanup.ps1"), template("cleanup.ps1"))
+            write_file(os.path.join(pay, "cleanup-undo.cmd"), template("cleanup-undo.cmd"))
+            if cleanup:
+                write_file(os.path.join(pay, "cleanup.on"), "1\r\n")
             if key:
                 write_file(os.path.join(pay, "productkey.txt"), key + "\r\n")
             for f in os.listdir(HELPER_SRC):
@@ -1047,18 +1438,25 @@ def fill_staging(iso, stg_dev, win_dev, st, edition, key, p0, p1):
                 for name, (dst, data) in files.items():
                     write_file(os.path.join(tmp, name), data)
                     cmds += "add '%s' '%s'\n" % (os.path.join(tmp, name), dst)
-                run(["wimlib-imagex", "update", bw, str(wim_boot_index(bw))], mutate=True, check=True, stdin=cmds, timeout=900)
+                bidx = wim_boot_index(bw)
+                takeover = pe_shell_takeover(bw, bidx, tmp)
+                if takeover:
+                    info["notes"].append("the medium starts its own installer in Windows PE: bypassed (DelayOS script runs instead)")
+                run(["wimlib-imagex", "update", bw, str(bidx)], mutate=True, check=True, stdin=cmds + takeover, timeout=900)
             finally:
                 shutil.rmtree(tmp, ignore_errors=True)
             progress(p0 + span * 0.95, "자동 설치를 구성하는 중…")
     finally:
-        isom.__exit__()
+        medium.__exit__()
+        if tmp_wim:
+            remove_file(tmp_wim)
     # the Windows partition: an empty FAT32 volume that only carries our marker, so WinPE finds exactly
     # this volume; WinPE then formats it as NTFS itself (no NTFS tools needed on the DelayOS side)
     run(["wipefs", "-a", win_dev], mutate=True)
     run(["mkfs.vfat", "-F", "32", "-n", "DELAYOSWIN", win_dev], mutate=True, check=True, timeout=900)
     with Mount(win_dev, "vfat", "rw") as wm:
         write_file(os.path.join(wm, "DelayOS-WinTarget.tag"), nonce + "\r\n")
+    return info
 
 
 def arm_esp(esp, st):
@@ -1092,7 +1490,9 @@ def copy_log(esp_dir):
         pass
 
 
-def do_stage(root, st, edition, key, iso_arg, win_gb):
+def do_stage(root, st, edition, key, iso_arg, win_gb, opts=None):
+    """opts: index / image_name (which image of the medium), cleanup "auto" (default) / "on" / "off"."""
+    opts = dict(opts or {})
     need_tools("wimlib-imagex", "mkfs.vfat", "efibootmgr")
     disk = st["disk"]
     stg_dev = verify_part(st.get("stage_partuuid"), STG_NAME, disk)
@@ -1111,12 +1511,24 @@ def do_stage(root, st, edition, key, iso_arg, win_gb):
                 STAGE_GB=str(STAGE_GB), RECLAIM=conf.get("RECLAIM", "grow-root"), CREATED=str(int(time.time())),
                 SB=conf.get("SB", "0"), USER_KEY="1" if key else "0")
     save_conf(conf, root)
-    iso, downloaded = obtain_iso(root, iso_arg, 0.02, 0.62)
+    iso, downloaded, verified = obtain_iso(root, iso_arg, 0.02, 0.62)
+    opts.update(verified=verified, cache=os.path.join(root, "var/cache/delayos/winsetup"))
     try:
-        fill_staging(iso, stg_dev, win_dev, st, edition, key, 0.62, 0.93)
+        info = fill_staging(iso, stg_dev, win_dev, st, edition, key, opts, 0.62, 0.93)
     finally:
         if downloaded and not DRY:
             remove_file(iso)
+    image = info.get("image") or {}
+    edition = info.get("edition") or edition
+    conf.update(EDITION=edition, ISO_SOURCE="download" if downloaded else ("local-official" if verified else "local-unverified"),
+                CLEANUP="1" if info.get("cleanup") else "0", IMAGE_INDEX=str(image.get("index", "")),
+                IMAGE_NAME=(image.get("name") or image.get("display") or "")[:80], IMAGE_BUILD=image.get("build", ""))
+    if not downloaded and not verified:
+        log("WARNING: the Windows medium given by the user is not a file Microsoft publishes a SHA-256 for "
+            "(custom or modified image, or no internet to compare): used as it is, without verification")
+        print("WARNING " + MSG["iso_unverified"], flush=True)
+    log("gaming cleanup: %s (%s)" % ("on" if info.get("cleanup") else "off",
+                                     {"on": "asked for", "off": "switched off"}.get(opts.get("cleanup"), "automatic: on for an unmodified Microsoft image only")))
     progress(0.94, "부팅 항목을 준비하는 중…")
     conf["STAGE_FSUUID"] = blkid(stg_dev, "UUID") if not DRY else ""
     esp_dir = arm_esp(esp, st)
@@ -1138,7 +1550,9 @@ def do_stage(root, st, edition, key, iso_arg, win_gb):
             # the MOK request is queued by "finalize" when Windows is ready (see sb_setup)
             if sb_setup(root, esp, disk, partnum(esp_dev), enroll=False):
                 conf["SB"] = "1"
-                conf["SB_MOK"] = "wanted"
+                # installed from the Secure Boot live medium: the CA is this PC's MOK already
+                # (docs/secure-boot.md), so nothing is queued later and no blue screen follows
+                conf["SB_MOK"] = "enrolled" if sb_enrolled(root) else "wanted"
         except Exception as e:  # noqa
             log("sb setup failed: %s" % e)
     conf["STATE"] = "pending"
@@ -1147,7 +1561,8 @@ def do_stage(root, st, edition, key, iso_arg, win_gb):
     num = create_setup_entry(disk, st["stage_n"])
     conf["SETUP_BOOTNUM"] = num
     save_conf(conf, root)
-    log("stage finished: Windows setup armed (Boot%s), edition %s, Secure Boot chain %s" % (num, edition, conf["SB"]))
+    log("stage finished: Windows setup armed (Boot%s), edition %s, source %s, gaming cleanup %s, Secure Boot chain %s"
+        % (num, edition, conf["ISO_SOURCE"], conf["CLEANUP"], conf["SB"]))
     copy_log(esp_dir)
     progress(1.0, "Windows 게임 지원 준비 완료")
     return conf
@@ -1195,12 +1610,20 @@ def cmd_stage(a):
             log("the product key has the wrong format and is ignored")
             key = ""
     try:
-        conf = do_stage(root, st, edition, key, a.iso or "", st.get("win_gb", MIN_WIN_GB))
+        conf = do_stage(root, st, edition, key, a.iso or "", st.get("win_gb", MIN_WIN_GB), image_opts(a))
     except Exception as e:  # noqa
         mark_failed(root, e)
         raise
-    print(json.dumps({"ok": True, "sb": conf.get("SB") == "1", "secure_boot": secure_boot()}, ensure_ascii=False))
+    unverified = conf.get("ISO_SOURCE") == "local-unverified"
+    print(json.dumps({"ok": True, "sb": conf.get("SB") == "1", "sb_mok": conf.get("SB_MOK", ""), "secure_boot": secure_boot(), "iso_source": conf.get("ISO_SOURCE", ""),
+                      "cleanup": conf.get("CLEANUP") == "1", "edition": conf.get("EDITION", ""), "image": conf.get("IMAGE_NAME", ""),
+                      "warning": MSG["iso_unverified"] if unverified else ""}, ensure_ascii=False))
     return 0
+
+
+def image_opts(a):
+    return {"index": getattr(a, "index", 0) or 0, "image_name": getattr(a, "image_name", "") or "",
+            "cleanup": getattr(a, "cleanup", "auto") or "auto"}
 
 
 # ---- installed system ------------------------------------------------------------------------------
@@ -1414,7 +1837,9 @@ def cmd_finalize(a):
             remove_file(os.path.join(d, f))
         hide_from_loaders()
         conf.update(STATE="done", REASON="", ACTIVATED="1" if s["done"].get("activated") else "0",
-                    HVCI="1" if s["done"].get("hvci") else "0", FINISHED=str(int(time.time())))
+                    HVCI="1" if s["done"].get("hvci") else "0", FINISHED=str(int(time.time())),
+                    CLEANUP_DONE="1" if s["done"].get("cleanup") else "0",
+                    WIN_SKIPPED=",".join(str(x) for x in (s["done"].get("skipped") or []))[:200])
         save_conf(conf)
         grub_mkconfig("/")
         copy_log(d)
@@ -1464,10 +1889,13 @@ def cmd_retry(a):
         key = read_text(a.key_file).strip().upper()
     os.makedirs(RUN, 0o755, exist_ok=True)
     try:
-        do_stage("/", st, a.edition or conf.get("EDITION", "home"), key if KEY_RE.match(key) else "", a.iso or "", st["win_gb"])
+        conf = do_stage("/", st, a.edition or conf.get("EDITION", "home"), key if KEY_RE.match(key) else "", a.iso or "", st["win_gb"], image_opts(a))
     except Exception as e:  # noqa
         mark_failed("/", e)
         raise
+    print("설치할 Windows: %s (%s), 게이밍 정리: %s" % (conf.get("IMAGE_NAME") or conf.get("EDITION", ""),
+          {"download": "Microsoft에서 받음", "local-official": "직접 지정한 ISO, Microsoft 공식 파일로 확인됨",
+           "local-unverified": "직접 지정한 ISO, 확인하지 않음"}.get(conf.get("ISO_SOURCE"), ""), "적용" if conf.get("CLEANUP") == "1" else "건너뜀"))
     print("준비가 끝났습니다. 컴퓨터를 다시 시작하면 Windows 게임 지원 설치가 자동으로 진행됩니다 (약 20~40분).")
     return 0
 
@@ -1513,7 +1941,9 @@ def status():
     st = {"enabled": conf.get("ENABLED") == "1", "state": conf.get("STATE", "none"), "reason": conf.get("REASON", ""),
           "edition": conf.get("EDITION", ""), "win_gb": conf.get("WIN_GB", ""), "secure_boot": secure_boot(),
           "sb_chain": conf.get("SB") == "1", "sb_build": sb_available(), "activated": conf.get("ACTIVATED", ""),
-          "hvci": conf.get("HVCI", ""), "tpm": tpm_facts(), "log": LOG}
+          "hvci": conf.get("HVCI", ""), "tpm": tpm_facts(), "log": LOG,
+          "iso_source": conf.get("ISO_SOURCE", ""), "image": conf.get("IMAGE_NAME", ""),
+          "cleanup": conf.get("CLEANUP_DONE", conf.get("CLEANUP", "")), "skipped": conf.get("WIN_SKIPPED", "")}
     text = {"none": "설치되지 않음", "preparing": "준비 중 중단됨", "pending": "다시 시작하면 Windows 설치가 진행됩니다",
             "done": "사용 가능", "failed": "설치 실패 (다시 시도하거나 제거할 수 있습니다)", "removed": "제거됨"}
     st["summary"] = text.get(st["state"], st["state"])
@@ -1528,6 +1958,11 @@ def cmd_status(a):
         print("Windows 게임 지원: %s" % st["summary"])
         if st["state"] == "done":
             print("  Windows 정품 인증: %s" % ("완료" if st["activated"] == "1" else "안 됨 (인터넷 연결 후 자동 인증되거나, Windows 설정에서 제품 키를 입력하세요)"))
+            print("  게이밍 정리: %s" % ("적용됨 (되돌리기: Windows의 C:\\ProgramData\\DelayOS\\winsetup\\cleanup-undo.cmd)" if st["cleanup"] == "1" else "적용 안 함"))
+        if st["iso_source"] == "local-unverified":
+            print("  직접 지정한 Windows ISO를 확인 없이 사용했습니다%s." % (" (%s)" % st["image"] if st["image"] else ""))
+        if st["skipped"]:
+            print("  Windows 이미지에 없어서 건너뛴 단계: %s" % st["skipped"])
         if st["secure_boot"] is False:
             print("  Secure Boot가 꺼져 있습니다. 발로란트(Vanguard)는 Windows 11에서 Secure Boot가 켜져 있어야 실행됩니다.")
     return 0
@@ -1590,14 +2025,22 @@ def main(argv):
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("probe"); p.add_argument("--write", action="store_true"); p.set_defaults(fn=cmd_probe, need_root=False)
     p = sub.add_parser("parts"); p.add_argument("--root-dev", required=True); p.add_argument("--win-gb", type=int, default=100); p.set_defaults(fn=cmd_parts, need_root=True)
-    p = sub.add_parser("stage"); p.add_argument("--root", required=True); p.add_argument("--iso"); p.add_argument("--edition", default="home"); p.add_argument("--key-file"); p.set_defaults(fn=cmd_stage, need_root=True)
+    def image_args(p):
+        p.add_argument("--iso", help="Windows ISO file, optical drive (/dev/sr1) or folder with the medium; without it: download from Microsoft")
+        p.add_argument("--index", type=int, default=0, help="image number inside install.wim/esd (custom ISO)")
+        p.add_argument("--image-name", default="", help="image name inside install.wim/esd (custom ISO)")
+        p.add_argument("--cleanup", choices=("auto", "on", "off"), default="auto",
+                       help="gaming cleanup: auto = only for an unmodified Microsoft image")
+        p.add_argument("--key-file")
+    p = sub.add_parser("stage"); p.add_argument("--root", required=True); p.add_argument("--edition", default="home"); image_args(p); p.set_defaults(fn=cmd_stage, need_root=True)
     p = sub.add_parser("finalize"); p.set_defaults(fn=cmd_finalize, need_root=True)
-    p = sub.add_parser("retry"); p.add_argument("--iso"); p.add_argument("--edition"); p.add_argument("--key-file"); p.set_defaults(fn=cmd_retry, need_root=True)
+    p = sub.add_parser("retry"); p.add_argument("--edition"); image_args(p); p.set_defaults(fn=cmd_retry, need_root=True)
     p = sub.add_parser("remove"); p.set_defaults(fn=cmd_remove, need_root=True)
     p = sub.add_parser("status"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_status, need_root=False)
     p = sub.add_parser("session-notify"); p.set_defaults(fn=cmd_session_notify, need_root=False)
     p = sub.add_parser("sb-setup"); p.set_defaults(fn=cmd_sb_setup, need_root=True)
     p = sub.add_parser("sb-kernel"); p.set_defaults(fn=cmd_sb_kernel, need_root=True)
+    p = sub.add_parser("sb-install"); p.add_argument("--root", required=True); p.add_argument("--force", action="store_true"); p.set_defaults(fn=cmd_sb_install, need_root=True)
     p = sub.add_parser("iso-url"); p.add_argument("--language", default="Korean"); p.set_defaults(fn=cmd_iso_url, need_root=False)
     a = ap.parse_args(argv)
     DRY = a.dry_run

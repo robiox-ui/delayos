@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_notifications.desktop: opens DelayOS Settings.
+Type=Application
+Name=Notifications
+Name[ko]=알림
+Icon=delayos-settings
+Exec=delay-settings notifications
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

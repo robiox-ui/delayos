@@ -1,0 +1,28 @@
+# DelayOS desktop menu plugin (Plasma containment action org.delayos.desktopmenu), built from src/.
+#
+# The ISO currently ships a prebuilt copy of this plugin inside delayos-shell
+# (profile/airootfs/usr/lib/qt6/plugins/plasma/containmentactions/org.delayos.desktopmenu.so, made
+# with src/build-manual.sh on the live system). The plugin links libPlasma/libPlasmaQuick: when
+# their soname changes it must be rebuilt, which is what this package is for
+# (tools/repo-build.sh local:delayos-desktopmenu). When it goes into the [delayos] repository, remove the
+# prebuilt file from profile/airootfs and from packages/delayos-shell/files.list (same path) and make
+# delayos-shell depend on this package.
+# The menu itself is QML in delayos-shell: /usr/share/delayos/shell/desktopmenu/DesktopMenu.qml.
+pkgname=delayos-desktopmenu
+pkgver=1.0
+pkgrel=1
+pkgdesc='DelayOS 바탕 화면 우클릭 메뉴: Plasma containment action that opens the DelayOS glass menu'
+arch=('x86_64')
+url='https://github.com/robiox-ui/delayos'
+license=('GPL-2.0-or-later')
+depends=('libplasma' 'qt6-declarative' 'kcoreaddons')
+makedepends=('cmake' 'extra-cmake-modules')
+
+build() {
+    cmake -B build -S "$startdir/src" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+    cmake --build build
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_updates.desktop: opens DelayOS Settings.
+Type=Application
+Name=Update & Drivers
+Name[ko]=업데이트 및 드라이버
+Icon=delayos-settings
+Exec=delay-settings update
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

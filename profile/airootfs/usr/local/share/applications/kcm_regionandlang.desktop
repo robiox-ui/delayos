@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_regionandlang.desktop: opens DelayOS Settings.
+Type=Application
+Name=Language & Region
+Name[ko]=언어 및 지역
+Icon=delayos-settings
+Exec=delay-settings "time#lang"
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

@@ -1,0 +1,11 @@
+[Desktop Entry]
+# DelayOS override of /usr/share/applications/kcm_nightlight.desktop: opens DelayOS Settings.
+Type=Application
+Name=Night Light
+Name[ko]=야간 모드
+Icon=delayos-settings
+Exec=delay-settings "display#d-night"
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.delayos.Settings
+NoDisplay=true

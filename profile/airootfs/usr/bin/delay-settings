@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 # DelayOS 설정 (org.delayos.Settings). Usage: delay-settings [page[#rowkey]]  e.g. delay-settings personalisation
-import sys
+import os, sys
+# rows like "추가 디스플레이 설정" open the KDE module itself: skip the kcm -> DelayOS Settings routing
+# of /usr/local/bin/{kcmshell6,systemsettings} for everything started from here
+os.environ["DELAY_KCM_DIRECT"] = "1"
 sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/settings"]
 from syskit import run_app, single_instance
 if single_instance("org.delayos.Settings", sys.argv[1:]):
