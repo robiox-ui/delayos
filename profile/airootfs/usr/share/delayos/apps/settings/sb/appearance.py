@@ -103,6 +103,11 @@ def _apply_scheme(name, hexcol):
     # make the accent explicit for everything that reads kdeglobals (DelayUI Theme, shell plasmoids, our apps)
     kwrite("kdeglobals", "General", "AccentColor", "%d,%d,%d" % _hex_rgb(hexcol))
     kwrite("kdeglobals", "General", "LastUsedCustomAccentColor", "%d,%d,%d" % _hex_rgb(hexcol))
+    # plasmashell reloads its palette on plasma-apply-colorscheme's own notification, which reaches it
+    # before the new colours are in kdeglobals: the dock / top bar then showed the previous accent
+    # (always one change behind). Announce the palette once more now that everything is written.
+    sh(["dbus-send", "--session", "--type=signal", "/KGlobalSettings",
+        "org.kde.KGlobalSettings.notifyChange", "int32:0", "int32:0"], 5)
     return True
 
 

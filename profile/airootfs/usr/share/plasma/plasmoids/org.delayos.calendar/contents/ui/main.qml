@@ -20,8 +20,16 @@ PlasmoidItem {
     function place() {
         const g = geo.r, cal = lazy.get()
         cal.posX = Math.round(g.x + g.width - Metrics.edgeMargin - cal.panelWidth)
-        cal.posY = Math.round(g.y + Metrics.popupTop)
+        // taskbar layout (panel at the bottom): sit above the taskbar instead of under the top bar
+        cal.posY = bottomBar ? Math.round(g.y + g.height - Metrics.taskbarTop - cal.panelHeight)
+                             : Math.round(g.y + Metrics.popupTop)
         return cal
+    }
+    readonly property bool bottomBar: Plasmoid.location === PlasmaCore.Types.BottomEdge
+    Connections {
+        target: lazy.item
+        enabled: root.bottomBar
+        function onPanelHeightChanged() { root.place() }
     }
     function toggle() { place().toggle() }
 

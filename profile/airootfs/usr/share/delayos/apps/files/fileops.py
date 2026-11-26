@@ -27,6 +27,14 @@ def unique_name(dirpath, name):
         n += 1
 
 
+def copy_name(dirpath, name):
+    """Duplicate in the same folder: 'a.txt' -> 'a - 복사본.txt', then 'a - 복사본 (2).txt'."""
+    base, ext = os.path.splitext(name)
+    if base.endswith(".tar"):
+        base, ext = base[:-4], ".tar" + ext
+    return unique_name(dirpath, "%s - 복사본%s" % (base, ext))
+
+
 def copy_into(src, dstdir, progress=None):
     name = unique_name(dstdir, os.path.basename(src.rstrip("/")))
     dst = os.path.join(dstdir, name)

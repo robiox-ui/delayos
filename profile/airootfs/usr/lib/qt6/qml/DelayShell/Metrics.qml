@@ -10,6 +10,7 @@ QtObject {
     readonly property int dockTop: dockHeight + dockGap   // distance of the dock top from the screen bottom
     readonly property int edgeMargin: 12        // CC / calendar / clipboard right margin
     readonly property int popupTop: 38          // CC / calendar top (10 px under the top bar)
+    readonly property int taskbarTop: 53        // taskbar layout: CC / calendar bottom edge above the screen bottom (43 px bar + 10)
     readonly property string iconDir: "/usr/share/delayos/shell/icons/"
 
     // Desktop ids of the DelayOS apps (apps-core / apps-system streams) and KDE fallbacks

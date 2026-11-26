@@ -5,8 +5,9 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import org.delayos.shell
 
-// Accent-blue "게이밍" pill in the top bar (ui-spec 3.1.1). Visible while Steam runs or Gaming mode
-// is on; click toggles /usr/local/bin/delay-gamemode. All logic lives in org.delayos.shell/GamingPill.
+// "게이밍" pill in the top bar (ui-spec 3.1.1): the one-click Gaming mode toggle, always visible.
+// Accent blue with white text while Gaming mode is on, neutral while it is off; click toggles
+// /usr/local/bin/delay-gamemode. All logic lives in org.delayos.shell/GamingPill.
 PlasmoidItem {
     id: root
     preferredRepresentation: fullRepresentation
@@ -24,6 +25,7 @@ PlasmoidItem {
             id: pill
             x: 8
             anchors.verticalCenter: parent.verticalCenter
+            alwaysShow: true
             dark: Kirigami.Theme.backgroundColor.hslLightness < 0.5
             refreshToken: Plasmoid.configuration.refreshToken
         }

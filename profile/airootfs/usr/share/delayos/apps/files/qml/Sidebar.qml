@@ -2,17 +2,28 @@ import QtQuick
 import QtQuick.Templates as T
 import DelayUI
 
-// Files sidebar (220 px): 홈 · 고정됨 (drop a folder to pin) · 즐겨찾기 · 드라이브 · 휴지통.
+// Files sidebar (220 px): 홈 · 고정됨 (drop a folder on empty space to pin) · 즐겨찾기 · 드라이브 · 휴지통.
+// Places, pins, drives and the trash are drop targets (move / copy / delete); they open when a drag rests on them.
 Item {
     id: sb
     property string current: ""
-    property bool dragActive: false        // a folder is being dragged over the window
+    property var ctl: null                 // the window (drop handling, see DropTarget)
     signal navigate(string path)
     signal contextFor(string path, bool pinned)
 
     property var pins: backend.pinned()
     Connections { target: backend; function onPinnedChanged() { sb.pins = backend.pinned() } }
     readonly property var drv: backend.drive()
+
+    DropArea {       // empty sidebar space: drop a folder to pin it (the items above it take drops for themselves)
+        id: drop
+        anchors.fill: parent
+        keys: ["text/uri-list"]
+        onDropped: (d) => {
+            for (const u of d.urls) backend.pin(backend.localPath(u.toString()))
+            d.accept(Qt.LinkAction)
+        }
+    }
 
     Flickable {
         anchors.fill: parent
@@ -44,6 +55,7 @@ Item {
                     selected: sb.current === modelData.path
                     onClicked: sb.navigate(modelData.path)
                     onRightClicked: sb.contextFor(modelData.path, true)
+                    DropTarget { anchors.fill: parent; ctl: sb.ctl; target: modelData.path; springLoaded: sb.current !== modelData.path; onSprung: sb.navigate(modelData.path) }
                 }
             }
             Rectangle {
@@ -75,6 +87,7 @@ Item {
                     selected: sb.current === modelData.path
                     onClicked: sb.navigate(modelData.path)
                     onRightClicked: sb.contextFor(modelData.path, false)
+                    DropTarget { anchors.fill: parent; ctl: sb.ctl; target: modelData.path; springLoaded: sb.current !== modelData.path; onSprung: sb.navigate(modelData.path) }
                 }
             }
 
@@ -111,6 +124,7 @@ Item {
                     iconName: "drive"
                     selected: sb.current === modelData.path
                     onClicked: sb.navigate(modelData.path)
+                    DropTarget { anchors.fill: parent; ctl: sb.ctl; target: modelData.path; springLoaded: sb.current !== modelData.path; onSprung: sb.navigate(modelData.path) }
                 }
             }
             Item { width: 1; height: 8 }
@@ -119,17 +133,8 @@ Item {
                 text: "휴지통"; iconName: "trash"; iconColor: Theme.text1
                 selected: sb.current === trashUrl
                 onClicked: sb.navigate(trashUrl)
+                DropTarget { anchors.fill: parent; ctl: sb.ctl; target: trashUrl }
             }
-        }
-    }
-
-    DropArea {
-        id: drop
-        anchors.fill: parent
-        keys: ["text/uri-list"]
-        onDropped: (d) => {
-            for (const u of d.urls) backend.pin(backend.localPath(u.toString()))
-            d.accept(Qt.LinkAction)
         }
     }
 }

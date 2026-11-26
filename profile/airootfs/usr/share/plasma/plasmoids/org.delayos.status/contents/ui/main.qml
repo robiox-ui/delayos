@@ -169,6 +169,7 @@ PlasmoidItem {
                 }
             }
             Btn {   // power profile / performance (⚡)
+                active: root.ccOpen
                 onClicked: act.toggle("controlcenter")
                 Glyph {
                     anchors.verticalCenter: parent.verticalCenter

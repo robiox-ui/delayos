@@ -63,6 +63,7 @@ tray.writeConfig("knownItems", known);     // never auto-add a tray plasmoid lat
 tray.writeConfig("extraItems", []);        // load none of them (DelayOS has its own status area)
 tray.writeConfig("showAllItems", true);    // no expander arrow
 tray.reloadConfig();
+if (has("org.delayos.gamingtoggle")) bar.addWidget("org.delayos.gamingtoggle");   // one-click Gaming mode, always visible
 var status = bar.addWidget("org.delayos.status");
 status.currentConfigGroup = ["General"];
 status.writeConfig("mode", "taskbar");

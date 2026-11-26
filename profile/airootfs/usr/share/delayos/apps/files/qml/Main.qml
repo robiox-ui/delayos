@@ -69,6 +69,58 @@ TWindow {
         else backend.openFile(it.path)
     }
     function selected() { return backend.files.selectedPaths() }
+
+    // ---------- drag and drop (DropTarget calls these) ----------
+    property string hintText: ""
+    property string hintMode: ""
+    property point hintPos
+    property var hintItem: null
+    property var springItem: null
+    property double hintStamp: 0
+    property string hintTarget: ""
+    property string hintName: ""
+    function dragSync(d) { if (!view.dragging) backend.setDragUrls(d.urls) }
+    function dragEnter(d, target, item) {
+        dragSync(d)
+        const mode = backend.dropMode(target, d.proposedAction, d.supportedActions)
+        if (mode === "none") return false
+        if (item.springLoaded && mode !== "denied" || item.springLoaded && target === "/") { springItem = item; springTimer.restart() }
+        dragHint(d, target, item, mode)
+        return true
+    }
+    function dragMove(d, target, item) {
+        const now = Date.now()
+        // Ctrl / Shift can change while the pointer rests: ask again a few times a second, not per event
+        dragHint(d, target, item, now - hintStamp > 150 || hintItem !== item ? backend.dropMode(target, d.proposedAction, d.supportedActions) : hintMode)
+    }
+    function dragHint(d, target, item, mode) {
+        if (mode !== hintMode || hintItem !== item) hintStamp = Date.now()
+        if (hintTarget !== target) { hintTarget = target; hintName = target === trashUrl ? "휴지통" : backend.displayName(target) }
+        hintItem = item
+        hintMode = mode
+        hintPos = item.mapToItem(hintLayer, d.x, d.y)
+        hintText = mode === "move" ? "“" + hintName + "”(으)로 이동" : mode === "copy" ? "“" + hintName + "”에 복사"
+                 : mode === "trash" ? "휴지통으로 이동" : mode === "denied" ? "여기에는 놓을 수 없어요" : ""
+    }
+    function dragLeave(item) {
+        if (hintItem === item) { hintItem = null; hintText = ""; hintMode = "" }
+        if (springItem === item) { springItem = null; springTimer.stop() }
+    }
+    function dragEnded() { hintItem = null; hintText = ""; hintMode = ""; springItem = null; springTimer.stop() }
+    function dropOn(d, target, item) {
+        dragEnded()
+        dragSync(d)
+        const mode = backend.drop(target, d.proposedAction, d.supportedActions)
+        if (mode === "copy") d.accept(Qt.CopyAction)
+        else if (mode === "move" || mode === "trash") d.accept(Qt.MoveAction)
+        else d.accepted = false
+        if (!view.dragging) backend.endDrag()
+    }
+    Timer {      // folders, places and tabs open when a drag rests on them
+        id: springTimer
+        interval: 900
+        onTriggered: { const it = win.springItem; win.springItem = null; if (it && it.containsDrag) it.sprung() }
+    }
     function trashSel() { const s = selected(); if (s.length) backend.trash(s) }
 
     onPathChanged: {
@@ -108,6 +160,22 @@ TWindow {
         onCloseRequested: (i) => win.closeTab(i)
         onAddRequested: win.newTab("home:")
         onMoveRequested: (a, b) => { tabs.move(a, b, 1); const h = win.hist.splice(a, 1)[0]; win.hist.splice(b, 0, h); if (win.cur === a) win.cur = b }
+    }
+    Repeater {       // tabs take drops; resting on another tab switches to it
+        model: tabs
+        delegate: DropTarget {
+            required property int index
+            required property string path
+            x: 6 + index * (strip._tabW + 2)
+            y: 4
+            width: strip._tabW
+            height: strip.height - 4
+            ctl: win
+            target: path
+            frameRadius: 8
+            springLoaded: index !== win.cur
+            onSprung: { win.cur = index; backend.open(path) }
+        }
     }
 
     // ================= navigation row =================
@@ -167,6 +235,7 @@ TWindow {
                             contentItem: Text { text: modelData.name; font.family: Theme.font; font.pixelSize: 13; color: Theme.text1; verticalAlignment: Text.AlignVCenter }
                             background: Rectangle { radius: 4; color: cb.hovered ? Theme.hoverStrong : "transparent" }
                             onClicked: win.go(modelData.path)
+                            DropTarget { anchors.fill: parent; ctl: win; target: modelData.path; frameRadius: 4; springLoaded: modelData.path !== win.path; onSprung: win.go(modelData.path) }
                         }
                     }
                 }
@@ -265,6 +334,7 @@ TWindow {
             width: 220
             height: parent.height
             current: win.path
+            ctl: win
             onNavigate: (p) => win.go(p)
             onContextFor: (p, pinned) => { sideMenu.target = p; sideMenu.pinned = pinned; sideMenu.popup() }
         }
@@ -291,7 +361,9 @@ TWindow {
                 visible: !win.atHome
                 mode: win.viewMode
                 inTrash: win.inTrash
+                ctl: win
                 focus: true
+                onSpringOpen: (p) => win.go(p)
                 onActivated: (i) => win.activate(i)
                 onItemMenu: (i) => win.showItemMenu()
                 onEmptyMenu: { if (win.isFolder) emptyMenu.popup() }
@@ -310,15 +382,46 @@ TWindow {
                 width: parent.width; thickness: 2
                 indeterminate: true
             }
-            DropArea {        // drop from other apps / tiles into the current folder
+            DropTarget {      // the open folder: drops from its own tiles, other tabs, other apps, the desktop
+                id: folderDrop
                 anchors.fill: parent
-                enabled: win.isFolder
-                keys: ["text/uri-list"]
                 z: -1
-                onDropped: (d) => {
-                    const ps = d.urls.map(u => backend.localPath(u.toString())).filter(p => backend.parentOf(p) !== win.path)
-                    if (ps.length) backend.transfer(ps, win.path, d.proposedAction === Qt.CopyAction)
-                    d.acceptProposedAction()
+                enabled: win.isFolder
+                ctl: win
+                target: win.isFolder ? win.path : ""
+                frame: false
+            }
+            Rectangle {       // drop indicator for the open folder
+                visible: folderDrop.hot && win.hintText !== "" && win.hintItem === folderDrop
+                anchors.fill: parent
+                anchors.margins: 3
+                radius: 8
+                color: "transparent"
+                border.width: 1.5
+                border.color: Theme.accent
+            }
+            Rectangle {       // copy / move progress (only for jobs that take a moment)
+                id: jobCard
+                readonly property var job: backend.job
+                visible: !!job.active
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 14
+                width: 340
+                height: jobCol.height + 28
+                radius: 10
+                color: Theme.popupBg
+                border.width: 1
+                border.color: Theme.popupRim
+                Column {
+                    id: jobCol
+                    x: 14; y: 14
+                    width: parent.width - 28
+                    spacing: 8
+                    Text { width: parent.width; text: (jobCard.job.title || "") + (jobCard.job.to ? "  →  " + jobCard.job.to : ""); elide: Text.ElideRight; font.family: Theme.font; font.pixelSize: 13; font.weight: Font.DemiBold; color: Theme.text1 }
+                    Text { width: parent.width; text: jobCard.job.detail || ""; elide: Text.ElideMiddle; font.family: Theme.font; font.pixelSize: 12; color: Theme.text2 }
+                    TProgressBar { width: parent.width; indeterminate: jobCard.visible && jobCard.job.fraction < 0; value: Math.max(0, jobCard.job.fraction || 0) }
+                    TButton { anchors.right: parent.right; text: "취소"; onClicked: backend.cancelJob() }
                 }
             }
             TToast {
@@ -372,6 +475,32 @@ TWindow {
             Item { width: 4; height: 1 }
             TIconButton { box: 24; iconSize: 14; iconName: "list"; checked: win.viewMode === "list"; tip: "자세히"; onClicked: win.viewMode = "list" }
             TIconButton { box: 24; iconSize: 14; iconName: "grid"; checked: win.viewMode === "grid"; tip: "아이콘"; onClicked: win.viewMode = "grid" }
+        }
+    }
+
+    Item {           // what a drop would do, next to the pointer
+        id: hintLayer
+        anchors.fill: parent
+        z: 50
+        Rectangle {
+            visible: win.hintText !== ""
+            x: Math.max(4, Math.min(parent.width - width - 4, win.hintPos.x + 16))
+            y: Math.max(4, Math.min(parent.height - height - 4, win.hintPos.y + 22))
+            width: hintRow.width + 18
+            height: 26
+            radius: 6
+            color: Theme.popupBg
+            border.width: 1
+            border.color: Theme.popupRim
+            Row {
+                id: hintRow
+                x: 9
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+                TIcon { anchors.verticalCenter: parent.verticalCenter; size: 13; color: win.hintMode === "denied" ? Theme.dangerText : Theme.accentText
+                        name: win.hintMode === "copy" ? "plus" : win.hintMode === "trash" ? "trash" : win.hintMode === "denied" ? "x" : "arrow-right" }
+                Text { anchors.verticalCenter: parent.verticalCenter; text: win.hintText; font.family: Theme.font; font.pixelSize: 12; color: Theme.text1 }
+            }
         }
     }
 
@@ -497,6 +626,32 @@ TWindow {
         title: "영구 삭제"
         buttons: ["삭제", "취소"]
         onButtonClicked: (i) => { if (i === 0) backend.deleteForever(paths) }
+    }
+    TDialog {        // a name that already exists in the target folder
+        id: conflictDlg
+        property var info: ({})
+        title: info.isDir ? "같은 이름의 폴더가 있어요" : "같은 이름의 파일이 있어요"
+        text: "“" + (info.where || "") + "”에 “" + (info.name || "") + "”이(가) 이미 있어요. 어떻게 할까요?"
+        buttons: [info.isDir ? "합치기" : "덮어쓰기", "건너뛰기", "둘 다 유지", "취소"]
+        cancelIndex: 3
+        dialogWidth: 500
+        closePolicy: T.Popup.NoAutoClose
+        onButtonClicked: (i) => { if (i === 3) backend.cancelJob(); else backend.resolveConflict(["overwrite", "skip", "keep"][i], allBox.checked) }
+        Repeater {
+            model: [["기존 항목", conflictDlg.info.dstText], [conflictDlg.info.copy ? "복사할 항목" : "옮길 항목", conflictDlg.info.srcText]]
+            delegate: Row {
+                required property var modelData
+                width: parent ? parent.width : 300
+                Text { width: 90; text: modelData[0]; font.family: Theme.font; font.pixelSize: 12; color: Theme.text2 }
+                Text { width: parent.width - 90; text: modelData[1] || ""; font.family: Theme.font; font.pixelSize: 12; color: Theme.text1; elide: Text.ElideRight }
+            }
+        }
+        TCheckBox { id: allBox; visible: (conflictDlg.info.more || 0) > 0; height: visible ? implicitHeight : 0; text: "남은 충돌 " + (conflictDlg.info.more || 0) + "개에도 똑같이 적용" }
+    }
+    Connections {
+        target: backend
+        function onConflict(info) { allBox.checked = false; conflictDlg.info = info; conflictDlg.open() }
+        function onBusyChanged() { if (!backend.busy && conflictDlg.opened) conflictDlg.close() }
     }
     TDialog {
         id: confirmEmpty

@@ -4,8 +4,9 @@ import org.kde.taskmanager as TaskManager
 import DelayUI
 import "apps.js" as Apps
 
-// "게이밍" pill (ui-spec 3.1.1): 77x23 capsule in the accent colour (blue #4D6BFE) with a filled gamepad and white text.
-// Shown while Steam runs or Gaming mode is on. Click toggles /usr/local/bin/delay-gamemode.
+// "게이밍" pill (ui-spec 3.1.1): 77x23 capsule with a gamepad; accent colour (blue #4D6BFE) with white
+// text while Gaming mode is on, neutral while it is off. Click toggles /usr/local/bin/delay-gamemode.
+// The bars show it always (alwaysShow); without that it only appears while Steam runs or Gaming is on.
 // Event driven: the state is re-read on click, at start, when the power profile changes, when
 // `refreshToken` changes (delay-shell-activate gaming-changed, called by delay-gamemode) and
 // when a window opens or closes (Steam starting / quitting). Nothing is polled while idle; only

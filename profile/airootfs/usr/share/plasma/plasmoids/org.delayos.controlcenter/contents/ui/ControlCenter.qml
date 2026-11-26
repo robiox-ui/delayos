@@ -26,7 +26,7 @@ PopupWindow {
     readonly property color onGlyph: "#2A0F0A"
     readonly property color offFill: Theme.dark ? Qt.rgba(1, 1, 1, 0.14) : "#D9DCE1"
 
-    onAboutToShow: { net.refresh(); soundList.expanded = false }
+    onAboutToShow: { net.refresh(); gamingRefresh(); soundList.expanded = false }
 
     Runner { id: runner }
     function run(cmd) { runner.exec(cmd) }
@@ -73,6 +73,23 @@ PopupWindow {
         BluezQt.Manager.bluetoothBlocked = !enable
         for (const a of BluezQt.Manager.adapters)
             a.powered = enable
+    }
+
+    // ------------------------------------------------------------ gaming mode (delay-gamemode; same state as the top-bar pill)
+    property bool gamingOn: false
+    property int gamingSeq: 0
+    // the executable engine runs a source only once while it is connected: make every call unique
+    function gamingRefresh() { runner.exec("/usr/local/bin/delay-gamemode status #" + (++gamingSeq)) }
+    function toggleGaming() {
+        gamingOn = !gamingOn                // instant feedback, confirmed by the status call below
+        runner.exec("/usr/local/bin/delay-gamemode toggle #" + (++gamingSeq))
+    }
+    Connections {
+        target: runner
+        function onFinished(cmd, code, out) {
+            if (cmd.indexOf("delay-gamemode status") >= 0) cc.gamingOn = out.trim().split("\n")[0] === "on"
+            else if (cmd.indexOf("delay-gamemode toggle") >= 0) cc.gamingRefresh()
+        }
     }
 
     // ------------------------------------------------------------ dark mode
@@ -339,6 +356,22 @@ PopupWindow {
                         onToggled: cc.toggleDnd()
                         onDetails: cc.toggleDnd()
                     }
+                }
+            }
+
+            // 1b. gaming mode (the same switch as the "게이밍" pill in the top bar, Meta+G)
+            Tile {
+                width: 322
+                height: 58
+                ToggleRow {
+                    x: 11; anchors.verticalCenter: parent.verticalCenter
+                    width: 300
+                    title: "게이밍 모드"
+                    status: cc.gamingOn ? "켬 · 최고 성능" : "끔"
+                    glyph: "gamepad"
+                    on: cc.gamingOn
+                    onToggled: cc.toggleGaming()
+                    onDetails: cc.toggleGaming()
                 }
             }
 

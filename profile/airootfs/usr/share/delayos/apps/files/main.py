@@ -16,6 +16,7 @@ sys.path.insert(0, "/usr/share/delayos/apps/common")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from delayapp import run  # noqa: E402
 import fileops  # noqa: E402
+import transfer  # noqa: E402
 
 from PySide6.QtCore import (QObject, Slot, Signal, Property, QAbstractListModel, QModelIndex, Qt, QByteArray,  # noqa: E402
                             QFileSystemWatcher, QTimer, QUrl, QMimeDatabase, QMimeData, QSize)
@@ -116,6 +117,9 @@ ROLES = ["name", "path", "isDir", "size", "sizeText", "mtime", "mtimeText", "kin
          "hidden", "orig", "ext"]
 
 
+SEL_ROLE = Qt.UserRole + ROLES.index("selected")
+
+
 class FileModel(QAbstractListModel):
     countChanged = Signal()
     selectionChanged = Signal()
@@ -125,6 +129,9 @@ class FileModel(QAbstractListModel):
         self._items = []
         self._roles = {Qt.UserRole + i: QByteArray(r.encode()) for i, r in enumerate(ROLES)}
         self._anchor = -1
+        self._stats = None            # (count, bytes, first index) of the selection, computed on demand
+        self._band_base = None
+        self._band_prev = set()
 
     def roleNames(self):
         return self._roles
@@ -141,6 +148,9 @@ class FileModel(QAbstractListModel):
         self.beginResetModel()
         self._items = items
         self._anchor = -1
+        self._stats = None
+        self._band_base = None
+        self._band_prev = set()
         self.endResetModel()
         self.countChanged.emit()
         self.selectionChanged.emit()
@@ -149,10 +159,62 @@ class FileModel(QAbstractListModel):
         return len(self._items)
     count = Property(int, _get_count, notify=countChanged)
 
-    def _changed_sel(self, rows=None):
-        if self._items:
-            self.dataChanged.emit(self.index(0), self.index(len(self._items) - 1), [Qt.UserRole + ROLES.index("selected")])
+    def _changed_sel(self, lo=None, hi=None):
+        n = len(self._items)
+        if n:
+            a = 0 if lo is None else max(0, lo)
+            b = n - 1 if hi is None else min(n - 1, hi)
+            self.dataChanged.emit(self.index(a), self.index(b), [SEL_ROLE])
+        self._stats = None
         self.selectionChanged.emit()
+
+    def _sel_stats(self):
+        if self._stats is None:
+            cnt, size, first = 0, 0, -1
+            for k, it in enumerate(self._items):
+                if it["selected"]:
+                    if first < 0:
+                        first = k
+                    cnt += 1
+                    if not it["isDir"]:
+                        size += it["size"]
+            self._stats = (cnt, size, first)
+        return self._stats
+
+    # ---- rubber band: only the rows whose state changes are touched (large folders stay smooth) ----
+    @Slot(bool)
+    def bandBegin(self, additive):
+        """additive (Ctrl): the band toggles on top of the selection that was there."""
+        self._band_base = [it["selected"] for it in self._items] if additive else None
+        self._band_prev = set()
+        if not additive:
+            self.clearSelection()
+
+    @Slot(int, int, int, int, int)
+    def bandSelect(self, cols, r0, r1, c0, c1):
+        """Select the cells of rows r0..r1 x columns c0..c1 of a grid with `cols` columns (list: cols=1)."""
+        n = len(self._items)
+        new = set()
+        cols = max(1, cols)
+        if r1 >= r0 and c1 >= c0:
+            for r in range(max(0, r0), r1 + 1):
+                first = r * cols
+                if first >= n:
+                    break
+                for c in range(max(0, c0), min(cols - 1, c1) + 1):
+                    if first + c < n:
+                        new.add(first + c)
+        changed = new ^ self._band_prev
+        if not changed:
+            return
+        base = self._band_base
+        for i in changed:
+            was = bool(base[i]) if base and i < len(base) else False
+            self._items[i]["selected"] = (i in new) != was
+        self._band_prev = new
+        if new:
+            self._anchor = min(new)
+        self._changed_sel(min(changed), max(changed))
 
     @Slot(int, str)
     def select(self, i, mode):
@@ -213,14 +275,15 @@ class FileModel(QAbstractListModel):
 
     @Slot(result=int)
     def selectedCount(self):
-        return sum(1 for it in self._items if it["selected"])
+        return self._sel_stats()[0]
 
     @Slot(result=int)
     def firstSelected(self):
-        for k, it in enumerate(self._items):
-            if it["selected"]:
-                return k
-        return -1
+        return self._sel_stats()[2]
+
+    @Slot(int, result=bool)
+    def isSelected(self, i):
+        return 0 <= i < len(self._items) and bool(self._items[i]["selected"])
 
     @Slot(int, result="QVariant")
     def get(self, i):
@@ -236,7 +299,7 @@ class FileModel(QAbstractListModel):
         return -1
 
     def selected_bytes(self):
-        return sum(it["size"] for it in self._items if it["selected"] and not it["isDir"])
+        return self._sel_stats()[1]
 
 
 class Backend(QObject):
@@ -251,7 +314,10 @@ class Backend(QObject):
     undoChanged = Signal()
     opDone = Signal(str)                  # path to select after an op
     sizeReady = Signal(str, str)
+    jobChanged = Signal()                 # copy/move progress card
+    conflict = Signal("QVariant")         # a name already exists in the target: ask 덮어쓰기 / 건너뛰기 / 둘 다 유지
     _opFinished = Signal()
+    _jobTick = Signal()
     _searchFinished = Signal()
 
     def __init__(self):
@@ -283,7 +349,15 @@ class Backend(QObject):
         self.opDone.connect(self._after_op)
         self._opFinished.connect(self._finish)
         self._searchFinished.connect(self._search_done)
+        self._jobTick.connect(self._job_tick)
         self._card = None
+        self._job = None
+        self._job_state = {"active": False, "title": "", "detail": "", "fraction": 0.0}
+        self._answer = None
+        self._answer_ev = threading.Event()
+        self._drag = []                   # local paths of the drag in progress (ours or another app's)
+        self._drag_internal = False
+        self._drag_key = None
 
     def _save_conf(self):
         try:
@@ -308,6 +382,10 @@ class Backend(QObject):
     def _get_canUndo(self):
         return bool(self._undo)
     canUndo = Property(bool, _get_canUndo, notify=undoChanged)
+
+    def _get_job(self):
+        return self._job_state
+    job = Property("QVariant", _get_job, notify=jobChanged)
 
     @Slot(str, result="QVariant")
     def conf(self, key):
@@ -359,6 +437,7 @@ class Backend(QObject):
         if same and [i["path"] for i in old] == [i["path"] for i in items]:
             # same entries: update in place (keeps scroll position and selection)
             self.model._items = items
+            self.model._stats = None
             if items:
                 self.model.dataChanged.emit(self.model.index(0), self.model.index(len(items) - 1))
             self.model.selectionChanged.emit()
@@ -799,6 +878,11 @@ class Backend(QObject):
     def _finish(self):
         sel, err, msg = self._pending
         self._set_busy(False)
+        if self._job is not None:
+            self._job = None
+            if self._job_state.get("active"):
+                self._job_state = {"active": False, "title": "", "detail": "", "fraction": 0.0}
+                self.jobChanged.emit()
         if err:
             self.error.emit(err)
         elif self._card:
@@ -814,22 +898,174 @@ class Backend(QObject):
     def _after_op(self, sel):
         self.model.selectPath(sel)
 
+    # ---------- drag and drop ----------
+    @staticmethod
+    def _local(u):
+        if isinstance(u, QUrl):
+            return u.toLocalFile() if u.isLocalFile() else ""
+        u = str(u)
+        if u.startswith("file:"):
+            return QUrl(u).toLocalFile()
+        return u if u.startswith("/") else ""
+
+    @Slot("QVariantList", result=str)
+    def beginDrag(self, paths):
+        """Our own drag starts: remember the paths, return the text/uri-list payload."""
+        self._drag = [p for p in paths if p]
+        self._drag_internal = True
+        return "\r\n".join(QUrl.fromLocalFile(p).toString(QUrl.ComponentFormattingOption.FullyEncoded)
+                           for p in self._drag) + "\r\n"
+
+    @Slot()
+    def endDrag(self):
+        self._drag = []
+        self._drag_internal = False
+        self._drag_key = None
+
+    @Slot("QVariantList")
+    def setDragUrls(self, urls):
+        """A drag from another application entered the window."""
+        if self._drag_internal:
+            return
+        key = (len(urls), str(urls[0]) if urls else "")
+        if key != self._drag_key:
+            self._drag_key = key
+            self._drag = [p for p in (self._local(u) for u in urls) if p]
+
+    def _drop_mode(self, paths, target, proposed, supported):
+        if not paths:
+            return "none"
+        if target == TRASH_URL:
+            return "none" if any(p.startswith(fileops.TRASH_FILES) for p in paths[:50]) else "trash"
+        if not target or target.startswith(("home:", "search:", "trash")):
+            return "none"
+        target = os.path.abspath(target)
+        if not os.path.isdir(target):
+            return "none"
+        if not os.access(target, os.W_OK | os.X_OK):
+            return "denied"
+        for p in paths[:500]:
+            if transfer.is_real_dir(p) and transfer.inside(target, p):
+                return "none"                       # onto itself or into its own subtree
+        mods = QGuiApplication.queryKeyboardModifiers()
+        ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
+        shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
+        can_move = supported == 0 or bool(supported & 2)
+        can_copy = supported == 0 or bool(supported & 1)
+        if ctrl and not shift and can_copy:
+            mode = "copy"
+        elif shift and not ctrl and can_move:
+            mode = "move"
+        elif not can_move:
+            mode = "copy"
+        elif not can_copy:
+            mode = "move"
+        else:                                       # like Explorer: same drive = move, another drive = copy
+            mode = "move" if transfer.same_device(paths[0], target) else "copy"
+        if mode == "move" and all(os.path.dirname(p.rstrip("/")) == target for p in paths[:500]):
+            return "same"                           # already there
+        return mode
+
+    @Slot(str, int, int, result=str)
+    def dropMode(self, target, proposed, supported):
+        """What a drop on `target` would do now: move | copy | trash | same | denied | none."""
+        return self._drop_mode(self._drag, target, proposed, supported)
+
+    @Slot(str, int, int, result=str)
+    def drop(self, target, proposed, supported):
+        paths = list(self._drag)
+        mode = self._drop_mode(paths, target, proposed, supported)
+        if mode == "trash":
+            self.trash(paths)
+        elif mode in ("move", "copy"):
+            self.transfer(paths, target, mode == "copy")
+        elif mode == "denied":
+            self.error.emit("“%s”에 쓸 수 있는 권한이 없어요" % display_name(target))
+        return mode
+
+    # ---------- copy / move with progress, conflicts and undo ----------
+    def _job_tick(self):
+        j = self._job
+        if not j:
+            return
+        if time.monotonic() - j.started < 0.45:      # quick jobs never flash a progress card
+            return
+        verb = "복사" if j.copy else "이동"
+        if j.by_bytes:
+            frac = (j.pos / j.total) if (j.exact and j.total > 0) else -1.0
+            amount = "%s / %s" % (human_size(j.pos), human_size(j.total)) if j.exact else human_size(j.pos)
+        else:
+            frac = j.pos / j.total if j.total else -1.0
+            amount = "%d / %d" % (j.pos, j.total)
+        self._job_state = {"active": True, "title": "항목 %d개 %s 중" % (j.count, verb),
+                           "detail": ("“%s”  ·  %s" % (j.current, amount)) if j.current else amount,
+                           "fraction": min(1.0, frac), "to": display_name(j.dstdir)}
+        self.jobChanged.emit()
+
+    def _ask_conflict(self, info):                   # worker thread; blocks until the dialog answers
+        def side(st):
+            size, mtime, is_dir = st
+            return ("폴더" if is_dir else human_size(size)) + "  ·  " + human_time(mtime)
+        self._answer = None
+        self._answer_ev.clear()
+        self.conflict.emit({"name": info["name"], "where": display_name(info["dir"]), "isDir": info["isDir"],
+                            "srcText": side(info["srcStat"]), "dstText": side(info["dstStat"]),
+                            "more": info["more"], "copy": self._job.copy if self._job else True})
+        while not self._answer_ev.wait(0.2):
+            if self._job is None or self._job.cancel.is_set():
+                return ("cancel", False)
+        return self._answer or ("cancel", False)
+
+    @Slot(str, bool)
+    def resolveConflict(self, choice, to_all):
+        self._answer = (choice, bool(to_all))
+        self._answer_ev.set()
+
+    @Slot()
+    def cancelJob(self):
+        if self._job:
+            self._job.cancel.set()
+        self._answer = ("cancel", False)
+        self._answer_ev.set()
+
     @Slot("QVariantList", str, bool)
     def transfer(self, paths, dstdir, copy):
         paths = [p for p in paths if p]
         if not paths or dstdir.startswith(("home:", "trash", "search:")):
             return
+        if self._busy:
+            self.error.emit("다른 작업이 진행 중이에요")
+            return
+        job = transfer.Job(paths, dstdir, copy, self._ask_conflict, lambda _j: self._jobTick.emit())
+        self._job = job
+        self._set_busy(True)
 
-        def fn():
-            done = []
-            for p in paths:
-                if copy:
-                    done.append(("copy", fileops.copy_into(p, dstdir)))
-                else:
-                    done.append(("move", p, fileops.move_into(p, dstdir)))
-            self._undo.append(("transfer", done))
-            return done[-1][-1] if done else ""
-        self._run(fn)
+        def work():
+            sel, err, cancelled = "", None, False
+            try:
+                sel = job.run()
+            except transfer.Cancelled:
+                cancelled = True
+            except OSError as e:
+                err = e.strerror or str(e)
+                if e.filename and e.strerror:
+                    err = "“%s”: %s" % (os.path.basename(str(e.filename)), e.strerror)
+            except Exception as e:  # pragma: no cover
+                err = str(e)
+            if job.done:
+                self._undo.append(("transfer", job.done))
+            n = sum(1 for d in job.done if d[0] in ("copy", "move"))
+            msg = None
+            if cancelled:
+                msg = "작업을 취소했어요"
+            elif n and not err:
+                what = "“%s”" % os.path.basename(paths[0].rstrip("/")) if len(paths) == 1 else "항목 %d개" % (len(paths) - job.skipped)
+                msg = "%s을(를) “%s”에 %s" % (what, display_name(dstdir), "복사했어요" if copy else "옮겼어요")
+                if job.skipped:
+                    msg += " (%d개 건너뜀)" % job.skipped
+            self._pending = (sel, err, msg)
+            self._opFinished.emit()
+        threading.Thread(target=work, daemon=True).start()
 
     @Slot("QVariantList")
     def trash(self, paths):
@@ -943,15 +1179,26 @@ class Backend(QObject):
                 self._card = ("실행 취소함", "“%s”을(를) 휴지통으로 옮겼어요" % os.path.basename(op[1]))
                 return ""
             if kind == "transfer":
+                import shutil
+                n, last = 0, ""
                 for d in reversed(op[1]):
-                    if d[0] == "copy":
-                        fileops.trash(d[1])
-                    else:
-                        os.makedirs(os.path.dirname(d[1]), exist_ok=True)
-                        import shutil
-                        shutil.move(d[2], d[1])
-                self._card = ("실행 취소함", "항목 %d개를 되돌렸어요" % len(op[1]))
-                return ""
+                    try:
+                        if d[0] == "copy":
+                            if os.path.lexists(d[1]):
+                                fileops.trash(d[1])
+                                n += 1
+                        elif d[0] == "move":
+                            if os.path.lexists(d[2]) and not os.path.lexists(d[1]):
+                                os.makedirs(os.path.dirname(d[1]), exist_ok=True)
+                                shutil.move(d[2], d[1])
+                                last = d[1]
+                                n += 1
+                        elif d[0] == "replaced":        # the item that was overwritten comes back from the trash
+                            fileops.restore(d[2])
+                    except OSError:
+                        continue
+                self._card = ("실행 취소함", "항목 %d개를 되돌렸어요" % n)
+                return last
             return ""
 
         self._card = None

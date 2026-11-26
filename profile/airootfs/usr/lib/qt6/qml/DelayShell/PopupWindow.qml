@@ -51,10 +51,35 @@ PlasmaCore.Dialog {
         aboutToShow()
         x = posX
         y = posY
+        _shownAt = Date.now()
         visible = true
         if (takeFocus)
             requestActivate()
         openAnim.restart()
+    }
+
+    // A resize that lands while the window is being mapped is lost on Wayland: Qt believes the
+    // new size, the surface keeps the old one and the content stays cut off on every later open
+    // (seen with the Control Center, whose brightness card appears right after the first show).
+    // When the panel size changes shortly after opening, nudge the window by 1 px and back so the
+    // real size is committed again. The glass frame is drawn at panelWidth x panelHeight, so the
+    // extra pixel is never visible.
+    // open() assigns x/y (which ends the bindings above): follow later position changes by hand
+    onPosXChanged: if (visible) x = posX
+    onPosYChanged: if (visible) y = posY
+
+    property double _shownAt: 0
+    property int _nudge: 0
+    function _resync() { if (visible && Date.now() - _shownAt < 1500) resyncTimer.restart() }
+    onPanelHeightChanged: _resync()
+    onPanelWidthChanged: _resync()
+    property Timer resyncTimer: Timer {
+        interval: 180
+        onTriggered: { win._nudge = 1; resyncBack.restart() }
+    }
+    property Timer resyncBack: Timer {
+        interval: 60
+        onTriggered: win._nudge = 0
     }
     function close() {
         if (!visible || _closing)
@@ -88,7 +113,7 @@ PlasmaCore.Dialog {
     mainItem: Item {
         id: holder
         width: Math.max(1, win.panelWidth - win.margins.left - win.margins.right)
-        height: Math.max(1, win.panelHeight - win.margins.top - win.margins.bottom)
+        height: Math.max(1, win.panelHeight - win.margins.top - win.margins.bottom) + win._nudge
 
         // DelayOS tokens follow the active colour scheme (CC dark-mode tile / delay-darkmode)
         // (application palette = kdeglobals colour scheme, independent of the Plasma desktop theme)

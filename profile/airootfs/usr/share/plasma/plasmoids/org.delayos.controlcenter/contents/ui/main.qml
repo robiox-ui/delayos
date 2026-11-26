@@ -24,10 +24,19 @@ PlasmoidItem {
     Item { id: geo; readonly property rect r: Qt.rect(Screen.virtualX, Screen.virtualY, Screen.width, Screen.height) }
     function place() {
         const g = geo.r, cc = lazy.get()
-        cc.maxHeight = g.height - Metrics.popupTop - Metrics.edgeMargin
+        cc.maxHeight = g.height - (bottomBar ? Metrics.taskbarTop : Metrics.popupTop) - Metrics.edgeMargin
         cc.posX = Math.round(g.x + g.width - Metrics.edgeMargin - cc.panelWidth)
-        cc.posY = Math.round(g.y + Metrics.popupTop)
+        // taskbar layout (panel at the bottom): sit above the taskbar instead of under the top bar
+        cc.posY = bottomBar ? Math.round(g.y + g.height - Metrics.taskbarTop - cc.panelHeight)
+                            : Math.round(g.y + Metrics.popupTop)
         return cc
+    }
+    readonly property bool bottomBar: Plasmoid.location === PlasmaCore.Types.BottomEdge
+    // bottom-anchored: follow the height (notification list, sound device list ...)
+    Connections {
+        target: lazy.item
+        enabled: root.bottomBar
+        function onPanelHeightChanged() { root.place() }
     }
     function toggle() { place().toggle() }
 
