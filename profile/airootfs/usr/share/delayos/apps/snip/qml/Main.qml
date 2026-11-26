@@ -52,7 +52,10 @@ TWindow {
     property string lastSaved: ""
     function fitZoom() {
         const aw = canvasArea.width - 48, ah = canvasArea.height - 48
-        if (imgW > 0 && imgH > 0) zoom = Math.min(1.0, aw / imgW, ah / imgH)
+        // before the window is first shown the canvas has no size yet: keep 100 % and let
+        // canvasArea refit once it is laid out (a negative zoom showed an empty editor at "-12%")
+        if (aw <= 0 || ah <= 0) return
+        if (imgW > 0 && imgH > 0) zoom = Math.max(0.05, Math.min(1.0, aw / imgW, ah / imgH))
     }
     function strokesJson() { return JSON.stringify(strokes) }
     function cropJson() { return cropRect ? JSON.stringify(cropRect) : "null" }
@@ -165,6 +168,7 @@ TWindow {
         color: Theme.dark ? "#090B10" : "#E9EAEE"
         clip: true
         onWidthChanged: if (win.zoom === 1.0) Qt.callLater(win.fitZoom)
+        onHeightChanged: if (win.zoom === 1.0) Qt.callLater(win.fitZoom)
 
         Flickable {
             id: flick

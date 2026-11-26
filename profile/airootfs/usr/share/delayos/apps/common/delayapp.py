@@ -14,6 +14,25 @@ import sys
 
 os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
 
+
+def software_render():
+    """True when the CPU draws everything (no usable GPU); decided at boot by delay-render-detect."""
+    v = os.environ.get("DELAY_SOFTWARE_RENDER")
+    if v in ("0", "1") and not os.path.exists("/run/delay/render"):
+        return v == "1"
+    try:
+        with open("/run/delay/render") as f:
+            return f.read().strip() == "software"
+    except OSError:
+        return False
+
+
+if software_render():
+    # Qt Quick's CPU scene graph instead of OpenGL on llvmpipe: it repaints only what changed. Measured on
+    # 파일 탐색기 in a VM without 3D: scrolling 33 % -> 17 % of a core, pointer hover 26 % -> 4 %, 137 MB less
+    # memory, first frame 218 -> 182 ms (docs/reports/smooth-nogpu.md). No DelayOS app uses shaders or layers.
+    os.environ.setdefault("QT_QUICK_BACKEND", "software")
+
 from PySide6.QtCore import QObject, Signal, Slot, Property, QFileSystemWatcher, QTimer, QUrl, Qt  # noqa: E402
 from PySide6.QtGui import QFont, QGuiApplication, QColor, QIcon  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402

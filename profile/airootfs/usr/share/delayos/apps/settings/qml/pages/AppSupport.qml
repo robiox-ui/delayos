@@ -147,8 +147,9 @@ SPage {
     // ---- Mac / Linux -------------------------------------------------------
     SHeader { text: "기타" }
     SRow {
-        icon: "g:mac"; title: "Mac 앱 (미리 보기)"
-        subtitle: pg.st.mac.installed ? "설치됨 · .dmg 파일을 두 번 클릭하면 엽니다. 아직 완성되지 않았습니다." : "초기 미리 보기 · 아직 완성되지 않았습니다"
+        icon: "g:mac"; title: "Mac 앱"
+        subtitle: "Mac 앱은 그대로 실행되지 않습니다. .dmg·.pkg 파일을 두 번 클릭하면 Linux·Windows·웹 버전을 찾아 줍니다."
+        SButton { text: "Mac에서 쓰던 앱 찾기"; onClicked: sys.detach(["delay-store", "--mac"]) }
     }
     SRow {
         icon: "g:terminal"; title: "다른 Linux 배포판의 앱"

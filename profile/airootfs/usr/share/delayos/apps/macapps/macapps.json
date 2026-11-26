@@ -1,0 +1,1804 @@
+{
+ "version": 1,
+ "apps": [
+  {
+   "name": "Google Chrome",
+   "cat": "브라우저",
+   "ids": [
+    "com.google.Chrome"
+   ],
+   "names": [
+    "googlechrome",
+    "chrome"
+   ],
+   "linux": [
+    {
+     "source": "repo",
+     "pkg": "google-chrome"
+    },
+    {
+     "source": "flathub",
+     "pkg": "com.google.Chrome"
+    }
+   ]
+  },
+  {
+   "name": "Firefox",
+   "cat": "브라우저",
+   "ids": [
+    "org.mozilla.firefox"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.mozilla.firefox"
+    }
+   ]
+  },
+  {
+   "name": "Microsoft Edge",
+   "cat": "브라우저",
+   "ids": [
+    "com.microsoft.edgemac"
+   ],
+   "names": [
+    "edge",
+    "microsoftedge"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.microsoft.Edge"
+    }
+   ]
+  },
+  {
+   "name": "Brave",
+   "cat": "브라우저",
+   "ids": [
+    "com.brave.Browser"
+   ],
+   "names": [
+    "bravebrowser"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.brave.Browser"
+    }
+   ]
+  },
+  {
+   "name": "Opera",
+   "cat": "브라우저",
+   "ids": [
+    "com.operasoftware.Opera"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.opera.Opera"
+    }
+   ]
+  },
+  {
+   "name": "Vivaldi",
+   "cat": "브라우저",
+   "ids": [
+    "com.vivaldi.Vivaldi"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.vivaldi.Vivaldi"
+    }
+   ]
+  },
+  {
+   "name": "Tor Browser",
+   "cat": "브라우저",
+   "ids": [
+    "org.torproject.torbrowser"
+   ],
+   "names": [
+    "torbrowser"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.torproject.torbrowser-launcher"
+    }
+   ]
+  },
+  {
+   "name": "Zen Browser",
+   "cat": "브라우저",
+   "ids": [
+    "app.zen-browser.zen"
+   ],
+   "names": [
+    "zen",
+    "zenbrowser"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "app.zen_browser.zen"
+    }
+   ]
+  },
+  {
+   "name": "Safari",
+   "cat": "브라우저",
+   "ids": [
+    "com.apple.Safari"
+   ],
+   "alt": [
+    {
+     "source": "repo",
+     "pkg": "google-chrome",
+     "name": "Google Chrome"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.mozilla.firefox",
+     "name": "Firefox"
+    }
+   ],
+   "note": "Safari는 Apple 기기 전용입니다. DelayOS에는 Chrome이 기본으로 들어 있습니다."
+  },
+  {
+   "name": "Arc",
+   "cat": "브라우저",
+   "ids": [
+    "company.thebrowser.Browser"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "app.zen_browser.zen",
+     "name": "Zen Browser"
+    }
+   ],
+   "win": "https://arc.net/download",
+   "note": "Linux용은 없습니다. 세로 탭 방식이 비슷한 Zen Browser를 쓰거나 Windows 버전을 실행할 수 있습니다."
+  },
+  {
+   "name": "Discord",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "com.hnc.Discord"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.discordapp.Discord"
+    }
+   ]
+  },
+  {
+   "name": "Slack",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "com.tinyspeck.slackmacgap"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.slack.Slack"
+    }
+   ]
+  },
+  {
+   "name": "Zoom",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "us.zoom.xos"
+   ],
+   "names": [
+    "zoomus",
+    "zoomworkplace"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "us.zoom.Zoom"
+    }
+   ]
+  },
+  {
+   "name": "Telegram",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "ru.keepcoder.Telegram",
+    "org.telegram.desktop",
+    "com.tdesktop.Telegram"
+   ],
+   "names": [
+    "telegramdesktop"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.telegram.desktop"
+    }
+   ]
+  },
+  {
+   "name": "Signal",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "org.whispersystems.signal-desktop"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.signal.Signal"
+    }
+   ]
+  },
+  {
+   "name": "WhatsApp",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "net.whatsapp.WhatsApp",
+    "WhatsApp"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "com.rtosta.zapzap",
+     "name": "ZapZap (WhatsApp 클라이언트)"
+    }
+   ],
+   "web": "https://web.whatsapp.com/",
+   "note": "공식 Linux 앱은 없습니다. 웹 버전이나 ZapZap을 쓰세요."
+  },
+  {
+   "name": "카카오톡",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "com.kakao.KakaoTalkMac"
+   ],
+   "names": [
+    "kakaotalk"
+   ],
+   "win": "https://www.kakaocorp.com/page/service/service/KakaoTalk",
+   "note": "Linux용 카카오톡은 없습니다. Windows 버전을 Windows 앱 엔진으로 실행할 수 있습니다."
+  },
+  {
+   "name": "LINE",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "jp.naver.line.mac"
+   ],
+   "win": "https://www.line.me/ko/",
+   "note": "Linux용 LINE은 없습니다. Windows 버전을 Windows 앱 엔진으로 실행할 수 있습니다."
+  },
+  {
+   "name": "Microsoft Teams",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "com.microsoft.teams2",
+    "com.microsoft.teams"
+   ],
+   "names": [
+    "teams"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "com.github.IsmaelMartinez.teams_for_linux",
+     "name": "Teams for Linux (비공식)"
+    }
+   ],
+   "web": "https://teams.microsoft.com/",
+   "note": "공식 Linux 앱은 없습니다. 웹 버전이나 비공식 클라이언트를 쓰세요."
+  },
+  {
+   "name": "Thunderbird",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "org.mozilla.thunderbird"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.mozilla.Thunderbird"
+    }
+   ]
+  },
+  {
+   "name": "Mail (Apple)",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "com.apple.mail"
+   ],
+   "names": [
+    "mail"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.mozilla.Thunderbird",
+     "name": "Thunderbird"
+    }
+   ],
+   "note": "Apple Mail은 macOS 전용입니다. Thunderbird에 같은 메일 계정을 추가하면 됩니다."
+  },
+  {
+   "name": "Element",
+   "cat": "메신저 및 회의",
+   "ids": [
+    "im.riot.app"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "im.riot.Riot"
+    }
+   ]
+  },
+  {
+   "name": "Visual Studio Code",
+   "cat": "개발",
+   "ids": [
+    "com.microsoft.VSCode"
+   ],
+   "names": [
+    "vscode",
+    "code"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.visualstudio.code"
+    }
+   ]
+  },
+  {
+   "name": "Zed",
+   "cat": "개발",
+   "ids": [
+    "dev.zed.Zed"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "dev.zed.Zed"
+    }
+   ]
+  },
+  {
+   "name": "Sublime Text",
+   "cat": "개발",
+   "ids": [
+    "com.sublimetext.4",
+    "com.sublimetext.3"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.sublimetext.three"
+    }
+   ]
+  },
+  {
+   "name": "Cursor",
+   "cat": "개발",
+   "ids": [
+    "com.todesktop.230313mzl4w4u92"
+   ],
+   "linux": [
+    {
+     "source": "aur",
+     "pkg": "cursor-bin"
+    }
+   ],
+   "link": "https://cursor.com/downloads",
+   "note": "제작사가 Linux용(AppImage)을 제공합니다. AppImage 파일은 두 번 클릭하면 바로 실행됩니다."
+  },
+  {
+   "name": "IntelliJ IDEA",
+   "cat": "개발",
+   "ids": [
+    "com.jetbrains.intellij*"
+   ],
+   "names": [
+    "intellijideace",
+    "intellijidea"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.jetbrains.IntelliJ-IDEA-Community"
+    }
+   ]
+  },
+  {
+   "name": "PyCharm",
+   "cat": "개발",
+   "ids": [
+    "com.jetbrains.pycharm*"
+   ],
+   "names": [
+    "pycharmce"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.jetbrains.PyCharm-Community"
+    }
+   ]
+  },
+  {
+   "name": "JetBrains Toolbox",
+   "cat": "개발",
+   "ids": [
+    "com.jetbrains.toolbox"
+   ],
+   "linux": [
+    {
+     "source": "aur",
+     "pkg": "jetbrains-toolbox"
+    }
+   ],
+   "link": "https://www.jetbrains.com/ko-kr/toolbox-app/"
+  },
+  {
+   "name": "Docker Desktop",
+   "cat": "개발",
+   "ids": [
+    "com.docker.docker"
+   ],
+   "names": [
+    "docker"
+   ],
+   "linux": [
+    {
+     "source": "repo",
+     "pkg": "docker",
+     "name": "Docker 엔진"
+    }
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "io.podman_desktop.PodmanDesktop",
+     "name": "Podman Desktop"
+    }
+   ],
+   "note": "Linux에서는 Docker가 가상 머신 없이 바로 실행됩니다. 설치 후 터미널에서 docker 명령을 쓰세요. 화면이 필요하면 Store에서 Podman Desktop을 설치하세요."
+  },
+  {
+   "name": "Postman",
+   "cat": "개발",
+   "ids": [
+    "com.postmanlabs.mac"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.getpostman.Postman"
+    }
+   ]
+  },
+  {
+   "name": "Insomnia",
+   "cat": "개발",
+   "ids": [
+    "com.insomnia.app"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "rest.insomnia.Insomnia"
+    }
+   ]
+  },
+  {
+   "name": "GitHub Desktop",
+   "cat": "개발",
+   "ids": [
+    "com.github.GitHubClient"
+   ],
+   "names": [
+    "githubdesktop"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "io.github.shiftey.Desktop"
+    }
+   ]
+  },
+  {
+   "name": "GitKraken",
+   "cat": "개발",
+   "ids": [
+    "com.axosoft.gitkraken"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.axosoft.GitKraken"
+    }
+   ]
+  },
+  {
+   "name": "DBeaver",
+   "cat": "개발",
+   "ids": [
+    "org.jkiss.dbeaver.core.product"
+   ],
+   "names": [
+    "dbeavercommunity"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "io.dbeaver.DBeaverCommunity"
+    }
+   ]
+  },
+  {
+   "name": "Unity Hub",
+   "cat": "개발",
+   "ids": [
+    "com.unity3d.unityhub"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.unity.UnityHub"
+    }
+   ]
+  },
+  {
+   "name": "Godot",
+   "cat": "개발",
+   "ids": [
+    "org.godotengine.godot"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.godotengine.Godot"
+    }
+   ]
+  },
+  {
+   "name": "Wireshark",
+   "cat": "개발",
+   "ids": [
+    "org.wireshark.Wireshark"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.wireshark.Wireshark"
+    }
+   ]
+  },
+  {
+   "name": "iTerm2",
+   "cat": "개발",
+   "ids": [
+    "com.googlecode.iterm2"
+   ],
+   "names": [
+    "iterm"
+   ],
+   "builtin": {
+    "label": "터미널",
+    "argv": [
+     "delay-terminal"
+    ]
+   },
+   "note": "DelayOS에는 터미널이 들어 있습니다. 탭, 분할, 프로필을 지원합니다."
+  },
+  {
+   "name": "터미널 (Apple)",
+   "cat": "개발",
+   "ids": [
+    "com.apple.Terminal"
+   ],
+   "names": [
+    "terminal"
+   ],
+   "builtin": {
+    "label": "터미널",
+    "argv": [
+     "delay-terminal"
+    ]
+   }
+  },
+  {
+   "name": "Xcode",
+   "cat": "개발",
+   "ids": [
+    "com.apple.dt.Xcode"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "com.visualstudio.code",
+     "name": "Visual Studio Code"
+    }
+   ],
+   "note": "Xcode와 iOS/macOS 앱 빌드는 Mac에서만 가능합니다. 다른 언어 개발은 VS Code나 JetBrains IDE를 쓰세요."
+  },
+  {
+   "name": "Ollama",
+   "cat": "개발",
+   "ids": [
+    "com.electron.ollama"
+   ],
+   "linux": [
+    {
+     "source": "repo",
+     "pkg": "ollama"
+    }
+   ]
+  },
+  {
+   "name": "Spotify",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "com.spotify.client"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.spotify.Client"
+    }
+   ]
+  },
+  {
+   "name": "VLC",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "org.videolan.vlc"
+   ],
+   "names": [
+    "vlcmediaplayer"
+   ],
+   "linux": [
+    {
+     "source": "repo",
+     "pkg": "vlc"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.videolan.VLC"
+    }
+   ]
+  },
+  {
+   "name": "IINA",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "com.colliderli.iina"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "io.mpv.Mpv",
+     "name": "mpv"
+    },
+    {
+     "source": "repo",
+     "pkg": "vlc",
+     "name": "VLC"
+    }
+   ],
+   "note": "IINA는 macOS 전용입니다. 같은 재생 엔진을 쓰는 mpv나 VLC를 쓰세요."
+  },
+  {
+   "name": "OBS Studio",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "com.obsproject.obs-studio"
+   ],
+   "names": [
+    "obs"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.obsproject.Studio"
+    }
+   ]
+  },
+  {
+   "name": "HandBrake",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "fr.handbrake.HandBrake"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "fr.handbrake.ghb"
+    }
+   ]
+  },
+  {
+   "name": "Audacity",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "org.audacityteam.audacity"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.audacityteam.Audacity"
+    }
+   ]
+  },
+  {
+   "name": "Plex",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "tv.plex.desktop"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "tv.plex.PlexDesktop"
+    }
+   ]
+  },
+  {
+   "name": "Apple Music",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "com.apple.Music",
+    "com.apple.iTunes"
+   ],
+   "names": [
+    "music",
+    "itunes"
+   ],
+   "web": "https://music.apple.com/kr/",
+   "note": "Apple Music 앱은 없지만 웹 플레이어에서 같은 계정으로 들을 수 있습니다."
+  },
+  {
+   "name": "Final Cut Pro",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "com.apple.FinalCut"
+   ],
+   "names": [
+    "finalcutpro"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.kde.kdenlive",
+     "name": "Kdenlive"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.shotcut.Shotcut",
+     "name": "Shotcut"
+    }
+   ],
+   "note": "Final Cut Pro는 macOS 전용입니다. 프로젝트 파일은 옮길 수 없지만 영상 편집은 Kdenlive나 DaVinci Resolve(제작사 Linux 버전)로 할 수 있습니다."
+  },
+  {
+   "name": "DaVinci Resolve",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "com.blackmagic-design.DaVinciResolve*"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.kde.kdenlive",
+     "name": "Kdenlive"
+    }
+   ],
+   "link": "https://www.blackmagicdesign.com/kr/products/davinciresolve",
+   "note": "제작사가 Linux 버전을 직접 제공합니다. 공식 페이지에서 Linux용을 내려받으세요."
+  },
+  {
+   "name": "Adobe Premiere Pro",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "com.adobe.PremierePro*"
+   ],
+   "names": [
+    "premierepro"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.kde.kdenlive",
+     "name": "Kdenlive"
+    }
+   ],
+   "note": "Adobe 앱은 Linux에서 실행되지 않습니다(Windows 앱 엔진에서도 동작하지 않습니다). Kdenlive나 DaVinci Resolve를 쓰세요."
+  },
+  {
+   "name": "Logic Pro",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "com.apple.logic10"
+   ],
+   "names": [
+    "logicpro"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.ardour.Ardour",
+     "name": "Ardour"
+    },
+    {
+     "source": "flathub",
+     "pkg": "fm.reaper.Reaper",
+     "name": "REAPER"
+    }
+   ],
+   "note": "Logic Pro는 macOS 전용입니다. Ardour나 REAPER(Linux 버전 있음)를 쓰세요."
+  },
+  {
+   "name": "GarageBand",
+   "cat": "음악 및 동영상",
+   "ids": [
+    "com.apple.garageband10",
+    "com.apple.garageband"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.ardour.Ardour",
+     "name": "Ardour"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.audacityteam.Audacity",
+     "name": "Audacity"
+    }
+   ],
+   "note": "GarageBand는 macOS 전용입니다."
+  },
+  {
+   "name": "Blender",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "org.blenderfoundation.blender"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.blender.Blender"
+    }
+   ]
+  },
+  {
+   "name": "GIMP",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "org.gimp.gimp*"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.gimp.GIMP"
+    }
+   ]
+  },
+  {
+   "name": "Krita",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "org.kde.krita",
+    "org.krita"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.kde.krita"
+    }
+   ]
+  },
+  {
+   "name": "Inkscape",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "org.inkscape.Inkscape"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.inkscape.Inkscape"
+    }
+   ]
+  },
+  {
+   "name": "Adobe Photoshop",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "com.adobe.Photoshop"
+   ],
+   "names": [
+    "photoshop"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.gimp.GIMP",
+     "name": "GIMP"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.kde.krita",
+     "name": "Krita"
+    }
+   ],
+   "web": "https://www.photopea.com/",
+   "note": "Photoshop은 Linux에서 실행되지 않습니다. GIMP나 Krita를 쓰거나, PSD 파일을 여는 웹 편집기 Photopea를 쓰세요."
+  },
+  {
+   "name": "Adobe Illustrator",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "com.adobe.illustrator"
+   ],
+   "names": [
+    "illustrator"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.inkscape.Inkscape",
+     "name": "Inkscape"
+    }
+   ],
+   "note": "Illustrator는 Linux에서 실행되지 않습니다. 벡터 작업은 Inkscape로 할 수 있습니다."
+  },
+  {
+   "name": "Adobe Lightroom",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "com.adobe.lightroomCC",
+    "com.adobe.LightroomClassicCC7"
+   ],
+   "names": [
+    "lightroom",
+    "lightroomclassic"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.darktable.Darktable",
+     "name": "darktable"
+    },
+    {
+     "source": "flathub",
+     "pkg": "com.rawtherapee.RawTherapee",
+     "name": "RawTherapee"
+    }
+   ],
+   "web": "https://lightroom.adobe.com/",
+   "note": "Lightroom 앱은 Linux에서 실행되지 않습니다. RAW 현상은 darktable로 할 수 있습니다."
+  },
+  {
+   "name": "Pixelmator Pro",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "com.pixelmatorteam.pixelmator.x"
+   ],
+   "names": [
+    "pixelmator"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.gimp.GIMP",
+     "name": "GIMP"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.kde.krita",
+     "name": "Krita"
+    }
+   ],
+   "note": "Pixelmator는 macOS 전용입니다."
+  },
+  {
+   "name": "Figma",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "com.figma.Desktop"
+   ],
+   "web": "https://www.figma.com/",
+   "note": "Figma는 브라우저에서 데스크톱 앱과 똑같이 동작합니다."
+  },
+  {
+   "name": "Sketch",
+   "cat": "사진 및 디자인",
+   "ids": [
+    "com.bohemiancoding.sketch3"
+   ],
+   "web": "https://www.figma.com/",
+   "note": "Sketch는 macOS 전용입니다. .sketch 파일은 Figma(웹)로 가져올 수 있습니다."
+  },
+  {
+   "name": "Obsidian",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "md.obsidian"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "md.obsidian.Obsidian"
+    }
+   ]
+  },
+  {
+   "name": "Notion",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "notion.id"
+   ],
+   "web": "https://www.notion.so/",
+   "note": "Linux용 공식 앱은 없습니다. 웹 버전이 데스크톱 앱과 같습니다."
+  },
+  {
+   "name": "Logseq",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "com.electron.logseq"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.logseq.Logseq"
+    }
+   ]
+  },
+  {
+   "name": "LibreOffice",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "org.libreoffice.script"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.libreoffice.LibreOffice",
+     "name": "LibreOffice"
+    }
+   ]
+  },
+  {
+   "name": "Microsoft Word",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "com.microsoft.Word"
+   ],
+   "names": [
+    "word"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.libreoffice.LibreOffice",
+     "name": "LibreOffice"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.onlyoffice.desktopeditors",
+     "name": "ONLYOFFICE"
+    }
+   ],
+   "web": "https://www.office.com/",
+   "note": "Microsoft 365 앱은 Linux용이 없습니다. 웹용 Office를 쓰거나, 문서 파일은 LibreOffice·ONLYOFFICE로 열 수 있습니다."
+  },
+  {
+   "name": "Microsoft Excel",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "com.microsoft.Excel"
+   ],
+   "names": [
+    "excel"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.libreoffice.LibreOffice",
+     "name": "LibreOffice"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.onlyoffice.desktopeditors",
+     "name": "ONLYOFFICE"
+    }
+   ],
+   "web": "https://www.office.com/",
+   "note": "Microsoft 365 앱은 Linux용이 없습니다. 웹용 Office를 쓰거나, 문서 파일은 LibreOffice·ONLYOFFICE로 열 수 있습니다."
+  },
+  {
+   "name": "Microsoft PowerPoint",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "com.microsoft.Powerpoint"
+   ],
+   "names": [
+    "powerpoint"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.libreoffice.LibreOffice",
+     "name": "LibreOffice"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.onlyoffice.desktopeditors",
+     "name": "ONLYOFFICE"
+    }
+   ],
+   "web": "https://www.office.com/",
+   "note": "Microsoft 365 앱은 Linux용이 없습니다. 웹용 Office를 쓰거나, 문서 파일은 LibreOffice·ONLYOFFICE로 열 수 있습니다."
+  },
+  {
+   "name": "Pages · Numbers · Keynote",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "com.apple.iWork.Pages",
+    "com.apple.iWork.Numbers",
+    "com.apple.iWork.Keynote"
+   ],
+   "names": [
+    "pages",
+    "numbers",
+    "keynote"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.libreoffice.LibreOffice",
+     "name": "LibreOffice"
+    }
+   ],
+   "web": "https://www.icloud.com/",
+   "note": "iWork 앱은 Apple 기기 전용입니다. iCloud 웹에서 같은 문서를 열 수 있습니다."
+  },
+  {
+   "name": "한컴오피스",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "com.hancom.office.hwp*",
+    "com.haansoft.*"
+   ],
+   "names": [
+    "hwp",
+    "hancomoffice",
+    "한글"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.onlyoffice.desktopeditors",
+     "name": "ONLYOFFICE"
+    }
+   ],
+   "web": "https://www.hancomdocs.com/",
+   "note": "Mac용 한컴오피스는 실행할 수 없습니다. 한컴독스(웹)에서 HWP 문서를 열고 편집할 수 있습니다."
+  },
+  {
+   "name": "Zotero",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "org.zotero.zotero"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.zotero.Zotero"
+    }
+   ]
+  },
+  {
+   "name": "Anki",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "net.ankiweb.dtop"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "net.ankiweb.Anki"
+    }
+   ]
+  },
+  {
+   "name": "calibre",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "net.kovidgoyal.calibre"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.calibre_ebook.calibre"
+    }
+   ]
+  },
+  {
+   "name": "Todoist",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "com.todoist.mac.Todoist"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.todoist.Todoist"
+    }
+   ]
+  },
+  {
+   "name": "ChatGPT",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "com.openai.chat"
+   ],
+   "web": "https://chatgpt.com/",
+   "note": "Linux용 앱은 없습니다. 웹에서 같은 계정으로 쓸 수 있습니다."
+  },
+  {
+   "name": "Claude",
+   "cat": "문서 및 생산성",
+   "ids": [
+    "com.anthropic.claudefordesktop"
+   ],
+   "web": "https://claude.ai/",
+   "note": "Linux용 앱은 없습니다. 웹에서 같은 계정으로 쓸 수 있습니다."
+  },
+  {
+   "name": "1Password",
+   "cat": "보안 및 파일",
+   "ids": [
+    "com.1password.1password",
+    "com.agilebits.onepassword7"
+   ],
+   "names": [
+    "1password7"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.onepassword.OnePassword"
+    }
+   ]
+  },
+  {
+   "name": "Bitwarden",
+   "cat": "보안 및 파일",
+   "ids": [
+    "com.bitwarden.desktop"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.bitwarden.desktop"
+    }
+   ]
+  },
+  {
+   "name": "KeePassXC",
+   "cat": "보안 및 파일",
+   "ids": [
+    "org.keepassxc.keepassxc"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.keepassxc.KeePassXC"
+    }
+   ]
+  },
+  {
+   "name": "Proton VPN",
+   "cat": "보안 및 파일",
+   "ids": [
+    "ch.protonvpn.mac"
+   ],
+   "names": [
+    "protonvpn"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.protonvpn.www"
+    }
+   ]
+  },
+  {
+   "name": "Tailscale",
+   "cat": "보안 및 파일",
+   "ids": [
+    "io.tailscale.ipn.macos",
+    "io.tailscale.ipn.macsys"
+   ],
+   "linux": [
+    {
+     "source": "repo",
+     "pkg": "tailscale"
+    }
+   ]
+  },
+  {
+   "name": "Dropbox",
+   "cat": "보안 및 파일",
+   "ids": [
+    "com.getdropbox.dropbox"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.dropbox.Client"
+    }
+   ]
+  },
+  {
+   "name": "Google Drive",
+   "cat": "보안 및 파일",
+   "ids": [
+    "com.google.drivefs"
+   ],
+   "names": [
+    "googledrive"
+   ],
+   "web": "https://drive.google.com/",
+   "note": "Linux용 Google Drive 앱은 없습니다. 웹에서 같은 파일을 쓸 수 있습니다."
+  },
+  {
+   "name": "Nextcloud",
+   "cat": "보안 및 파일",
+   "ids": [
+    "com.nextcloud.desktopclient"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.nextcloud.desktopclient.nextcloud"
+    }
+   ]
+  },
+  {
+   "name": "Cryptomator",
+   "cat": "보안 및 파일",
+   "ids": [
+    "org.cryptomator"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.cryptomator.Cryptomator"
+    }
+   ]
+  },
+  {
+   "name": "qBittorrent",
+   "cat": "보안 및 파일",
+   "ids": [
+    "org.qbittorrent.qBittorrent"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.qbittorrent.qBittorrent"
+    }
+   ]
+  },
+  {
+   "name": "Transmission",
+   "cat": "보안 및 파일",
+   "ids": [
+    "org.m0k.transmission"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.transmissionbt.Transmission"
+    }
+   ]
+  },
+  {
+   "name": "FileZilla",
+   "cat": "보안 및 파일",
+   "ids": [
+    "org.filezilla-project.filezilla"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.filezillaproject.Filezilla"
+    }
+   ]
+  },
+  {
+   "name": "Cyberduck",
+   "cat": "보안 및 파일",
+   "ids": [
+    "ch.sudo.cyberduck"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.filezillaproject.Filezilla",
+     "name": "FileZilla"
+    }
+   ],
+   "note": "Cyberduck은 Linux용 화면 앱이 없습니다. FTP/SFTP는 FileZilla나 파일 앱의 서버 연결로 쓸 수 있습니다."
+  },
+  {
+   "name": "LocalSend",
+   "cat": "보안 및 파일",
+   "ids": [
+    "org.localsend.localsendApp"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "org.localsend.localsend_app"
+    }
+   ]
+  },
+  {
+   "name": "AnyDesk",
+   "cat": "원격 및 가상화",
+   "ids": [
+    "com.philandro.anydesk"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.anydesk.Anydesk"
+    }
+   ]
+  },
+  {
+   "name": "RustDesk",
+   "cat": "원격 및 가상화",
+   "ids": [
+    "com.carriez.rustdesk"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.rustdesk.RustDesk"
+    }
+   ]
+  },
+  {
+   "name": "Parsec",
+   "cat": "원격 및 가상화",
+   "ids": [
+    "tv.parsec.www"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.parsecgaming.parsec"
+    }
+   ]
+  },
+  {
+   "name": "Moonlight",
+   "cat": "원격 및 가상화",
+   "ids": [
+    "com.moonlight-stream.Moonlight"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.moonlight_stream.Moonlight"
+    }
+   ]
+  },
+  {
+   "name": "VirtualBox",
+   "cat": "원격 및 가상화",
+   "ids": [
+    "org.virtualbox.app.VirtualBox"
+   ],
+   "linux": [
+    {
+     "source": "repo",
+     "pkg": "virtualbox"
+    }
+   ]
+  },
+  {
+   "name": "UTM",
+   "cat": "원격 및 가상화",
+   "ids": [
+    "com.utmapp.UTM"
+   ],
+   "alt": [
+    {
+     "source": "repo",
+     "pkg": "virt-manager",
+     "name": "가상 머신 관리자"
+    }
+   ],
+   "note": "UTM은 macOS 전용입니다. 같은 QEMU 엔진을 쓰는 가상 머신 관리자를 쓰세요."
+  },
+  {
+   "name": "Parallels Desktop",
+   "cat": "원격 및 가상화",
+   "ids": [
+    "com.parallels.desktop.console"
+   ],
+   "names": [
+    "parallels"
+   ],
+   "alt": [
+    {
+     "source": "repo",
+     "pkg": "virt-manager",
+     "name": "가상 머신 관리자"
+    },
+    {
+     "source": "repo",
+     "pkg": "virtualbox",
+     "name": "VirtualBox"
+    }
+   ],
+   "note": "Parallels는 macOS 전용입니다. Windows 프로그램은 DelayOS의 Windows 앱 엔진에서 바로 실행됩니다(.exe 두 번 클릭)."
+  },
+  {
+   "name": "VMware Fusion",
+   "cat": "원격 및 가상화",
+   "ids": [
+    "com.vmware.fusion"
+   ],
+   "alt": [
+    {
+     "source": "repo",
+     "pkg": "virt-manager",
+     "name": "가상 머신 관리자"
+    },
+    {
+     "source": "repo",
+     "pkg": "virtualbox",
+     "name": "VirtualBox"
+    }
+   ],
+   "note": "VMware Fusion은 macOS 전용입니다."
+  },
+  {
+   "name": "Rectangle",
+   "cat": "시스템 도구",
+   "ids": [
+    "com.knollsoft.Rectangle",
+    "com.knollsoft.Hookshot"
+   ],
+   "builtin": {
+    "label": "",
+    "argv": []
+   },
+   "note": "DelayOS에 들어 있는 기능입니다. 창을 화면 가장자리로 끌거나 Meta+방향키를 누르면 반쪽/사분할로 맞춰집니다."
+  },
+  {
+   "name": "Magnet",
+   "cat": "시스템 도구",
+   "ids": [
+    "com.crowdcafe.windowmagnet"
+   ],
+   "builtin": {
+    "label": "",
+    "argv": []
+   },
+   "note": "DelayOS에 들어 있는 기능입니다. 창을 화면 가장자리로 끌거나 Meta+방향키를 누르면 반쪽/사분할로 맞춰집니다."
+  },
+  {
+   "name": "Alfred",
+   "cat": "시스템 도구",
+   "ids": [
+    "com.runningwithcrayons.Alfred"
+   ],
+   "builtin": {
+    "label": "명령 바 열기",
+    "argv": [
+     "delay-shell",
+     "show",
+     "commandbar"
+    ]
+   },
+   "note": "DelayOS의 명령 바(Meta+Space)가 앱 실행, 파일 검색, 계산을 합니다."
+  },
+  {
+   "name": "Raycast",
+   "cat": "시스템 도구",
+   "ids": [
+    "com.raycast.macos"
+   ],
+   "builtin": {
+    "label": "명령 바 열기",
+    "argv": [
+     "delay-shell",
+     "show",
+     "commandbar"
+    ]
+   },
+   "note": "DelayOS의 명령 바(Meta+Space)가 앱 실행, 파일 검색, 계산을 합니다."
+  },
+  {
+   "name": "The Unarchiver",
+   "cat": "시스템 도구",
+   "ids": [
+    "cx.c3.theunarchiver"
+   ],
+   "names": [
+    "unarchiver"
+   ],
+   "builtin": {
+    "label": "파일 앱 열기",
+    "argv": [
+     "delay-files"
+    ]
+   },
+   "note": "압축 풀기는 DelayOS 파일 앱에 들어 있습니다. 압축 파일을 마우스 오른쪽 버튼으로 눌러 '압축 풀기'를 고르세요."
+  },
+  {
+   "name": "Keka",
+   "cat": "시스템 도구",
+   "ids": [
+    "com.aone.keka"
+   ],
+   "builtin": {
+    "label": "파일 앱 열기",
+    "argv": [
+     "delay-files"
+    ]
+   },
+   "note": "압축과 압축 풀기는 DelayOS 파일 앱에 들어 있습니다."
+  },
+  {
+   "name": "AppCleaner",
+   "cat": "시스템 도구",
+   "ids": [
+    "net.freemacsoft.AppCleaner"
+   ],
+   "builtin": {
+    "label": "설치된 앱 보기",
+    "argv": [
+     "delay-store",
+     "--installed"
+    ]
+   },
+   "note": "DelayOS에서는 Store › 설치됨에서 '제거'를 누르면 앱이 깨끗하게 지워집니다."
+  },
+  {
+   "name": "CleanMyMac",
+   "cat": "시스템 도구",
+   "ids": [
+    "com.macpaw.CleanMyMac*"
+   ],
+   "builtin": {
+    "label": "저장소 설정",
+    "argv": [
+     "delay-settings",
+     "storage"
+    ]
+   },
+   "note": "macOS 전용입니다. DelayOS는 설정 › 저장소에서 정리할 수 있습니다."
+  },
+  {
+   "name": "Steam",
+   "cat": "게임",
+   "ids": [
+    "com.valvesoftware.steam"
+   ],
+   "linux": [
+    {
+     "source": "repo",
+     "pkg": "steam"
+    },
+    {
+     "source": "flathub",
+     "pkg": "com.valvesoftware.Steam"
+    }
+   ],
+   "note": "Linux용 Steam은 Windows 게임도 Proton으로 실행하므로 Mac보다 훨씬 많은 게임을 할 수 있습니다."
+  },
+  {
+   "name": "Epic Games Launcher",
+   "cat": "게임",
+   "ids": [
+    "com.epicgames.EpicGamesLauncher"
+   ],
+   "names": [
+    "epicgames",
+    "epicinstaller"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "com.heroicgameslauncher.hgl",
+     "name": "Heroic Games Launcher"
+    }
+   ],
+   "note": "Epic 런처는 Linux용이 없습니다. Heroic에 Epic 계정으로 로그인하면 보관함의 게임을 설치해 실행할 수 있습니다."
+  },
+  {
+   "name": "Battle.net",
+   "cat": "게임",
+   "ids": [
+    "net.battle.app",
+    "com.blizzard.*"
+   ],
+   "names": [
+    "battlenet",
+    "battlenetsetup"
+   ],
+   "win": "https://download.battle.net/ko-kr/desktop",
+   "note": "Linux용은 없습니다. Windows용 Battle.net을 Windows 앱 엔진으로 실행할 수 있습니다."
+  },
+  {
+   "name": "Minecraft",
+   "cat": "게임",
+   "ids": [
+    "com.mojang.minecraftlauncher"
+   ],
+   "linux": [
+    {
+     "source": "flathub",
+     "pkg": "com.mojang.Minecraft",
+     "name": "Minecraft 런처"
+    },
+    {
+     "source": "flathub",
+     "pkg": "org.prismlauncher.PrismLauncher",
+     "name": "Prism Launcher"
+    }
+   ]
+  },
+  {
+   "name": "Roblox",
+   "cat": "게임",
+   "ids": [
+    "com.roblox.RobloxPlayer",
+    "com.roblox.Roblox"
+   ],
+   "alt": [
+    {
+     "source": "flathub",
+     "pkg": "org.vinegarhq.Sober",
+     "name": "Sober (비공식 Roblox 클라이언트)"
+    }
+   ],
+   "note": "공식 Linux 버전은 없습니다. 비공식 클라이언트 Sober로 플레이할 수 있습니다."
+  },
+  {
+   "name": "League of Legends",
+   "cat": "게임",
+   "ids": [
+    "com.riotgames.*"
+   ],
+   "names": [
+    "leagueoflegends",
+    "riotclient",
+    "valorant"
+   ],
+   "builtin": {
+    "label": "Windows 게임 보기",
+    "argv": [
+     "delay-store",
+     "--windows"
+    ]
+   },
+   "note": "Riot 게임은 커널 안티치트(Vanguard) 때문에 DelayOS에서 실행할 수 없습니다. 이 PC에 Windows가 있으면 Store › Windows 게임에서 Windows로 전환해 실행할 수 있습니다."
+  }
+ ]
+}

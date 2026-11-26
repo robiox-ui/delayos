@@ -96,7 +96,7 @@ FocusScope {
             dragProxy.Drag.imageSource = url
             Qt.callLater(() => { if (fv.dragging) dragProxy.Drag.active = true })
         }
-        if (!dragBadge.grabToImage((r) => go(r.url))) go("")
+        if (!dragBadge.grabToImage((r) => go(r.url), Qt.size(dragBadge.width, dragBadge.height))) go("")
     }
     function endDrag() {
         if (!dragging) return
@@ -120,6 +120,7 @@ FocusScope {
         property point last
         property bool banding: false
         property string lastKey: ""
+        parent: view.contentItem       // (items declared inside a ListView/GridView are not put there by Qt)
         z: -1
         y: view.originY
         width: view.width
@@ -300,7 +301,7 @@ FocusScope {
 
         // empty space: click clears, right-click menu, rubber band
         BandArea { view: grid; band: gridBand; cols: grid.cols; cellW: grid.cellWidth; cellH: grid.cellHeight; tileW: 96; tileH: 96 }
-        Band { id: gridBand }
+        Band { id: gridBand; parent: grid.contentItem }
     }
 
     // ---------- list ----------
@@ -413,7 +414,7 @@ FocusScope {
                 }
             }
             BandArea { id: listBandArea; view: list; band: listBand; cols: 1; cellW: Math.max(1, list.width); cellH: 30; tileW: Math.max(1, list.width); tileH: 30 }
-            Band { id: listBand }
+            Band { id: listBand; parent: list.contentItem }
         }
         // date / type / size columns: a click selects the row, a drag draws the rubber band (as in Explorer).
         // One area above the rows (not one per row), so the band survives rows scrolling out of view.

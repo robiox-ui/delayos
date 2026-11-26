@@ -1,7 +1,7 @@
 #!/usr/bin/python3
-# DelayOS Store (org.delayos.Store). Usage: delay-store [--installed | --updates | --windows | --search TEXT | APP_ID | appstream://ID]
+# DelayOS Store (org.delayos.Store). Usage: delay-store [--installed | --updates | --windows | --mac | --search TEXT | APP_ID | appstream://ID]
 import sys
-sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/store"]
+sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/store", "/usr/share/delayos/apps/macapps"]
 from syskit import run_app, single_instance
 if single_instance("org.delayos.Store", sys.argv[1:]):
     sys.exit(0)

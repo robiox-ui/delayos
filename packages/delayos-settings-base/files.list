@@ -60,3 +60,7 @@ usr/lib/delayos/delay-grub-ko
 usr/lib/delayos/delay-splash-handoff
 etc/pacman.d/hooks/65-delay-grub-ko.hook
 usr/share/polkit-1/actions/org.delayos.recovery.policy
+# render profile: software rendering without a GPU (docs/reports/smooth-nogpu.md)
+etc/xdg/plasma-workspace/env/delay-render.sh
+usr/lib/delayos/delay-render-detect
+usr/share/delayos/render-software/

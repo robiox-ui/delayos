@@ -12,4 +12,4 @@ Terminal=false
 NoDisplay=true
 StartupNotify=false
 Categories=System;Emulator;
-MimeType=application/x-ms-dos-executable;application/x-msdownload;application/vnd.microsoft.portable-executable;application/x-msi;application/x-ms-installer;application/x-ms-shortcut;application/x-bat;application/x-apple-diskimage;
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/vnd.microsoft.portable-executable;application/x-msi;application/x-ms-installer;application/x-ms-shortcut;application/x-bat;

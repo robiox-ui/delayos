@@ -6,6 +6,7 @@ usr/bin/delay-calc
 usr/bin/delay-drivers
 usr/bin/delay-files
 usr/bin/delay-gamecontrols
+usr/bin/delay-macapps
 usr/bin/delay-notepad
 usr/bin/delay-settings
 usr/bin/delay-snip
@@ -22,3 +23,4 @@ usr/share/applications/org.delayos.*.desktop
 usr/share/delayos/apps/
 usr/share/delayos/gamecontrols/
 usr/share/polkit-1/actions/org.delayos.syshelper.policy
+usr/share/mime/packages/delayos-macapps.xml

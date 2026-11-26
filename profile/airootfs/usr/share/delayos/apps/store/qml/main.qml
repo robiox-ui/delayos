@@ -15,7 +15,7 @@ Window {
     title: "DelayOS Store"
     color: Theme.windowBg
 
-    property string view: "home"         // home | browse | installed | wingames | search | app
+    property string view: "home"         // home | browse | installed | wingames | macapps | search | app
     property string prevView: "home"
     property string category: "popular"
     property string query: ""
@@ -39,6 +39,7 @@ Window {
         if (!a || !a.length) return
         if (a[0] === "--installed" || a[0] === "--updates") view = "installed"
         else if (a[0] === "--windows") view = "wingames"
+        else if (a[0] === "--mac") view = "macapps"
         else if (a[0] === "--search" && a.length > 1) search.text = a[1]
         else if (a[0].indexOf("-") !== 0) { appId = a[0].replace(/^appstream:\/*/, "").replace(/\.desktop$/, ""); view = "app" }
     }
@@ -127,6 +128,7 @@ Window {
             Repeater {
                 model: [{ id: "home", label: "홈", icon: "go-home" }, { id: "browse", label: "둘러보기", icon: "view-app-grid-symbolic" }, { id: "installed", label: "설치됨", icon: "view-list-details" }]
                        .concat(win.hasWin ? [{ id: "wingames", label: "Windows 게임", icon: "g:gamepad" }] : [])
+                       .concat([{ id: "macapps", label: "Mac 앱", icon: "g:mac" }])
                 Rectangle {
                     readonly property bool sel: win.view === modelData.id || (modelData.id === "home" && (win.view === "search") && false)
                     width: 202; height: 40; radius: 20
@@ -173,7 +175,7 @@ Window {
             anchors.fill: parent
             anchors.topMargin: 62
             sourceComponent: win.view === "home" ? homePage : win.view === "browse" ? browsePage : win.view === "installed" ? installedPage
-                           : win.view === "wingames" ? winPage : win.view === "search" ? searchPage : appPage
+                           : win.view === "wingames" ? winPage : win.view === "macapps" ? macPage : win.view === "search" ? searchPage : appPage
         }
         // install banner (§9.8 state 3)
         Rectangle {
@@ -420,6 +422,11 @@ Window {
                 }
             }
         }
+    }
+    // "Mac 앱": Mac에서 쓰던 앱 찾기 (curated table, macback.store_view)
+    Component {
+        id: macPage
+        MacPage { width: content.width }
     }
     Component {
         id: appPage

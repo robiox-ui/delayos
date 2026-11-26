@@ -346,6 +346,12 @@ def run_app(app_id, title, qml_file, modules=None, icon=None, extra_ctx=None, ar
     """Create the app, expose `sys`, load qml_file and exec."""
     QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
+    try:        # no usable GPU (delay-render-detect): CPU scene graph, see apps/common/delayapp.py
+        with open("/run/delay/render") as f:
+            if f.read().strip() == "software":
+                os.environ.setdefault("QT_QUICK_BACKEND", "software")
+    except OSError:
+        pass
     app = QGuiApplication(argv or sys.argv)
     app.setOrganizationName("DelayOS")
     app.setApplicationName(app_id.split(".")[-1].lower())

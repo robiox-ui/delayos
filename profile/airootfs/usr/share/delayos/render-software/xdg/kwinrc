@@ -1,0 +1,14 @@
+# DelayOS software-render profile (no GPU: llvmpipe). Layered above /etc/xdg/kwinrc by
+# /etc/xdg/plasma-workspace/env/delay-render.sh; never active when a GPU is in use.
+# Measured in a VM without 3D at 1920x1080 (docs/reports/smooth-nogpu.md): the rounded-corner shader
+# and the blur behind the glass cost KWin 1.5 CPU cores while a window moves; without them 0.5.
+[Plugins]
+blurEnabled=false
+contrastEnabled=false
+backgroundcontrastEnabled=false
+kwin4_effect_shapecornersEnabled=false
+magiclampEnabled=false
+wobblywindowsEnabled=false
+translucencyEnabled=false
+slideEnabled=false
+shakecursorEnabled=false

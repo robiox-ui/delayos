@@ -1,0 +1,12 @@
+# DelayOS: decide once per boot whether the desktop is drawn by a GPU or by the CPU (llvmpipe).
+# Pulled in by sddm.service.d/20-delay-render.conf; the result is /run/delay/render.
+[Unit]
+Description=DelayOS render profile (software rendering without a GPU)
+After=systemd-modules-load.service systemd-udev-trigger.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/delayos/delay-render-detect
+TimeoutStartSec=20

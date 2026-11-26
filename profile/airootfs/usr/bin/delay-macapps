@@ -1,0 +1,33 @@
+#!/usr/bin/python3
+# Mac 앱 (org.delayos.MacApps): delay-macapps FILE.dmg | FILE.pkg | DIR.app | FILE.zip | mach-o-binary
+# Tells which Mac app the file is and offers the Linux version, a Windows version, a web version or
+# (command-line programs only) Darling. It never runs macOS code itself. Without a file: the Store page "Mac 앱".
+# --json FILE prints the analysis (for tests and scripts).
+import os
+import sys
+sys.path[:0] = ["/usr/share/delayos/apps/syskit", "/usr/share/delayos/apps/macapps", "/usr/share/delayos/apps/store"]
+args = [a for a in sys.argv[1:] if a]
+files = [a for a in args if not a.startswith("--")]
+if not files:
+    os.execv("/usr/bin/delay-store", ["delay-store", "--mac"])
+path = files[0]
+if path.startswith("file://"):
+    from urllib.parse import unquote
+    path = unquote(path[7:])
+path = os.path.abspath(path)
+if "--json" in args:
+    import json
+    import macback
+    print(json.dumps(macback.analyze(path), ensure_ascii=False, indent=1))
+    sys.exit(0)
+from syskit import run_app
+
+
+def ctx():
+    from installer import Installer
+    return {"installer": Installer()}
+
+
+sys.exit(run_app("org.delayos.MacApps", "Mac 앱", "/usr/share/delayos/apps/macapps/qml/main.qml",
+                 modules={"storeback": "storeback"}, icon="delayos-macapps", extra_ctx=ctx,
+                 argv=[sys.argv[0], path]))

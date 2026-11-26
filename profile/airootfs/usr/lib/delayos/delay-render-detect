@@ -1,0 +1,72 @@
+#!/bin/bash
+# DelayOS render profile: is there a GPU that Mesa can use, or is everything drawn by the CPU
+# (llvmpipe / softpipe: VMs without 3D, old or unsupported cards, a broken driver, nomodeset)?
+#
+# Runs once per boot before the display manager (delay-render-detect.service) and writes
+#   /run/delay/render               "software" or "hardware"
+#   /run/delay/SoftwareRender.qml   only in software mode; DelayUI's Theme.softwareRender tests for it
+#   /run/delay/plasmashell.env      only in software mode; environment of plasmashell (systemd drop-in)
+# The session (/etc/xdg/plasma-workspace/env/delay-render.sh), the DelayOS apps (delayapp.py) and the
+# shell read these and switch to the cheap look: no blur, no rounded-corner shader, no animations,
+# opaque panels, CPU scene graph for the apps. Nothing is stored on disk, so a machine that gets a
+# working GPU (driver installed, 3D enabled in the VM) is back to the full look at the next boot.
+#
+# Override: MODE=software|hardware in /etc/delay/render.conf, or delay.render=software|hardware on the
+# kernel command line. "delay-render-detect --print" only prints the decision.
+set -u
+mode=auto
+[[ -r /etc/delay/render.conf ]] && . /etc/delay/render.conf 2>/dev/null
+mode=${MODE:-$mode}
+for a in $(< /proc/cmdline); do
+  [[ $a == delay.render=* ]] && mode=${a#delay.render=}
+done
+
+detect() {
+  local c drv hw=0 ask=0 i
+  # graphics drivers load in parallel with us: give a card up to 4 s to show up
+  for i in {1..40}; do
+    compgen -G '/sys/class/drm/card[0-9]' >/dev/null && break
+    sleep 0.1
+  done
+  for c in /sys/class/drm/card[0-9] /sys/class/drm/card[0-9][0-9]; do
+    [[ -e $c/device/driver ]] || continue
+    drv=$(basename "$(readlink -f "$c/device/driver")")
+    case $drv in
+      i915|xe|amdgpu|radeon|nouveau|nvidia|nvidia-drm|nvidia_drm) hw=1 ;;
+      # firmware framebuffers and display-only chips: no 3D at all
+      simple-framebuffer|simpledrm|efi-framebuffer|vesa-framebuffer|bochs-drm|bochs|cirrus*|qxl|hyperv_drm|mgag200|ast|gma500|udl|gm12u320|vboxvideo) ;;
+      # vmwgfx, virtio_gpu and anything unknown: 3D depends on the host or the chip, ask Mesa
+      *) ask=1 ;;
+    esac
+  done
+  if (( hw )); then echo hardware; return; fi
+  if (( ask )) && command -v eglinfo >/dev/null; then
+    local r
+    r=$(timeout 8 eglinfo -B -p gbm 2>/dev/null | grep -m1 -i 'renderer')
+    [[ -z $r ]] && r=$(timeout 8 eglinfo -B -p surfaceless 2>/dev/null | grep -m1 -i 'renderer')
+    if [[ -n $r && ! $r =~ llvmpipe|softpipe|swrast|[Ss]oftware ]]; then echo hardware; return; fi
+    echo software; return
+  fi
+  (( ask )) && { echo hardware; return; }     # cannot tell without eglinfo: keep the normal look
+  echo software
+}
+
+case $mode in
+  software|hardware) result=$mode ;;
+  *) result=$(detect) ;;
+esac
+if [[ ${1:-} == --print ]]; then echo "$result"; exit 0; fi
+
+mkdir -p /run/delay
+chmod 755 /run/delay
+echo "$result" > /run/delay/render
+if [[ $result == software ]]; then
+  printf 'import QtQml\nQtObject {}\n' > /run/delay/SoftwareRender.qml
+  # plasmashell on Qt Quick's CPU scene graph: measured 592 -> 275 MB RSS and a quarter of the CPU when
+  # a popup opens, against OpenGL on llvmpipe
+  echo 'QT_QUICK_BACKEND=software' > /run/delay/plasmashell.env
+else
+  rm -f /run/delay/SoftwareRender.qml /run/delay/plasmashell.env
+fi
+chmod 644 /run/delay/render /run/delay/SoftwareRender.qml /run/delay/plasmashell.env 2>/dev/null
+echo "delay-render: $result"

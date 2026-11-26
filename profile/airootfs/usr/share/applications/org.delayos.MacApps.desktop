@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Mac Apps
+Name[ko]=Mac 앱
+GenericName=Mac app helper
+GenericName[ko]=Mac 앱 도우미
+Comment=Find the Linux, Windows or web version of a Mac app (.dmg, .pkg, .app)
+Comment[ko]=Mac 앱 파일(.dmg, .pkg, .app)의 Linux·Windows·웹 버전을 찾아 줍니다
+Icon=delayos-macapps
+Exec=delay-macapps %f
+Terminal=false
+NoDisplay=true
+StartupNotify=false
+StartupWMClass=org.delayos.MacApps
+Categories=System;Utility;
+MimeType=application/x-apple-diskimage;application/x-xar;application/vnd.apple.installer+xml;application/x-mach-binary;application/x-apple-app-bundle;

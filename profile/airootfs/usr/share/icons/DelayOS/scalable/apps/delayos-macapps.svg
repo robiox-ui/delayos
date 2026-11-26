@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".5"/><stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F4F6FB"/><stop offset="1" stop-color="#C9D0E0"/></linearGradient><linearGradient id="l" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6C86FF"/><stop offset="1" stop-color="#3350D8"/></linearGradient></defs>
+<path d="M4 32C4 9 9 4 32 4s28 5 28 28-5 28-28 28S4 55 4 32Z" transform="translate(0 1.2)" fill="#0A1030" opacity=".18"/>
+<path d="M4 32C4 9 9 4 32 4s28 5 28 28-5 28-28 28S4 55 4 32Z" fill="url(#k)"/>
+<path d="M4.5 32C4.5 9.4 9.4 4.5 32 4.5s27.5 4.9 27.5 27.5-4.9 27.5-27.5 27.5S4.5 54.6 4.5 32Z" fill="none" stroke="url(#h)"/>
+<circle cx="15.5" cy="15.5" r="2.2" fill="#FF5F57"/><circle cx="22.5" cy="15.5" r="2.2" fill="#FEBC2E"/><circle cx="29.5" cy="15.5" r="2.2" fill="#28C840"/>
+<path d="M27 27h10v10H27ZM27 27h-4a4 4 0 1 1 4-4ZM37 27v-4a4 4 0 1 1 4 4ZM37 37h4a4 4 0 1 1-4 4ZM27 37v4a4 4 0 1 1-4-4Z" transform="translate(0 3)" fill="none" stroke="url(#l)" stroke-width="3" stroke-linejoin="round"/>
+</svg>

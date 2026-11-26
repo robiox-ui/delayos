@@ -227,6 +227,204 @@
     "anticheat_note": "추가 요구 사항이 없습니다.",
     "requires": []
    }
+  },
+  {
+   "id": "cod",
+   "name": "Call of Duty",
+   "name_ko": "콜 오브 듀티",
+   "icon": "delayos-winboot-game",
+   "launch": { "type": "uri", "target": "steam://rungameid/1938090" },
+   "exit_processes": [],
+   "aliases": ["steam-1938090"],
+   "exe_names": [],
+   "featured": false,
+   "reason": "콜 오브 듀티는 커널 안티치트(RICOCHET)를 사용하며 Linux에서 실행할 수 없습니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/1938090" },
+    "detect": { "type": "steam", "appid": "1938090" },
+    "size_gb": 150,
+    "account": "Steam 계정 (실행할 때 Activision 계정 연결)",
+    "anticheat": "RICOCHET",
+    "anticheat_note": "최신작(블랙 옵스 7, 워존)은 TPM 2.0과 Secure Boot가 켜져 있어야 실행됩니다.",
+    "requires": ["tpm2", "secureboot"]
+   }
+  },
+  {
+   "id": "bf6",
+   "name": "Battlefield 6",
+   "name_ko": "배틀필드 6",
+   "icon": "delayos-winboot-game",
+   "launch": { "type": "uri", "target": "steam://rungameid/2807960" },
+   "exit_processes": [],
+   "aliases": ["steam-2807960"],
+   "exe_names": [],
+   "featured": false,
+   "reason": "배틀필드 6는 커널 안티치트(EA Javelin)를 사용하며 Linux에서 실행할 수 없습니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/2807960" },
+    "detect": { "type": "steam", "appid": "2807960" },
+    "size_gb": 80,
+    "account": "Steam 계정 (실행할 때 EA 계정 연결)",
+    "anticheat": "EA Javelin",
+    "anticheat_note": "Secure Boot가 켜져 있어야 실행됩니다.",
+    "requires": ["secureboot"]
+   }
+  },
+  {
+   "id": "fc26",
+   "name": "EA SPORTS FC 26",
+   "name_ko": "EA SPORTS FC 26",
+   "icon": "delayos-winboot-game",
+   "launch": { "type": "uri", "target": "steam://rungameid/3405690" },
+   "exit_processes": [],
+   "aliases": ["steam-3405690"],
+   "exe_names": [],
+   "featured": false,
+   "reason": "EA SPORTS FC 26은 커널 안티치트(EA Javelin)를 사용하며 Linux에서 실행할 수 없습니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/3405690" },
+    "detect": { "type": "steam", "appid": "3405690" },
+    "size_gb": 100,
+    "account": "Steam 계정 (실행할 때 EA 계정 연결)",
+    "anticheat": "EA Javelin",
+    "anticheat_note": "Secure Boot가 필요할 수 있습니다.",
+    "requires": []
+   }
+  },
+  {
+   "id": "f1-25",
+   "name": "F1 25",
+   "name_ko": "F1 25",
+   "icon": "delayos-winboot-game",
+   "launch": { "type": "uri", "target": "steam://rungameid/3059520" },
+   "exit_processes": [],
+   "aliases": ["steam-3059520"],
+   "exe_names": [],
+   "featured": false,
+   "reason": "F1 25는 EA 안티치트를 사용해 Linux에서 실행되지 않는 것으로 알려져 있습니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/3059520" },
+    "detect": { "type": "steam", "appid": "3059520" },
+    "size_gb": 100,
+    "account": "Steam 계정 (실행할 때 EA 계정 연결)",
+    "anticheat": "EA Javelin",
+    "anticheat_note": "추가 요구 사항은 확인되지 않았습니다.",
+    "requires": []
+   }
+  },
+  {
+   "id": "destiny2",
+   "name": "Destiny 2",
+   "name_ko": "데스티니 가디언즈",
+   "icon": "delayos-winboot-game",
+   "launch": { "type": "uri", "target": "steam://rungameid/1085660" },
+   "exit_processes": [],
+   "aliases": ["steam-1085660"],
+   "exe_names": [],
+   "featured": false,
+   "reason": "데스티니 가디언즈는 Linux에서 실행하면 계정이 정지될 수 있습니다 (BattlEye).",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/1085660" },
+    "detect": { "type": "steam", "appid": "1085660" },
+    "size_gb": 105,
+    "account": "Steam 계정 (Bungie 계정 연결)",
+    "anticheat": "BattlEye",
+    "anticheat_note": "추가 요구 사항이 없습니다.",
+    "requires": []
+   }
+  },
+  {
+   "id": "tarkov",
+   "name": "Escape from Tarkov",
+   "name_ko": "이스케이프 프롬 타르코프",
+   "icon": "delayos-winboot-game",
+   "launch": { "type": "uri", "target": "steam://rungameid/3932890" },
+   "exit_processes": [],
+   "aliases": ["steam-3932890"],
+   "exe_names": [],
+   "featured": false,
+   "reason": "이스케이프 프롬 타르코프는 Linux에서 안티치트(BattlEye)가 켜지지 않아 온라인 플레이를 할 수 없습니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/3932890" },
+    "detect": { "type": "steam", "appid": "3932890" },
+    "size_gb": 60,
+    "account": "Steam 계정 (BSG 계정 연결)",
+    "anticheat": "BattlEye",
+    "anticheat_note": "추가 요구 사항이 없습니다.",
+    "requires": []
+   }
+  },
+  {
+   "id": "deltaforce",
+   "name": "Delta Force",
+   "name_ko": "델타 포스",
+   "icon": "delayos-winboot-game",
+   "launch": { "type": "uri", "target": "steam://rungameid/2507950" },
+   "exit_processes": [],
+   "aliases": ["steam-2507950"],
+   "exe_names": [],
+   "featured": false,
+   "reason": "델타 포스는 커널 안티치트(ACE)를 사용하며 Linux에서 실행할 수 없습니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/2507950" },
+    "detect": { "type": "steam", "appid": "2507950" },
+    "size_gb": 90,
+    "account": "Steam 계정",
+    "anticheat": "Anti-Cheat Expert",
+    "anticheat_note": "추가 요구 사항이 없습니다.",
+    "requires": []
+   }
+  },
+  {
+   "id": "rust",
+   "name": "Rust",
+   "name_ko": "러스트",
+   "icon": "delayos-winboot-game",
+   "launch": { "type": "uri", "target": "steam://rungameid/252490" },
+   "exit_processes": [],
+   "aliases": ["steam-252490"],
+   "exe_names": [],
+   "featured": false,
+   "reason": "러스트는 Linux용 Easy Anti-Cheat를 켜지 않아 대부분의 서버에 접속할 수 없습니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/252490" },
+    "detect": { "type": "steam", "appid": "252490" },
+    "size_gb": 45,
+    "account": "Steam 계정",
+    "anticheat": "Easy Anti-Cheat",
+    "anticheat_note": "추가 요구 사항이 없습니다.",
+    "requires": []
+   }
+  },
+  {
+   "id": "gta5",
+   "name": "Grand Theft Auto V",
+   "name_ko": "GTA 5",
+   "icon": "delayos-winboot-game",
+   "launch": { "type": "uri", "target": "steam://rungameid/3240220" },
+   "exit_processes": [],
+   "aliases": ["steam-3240220"],
+   "exe_names": [],
+   "featured": false,
+   "reason": "GTA 온라인은 BattlEye 때문에 Linux에서 접속할 수 없습니다. 스토리 모드는 DelayOS의 Steam에서도 실행됩니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/3240220" },
+    "detect": { "type": "steam", "appid": "3240220" },
+    "size_gb": 110,
+    "account": "Steam 계정 (Rockstar Games 계정 연결)",
+    "anticheat": "BattlEye",
+    "anticheat_note": "추가 요구 사항이 없습니다.",
+    "requires": []
+   }
   }
  ]
 }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <!-- macOS installer package (a xar archive). shared-mime-info knows application/x-xar by magic only;
+       this adds the *.pkg / *.mpkg file names so a double click reaches "Mac 앱". -->
+  <mime-type type="application/vnd.apple.installer+xml">
+    <comment>macOS installer package</comment>
+    <comment xml:lang="ko">macOS 설치 꾸러미</comment>
+    <sub-class-of type="application/x-xar"/>
+    <magic priority="60"><match type="string" value="xar!" offset="0"/></magic>
+    <glob pattern="*.pkg" weight="60"/>
+    <glob pattern="*.mpkg" weight="60"/>
+  </mime-type>
+</mime-info>

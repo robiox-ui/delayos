@@ -7,6 +7,10 @@ QtObject {
     id: t
     // dark is the default; apps/plasmoids may bind this to the Plasma colour scheme
     property bool dark: true
+    // true when the CPU draws the desktop (no usable GPU: llvmpipe in a VM without 3D, an old card, a broken
+    // driver). Decided at boot by /usr/lib/delayos/delay-render-detect, which leaves this file in /run only
+    // then. Components use it for the cheap look: opaque surfaces instead of glass, no motion, no layers.
+    readonly property bool softwareRender: Qt.createComponent("file:///run/delay/SoftwareRender.qml").status === Component.Ready
     property color accent: "#4D6BFE"
     readonly property color accentSoft: Qt.rgba(accent.r, accent.g, accent.b, 0.22)
     // accent used as text/glyph colour on dark surfaces (lightened so the blue stays readable)
@@ -31,8 +35,9 @@ QtObject {
     readonly property color danger: "#C42B1C"
 
     // glass surfaces (the blur itself comes from KWin; these are the tints)
-    readonly property color glassDark: dark ? Qt.rgba(8/255,16/255,26/255,0.78) : Qt.rgba(246/255,247/255,250/255,0.78)
-    readonly property color glassBar: dark ? Qt.rgba(6/255,14/255,22/255,0.50) : Qt.rgba(240/255,242/255,246/255,0.75)
+    // without a GPU KWin does not blur what is behind them, so they are almost opaque to stay readable
+    readonly property color glassDark: dark ? Qt.rgba(8/255,16/255,26/255, softwareRender ? 0.96 : 0.78) : Qt.rgba(246/255,247/255,250/255, softwareRender ? 0.97 : 0.78)
+    readonly property color glassBar: dark ? Qt.rgba(6/255,14/255,22/255, softwareRender ? 0.88 : 0.50) : Qt.rgba(240/255,242/255,246/255, softwareRender ? 0.94 : 0.75)
     readonly property color glassTile: dark ? Qt.rgba(1,1,1,0.07) : Qt.rgba(1,1,1,0.65)
     readonly property color glassTileHover: dark ? Qt.rgba(1,1,1,0.10) : Qt.rgba(1,1,1,0.80)
     readonly property color rim: dark ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
@@ -87,9 +92,11 @@ QtObject {
     readonly property int fsGreeting: 30
 
     // motion
-    readonly property int popMs: 120
-    readonly property int closeMs: 90
-    readonly property int islandMs: 280
-    readonly property int toastMs: 130
+    // (software rendering: popups, menus and toasts appear in one frame; an animation the CPU cannot hold at
+    // 60 fps looks worse than none)
+    readonly property int popMs: softwareRender ? 0 : 120
+    readonly property int closeMs: softwareRender ? 0 : 90
+    readonly property int islandMs: softwareRender ? 0 : 280
+    readonly property int toastMs: softwareRender ? 0 : 130
     readonly property var easeOut: [0.2, 0.8, 0.2, 1, 1, 1]
 }
