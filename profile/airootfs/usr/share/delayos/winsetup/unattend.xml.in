@@ -36,6 +36,7 @@
         <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
         <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
         <ProtectYourPC>3</ProtectYourPC>
+        @OOBE_SKIP@
       </OOBE>
       <UserAccounts>
         <LocalAccounts>

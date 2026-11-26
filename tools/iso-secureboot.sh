@@ -88,7 +88,7 @@ have="$(sha256sum "$WORK/vmlinuz.iso" | awk '{print $1}')"
 want="$(awk '{print $1; exit}' "$G/vmlinuz-linux-delayos.sha256")"
 signed="$(sha256sum "$G/vmlinuz-linux-delayos.signed" | awk '{print $1}')"
 [[ $have == "$want" || $have == "$signed" ]] \
-  || die "the kernel on the ISO is not the one delayos-sb-general was made from (rebuild delayos-sb-general for this linux-delayos)"
+  || die "the kernel on the ISO is not the one this delayos-sb-general was made from (rebuild delayos-sb-general for this linux-delayos; an ISO that was signed before needs the very package it was signed with)"
 
 # ---------------------------------------------------------------- /EFI tree
 install -m644 "$SH/shimx64.efi" "$WORK/tree/EFI/BOOT/BOOTx64.EFI"
