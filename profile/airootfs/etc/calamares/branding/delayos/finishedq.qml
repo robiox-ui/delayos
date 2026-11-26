@@ -10,6 +10,17 @@ Rectangle {
     color: ts.bg
     anchors.fill: parent
 
+    // Hidden Windows for anti-cheat games (delay-winsetup): what happens at the next start
+    property string winResult: ""
+    property string winError: ""
+    property bool winSb: false
+    function winRefresh() {
+        winResult = Global.contains("delayos_win_result") ? Global.value("delayos_win_result") : ""
+        winError = Global.contains("delayos_win_error") ? Global.value("delayos_win_error") : ""
+        winSb = Global.contains("delayos_win_sb") && Global.value("delayos_win_sb") === "1"
+    }
+    Timer { interval: 700; running: true; repeat: true; triggeredOnStart: true; onTriggered: page.winRefresh() }
+
     Column {
         anchors.centerIn: parent
         anchors.verticalCenterOffset: -30
@@ -40,6 +51,24 @@ Rectangle {
             text: "컴퓨터를 다시 시작하고, 화면이 꺼지면 USB를 뽑으세요."
             color: ts.text2
             font.family: ts.font; font.pixelSize: 14
+        }
+        Item { width: 1; height: page.winResult !== "" || page.winError !== "" ? 14 : 0 }
+        Text {
+            visible: page.winResult === "ok"
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 620; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; lineHeight: 1.2
+            text: "다시 시작하면 Windows 게임 지원을 자동으로 준비합니다 (약 20~40분, 컴퓨터를 끄지 마세요). 화면이 몇 번 꺼졌다 켜지고, 끝나면 DelayOS가 시작됩니다."
+                  + (page.winSb ? "\n그때 파란 화면(MOK 관리)이 나오면: Enroll MOK → Continue → Yes → 암호 delayos 입력 → Reboot." : "")
+            color: ts.text1
+            font.family: ts.font; font.pixelSize: 13
+        }
+        Text {
+            visible: page.winResult !== "ok" && page.winError !== ""
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 620; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; lineHeight: 1.2
+            text: "DelayOS는 정상적으로 설치되었지만 Windows 게임 지원은 준비하지 못했습니다. " + page.winError + " 설치 후 터미널에서 sudo delay-winsetup retry 로 다시 시도하거나 sudo delay-winsetup remove 로 공간을 되돌릴 수 있습니다."
+            color: "#F2C89A"
+            font.family: ts.font; font.pixelSize: 13
         }
         Item { width: 1; height: 28 }
         Rectangle {

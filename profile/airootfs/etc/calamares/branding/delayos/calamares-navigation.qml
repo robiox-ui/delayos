@@ -15,7 +15,7 @@ Rectangle {
     height: 64
 
     readonly property int cur: ViewManager.currentStepIndex
-    readonly property int summaryIndex: 6
+    readonly property int summaryIndex: 7   // settings.conf: 6 = notesqml@wingames, 7 = summaryq
     readonly property bool shown: ViewManager.backAndNextVisible && cur > 0 && cur <= summaryIndex
     readonly property bool isSummary: cur === summaryIndex
 

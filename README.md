@@ -37,7 +37,7 @@ sudo ./build.sh
 - **커널:** `linux-delayos`(CachyOS 소스 기반: BORE 스케줄러, Clang ThinLTO, -O3, 1000Hz, 완전 선점, BBRv3)과 대체용 `linux-lts`.
 - **스케줄러:** sched-ext `scx_lavd`, ananicy-cpp(CachyOS 규칙), irqbalance, GameMode.
 - **메모리:** zram(zstd), MGLRU, `vm.max_map_count` 최대.
-- **I/O:** HDD는 BFQ, SATA SSD는 mq-deadline, NVMe는 none 자동 선택.
+- **I/O:** HDD는 BFQ, SATA SSD는 mq-deadline, NVMe는 kyber 자동 선택.
 - **GPU:** 셰이더 캐시 확대, ntsync, 전체 화면 게임 컴포지터 우회.
 - **네트워크:** BBRv3와 fq.
 - **부팅:** 부팅 메뉴 자동 선택, 불필요한 대기 서비스 제거.

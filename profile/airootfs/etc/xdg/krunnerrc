@@ -9,7 +9,12 @@ calculatorEnabled=true
 unitconverterEnabled=true
 webshortcutsEnabled=true
 shellEnabled=true
-baloosearchEnabled=true
+# file-content indexing is off (baloofilerc), so this runner only failed a D-Bus call on every keystroke
+baloosearchEnabled=false
+# Kate/Konsole sessions and KDE help: hidden behind the DelayOS apps, never useful in Start / the command bar
+krunner_katesessionsEnabled=false
+krunner_konsoleprofilesEnabled=false
+helprunnerEnabled=false
 krunner_appstreamEnabled=false
 krunner_spellcheckEnabled=false
 browserhistoryEnabled=false

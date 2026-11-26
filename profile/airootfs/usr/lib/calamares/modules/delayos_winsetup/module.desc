@@ -1,0 +1,8 @@
+# DelayOS hidden Windows, stage 2 (docs/windows-switch.md): runs after "bootloader", before "umount".
+---
+type:       "job"
+name:       "delayos_winsetup"
+interface:  "python"
+script:     "main.py"
+noconfig:   true
+weight:     45

@@ -1,0 +1,6 @@
+# DelayOS hidden Windows (delay-winsetup): the Windows partition and the temporary setup partition
+# are never shown or auto-mounted on the DelayOS desktop (udisks2: Dolphin, Files, device notifier).
+# Matched by GPT partition name; delay-winsetup also writes a rule with the partition GUIDs to
+# /etc/udev/rules.d/61-delayos-winsetup-local.rules.
+SUBSYSTEM=="block", ENV{ID_PART_ENTRY_NAME}=="DelayOS-Windows", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"
+SUBSYSTEM=="block", ENV{ID_PART_ENTRY_NAME}=="DelayOS-WinSetup", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"

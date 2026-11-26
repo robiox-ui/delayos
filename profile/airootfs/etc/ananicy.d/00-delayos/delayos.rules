@@ -1,0 +1,13 @@
+# DelayOS apps and helpers (process name = launcher name, cut to 15 characters by the kernel).
+# Interactive apps: same class as other document viewers / editors in the CachyOS rules.
+{ "name": "delay-notepad", "type": "Doc-View" }
+{ "name": "delay-calc", "type": "Doc-View" }
+{ "name": "delay-files", "type": "Doc-View" }
+{ "name": "delay-settings", "type": "Doc-View" }
+{ "name": "delay-taskmanag", "type": "Doc-View" }
+{ "name": "delay-snip", "type": "Doc-View" }
+{ "name": "delay-welcome", "type": "Doc-View" }
+{ "name": "delay-drivers", "type": "Doc-View" }
+{ "name": "delay-android-a", "type": "Doc-View" }
+{ "name": "delay-winengine", "type": "Doc-View" }
+{ "name": "delay-store", "type": "Doc-View" }

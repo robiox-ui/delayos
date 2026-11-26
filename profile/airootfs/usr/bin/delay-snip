@@ -1,5 +1,7 @@
 #!/usr/bin/python3
-import runpy
+# import (not runpy): main.py is then loaded from its precompiled __pycache__ instead of being compiled at every start
 import sys
 sys.argv[0] = "delay-snip"
-runpy.run_path("/usr/share/delayos/apps/snip/main.py", run_name="__main__")
+sys.path.insert(0, "/usr/share/delayos/apps/snip")
+import main
+sys.exit(main.main())

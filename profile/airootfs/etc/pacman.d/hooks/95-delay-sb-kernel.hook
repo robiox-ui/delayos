@@ -1,0 +1,14 @@
+# Secure Boot (DelayOS general key): after mkinitcpio copied the kernel image to /boot, put the
+# DelayOS-signed image back when it belongs to the installed kernel. Does nothing unless
+# /etc/delayos/winsetup.conf says SB='1'.
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Target = usr/lib/modules/*/vmlinuz
+Target = usr/share/delayos/secureboot/general/*
+
+[Action]
+Description = DelayOS Secure Boot: installing the signed kernel image...
+When = PostTransaction
+Exec = /usr/bin/python3 /usr/local/bin/delay-winsetup sb-kernel

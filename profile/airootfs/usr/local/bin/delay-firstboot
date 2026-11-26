@@ -20,6 +20,26 @@ if grep -q archisobasedir /proc/cmdline && ! id live >/dev/null 2>&1; then
   chown live:live /home/live/.config/kscreenlockerrc
 fi
 
+# ---- Low-memory desktop profile (under ~3 GB RAM), checked on every boot ----
+# Plasma stays the session, but KWin drops the effects that cost GPU memory and fill rate on
+# weak machines: blur / background contrast behind the glass, the genie minimise and the
+# rounded-corner shader. The shell itself (DelayShell.ShellBus) builds popups only on demand
+# there. Adding RAM later puts the effects back at the next boot. A user's own choice in
+# ~/.config/kwinrc always wins over these system defaults.
+mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+LOWMARK=/var/lib/delay/lowmem
+low_effects() { # $1 = true|false
+  local e
+  for e in blur contrast backgroundcontrast magiclamp kwin4_effect_shapecorners; do
+    sed -i "s/^${e}Enabled=.*/${e}Enabled=$1/" /etc/xdg/kwinrc
+  done
+}
+if (( mem_kb < 3100000 )); then
+  [[ -e $LOWMARK ]] || { low_effects false; touch "$LOWMARK"; }
+elif [[ -e $LOWMARK ]]; then
+  low_effects true; rm -f "$LOWMARK"
+fi
+
 [[ -e $STAMP ]] && exit 0
 
 # ---- Low-memory machines (< 1.5 GB): lightweight session as default ----

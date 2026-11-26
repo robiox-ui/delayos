@@ -1,5 +1,7 @@
 #!/usr/bin/python3
-import runpy
+# import (not runpy): main.py is then loaded from its precompiled __pycache__ instead of being compiled at every start
 import sys
 sys.argv[0] = "delay-notepad"
-runpy.run_path("/usr/share/delayos/apps/notepad/main.py", run_name="__main__")
+sys.path.insert(0, "/usr/share/delayos/apps/notepad")
+import main
+sys.exit(main.main())

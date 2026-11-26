@@ -1,0 +1,115 @@
+# DelayOS Secure Boot, GENERAL key: lets the normal DelayOS (linux-delayos) boot with Secure Boot
+# switched on. Needed by the hidden Windows for anti-cheat games (docs/windows-switch.md): Vanguard
+# on Windows 11 wants Secure Boot ON, and Secure Boot is one firmware-wide switch.
+#
+# Chain: firmware db (Microsoft) -> shimx64.efi (shim-signed) -> this GRUB -> this kernel image,
+# both signed with the DelayOS *general* key, whose CA "delay-winsetup" queues as a MOK.
+#
+# This is deliberately NOT the DelayOS anti-cheat key of delayos-sb-signed / linux-delayos-eac:
+# linux-delayos has no forced lockdown or module signatures, and the anti-cheat key must never
+# sign such a kernel (docs/reports/eac.md). The general CA is a separate CA with its own key.
+#
+#   /usr/share/delayos/secureboot/general/grubx64.efi                   standalone GRUB, prefix /EFI/DelayOS
+#   /usr/share/delayos/secureboot/general/vmlinuz-linux-delayos.signed  signed copy of the kernel image
+#   /usr/share/delayos/secureboot/general/vmlinuz-linux-delayos.sha256  SHA-256 of the UNSIGNED image it was made from
+#   /usr/share/delayos/secureboot/general/delayos-general-ca.{cer,crt}  public CA (DER for mokutil, PEM)
+#
+# Build (keys from tools/make-delayos-general-key.sh, never commit them):
+#   DELAYOS_SBG_KEY=.../delayos-general-signing.key DELAYOS_SBG_CERT=.../delayos-general-signing.crt \
+#   DELAYOS_SBG_CA=.../delayos-general-ca.crt DELAYOS_KERNEL_PKG=/path/linux-delayos-<ver>.pkg.tar.zst makepkg -f
+# Rebuild it whenever linux-delayos or grub is rebuilt (pkgver is the build date).
+
+pkgname=delayos-sb-general
+pkgver=$(date -u +%Y.%m.%d)
+pkgrel=1
+pkgdesc='DelayOS Secure Boot (general key): signed GRUB and linux-delayos image, DelayOS general CA certificate'
+arch=('x86_64')
+url='https://github.com/robiox-ui/delayos'
+license=('GPL-3.0-or-later' 'GPL-2.0-only')
+makedepends=('grub' 'sbsigntools' 'openssl' 'libarchive')
+optdepends=('shim-signed: Microsoft-signed shim, the first stage under Secure Boot'
+            'mokutil: enroll the DelayOS general CA as a Machine Owner Key')
+options=('!strip' '!debug')
+
+# GRUB under shim lock cannot load modules from disk, so everything grub.cfg uses is built in
+# (including what /etc/grub.d/05_delayos-winsetup needs: regexp, loadenv, chain, fat).
+_grub_modules=(
+    all_video bli boot btrfs cat chain configfile cpuid cryptodisk echo efifwsetup exfat ext2
+    f2fs fat font gcry_rijndael gcry_sha256 gcry_sha512 gettext gfxmenu gfxterm gfxterm_background
+    gzio halt help iso9660 jpeg keystatus linux loadenv loopback ls lsefi lsefimmap lsefisystab
+    luks luks2 lvm mdraid09 mdraid1x memdisk minicmd normal ntfs part_gpt part_msdos password_pbkdf2
+    pbkdf2 png probe reboot regexp search search_fs_file search_fs_uuid search_label sleep smbios
+    test tpm true video xfs zstd
+)
+
+# Must match delay-winsetup (sb_setup): GRUB reads <ESP>/EFI/DelayOS/grub.cfg
+_esp_prefix=/EFI/DelayOS
+
+build() {
+    [ -n "${DELAYOS_SBG_KEY:-}" ] && [ -n "${DELAYOS_SBG_CERT:-}" ] && [ -n "${DELAYOS_SBG_CA:-}" ] \
+        || { error "Set DELAYOS_SBG_KEY, DELAYOS_SBG_CERT and DELAYOS_SBG_CA"; return 1; }
+    [ -r "${DELAYOS_KERNEL_PKG:-}" ] || { error "Set DELAYOS_KERNEL_PKG to the linux-delayos package file"; return 1; }
+    local f
+    for f in "$DELAYOS_SBG_KEY" "$DELAYOS_SBG_CERT" "$DELAYOS_SBG_CA"; do
+        [ -r "$f" ] || { error "Cannot read $f"; return 1; }
+    done
+    openssl verify -CAfile "$DELAYOS_SBG_CA" "$DELAYOS_SBG_CERT" \
+        || { error "The signing certificate was not issued by the DelayOS general CA"; return 1; }
+    # refuse the anti-cheat key: it must never sign the normal kernel
+    if [ -n "${DELAYOS_SB_CA:-}" ] && [ -r "${DELAYOS_SB_CA}" ] && \
+       [ "$(openssl x509 -in "$DELAYOS_SBG_CA" -noout -fingerprint -sha256)" = "$(openssl x509 -in "$DELAYOS_SB_CA" -noout -fingerprint -sha256)" ]; then
+        error "DELAYOS_SBG_CA is the anti-cheat CA. Use the general key (tools/make-delayos-general-key.sh)"; return 1
+    fi
+    if openssl x509 -in "$DELAYOS_SBG_CA" -noout -subject | grep -q 'Secure Boot CA' && \
+       ! openssl x509 -in "$DELAYOS_SBG_CA" -noout -subject | grep -q 'General'; then
+        error "The CA subject does not say 'General': refusing to sign linux-delayos with it"; return 1
+    fi
+
+    cd "$srcdir"
+
+    # ---- GRUB
+    local grubver
+    grubver="$(pacman -Q grub | awk '{print $2}')"
+    if [ -s /usr/share/grub/sbat.csv ]; then
+        sed '/^[[:space:]]*$/d' /usr/share/grub/sbat.csv > sbat.csv
+    else
+        warning "/usr/share/grub/sbat.csv is missing, writing a generic SBAT (check the grub generation!)"
+        printf '%s\n' \
+            'sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md' \
+            "grub,5,Free Software Foundation,grub,${grubver#*:},https://www.gnu.org/software/grub/" \
+            > sbat.csv
+    fi
+    printf '%s\n' "grub.delayos,1,DelayOS,grub,${grubver},${url}" >> sbat.csv
+    local mods=() m
+    for m in "${_grub_modules[@]}"; do
+        if [ -f "/usr/lib/grub/x86_64-efi/${m}.mod" ]; then mods+=("$m"); else warning "GRUB module $m does not exist, leaving it out"; fi
+    done
+    grub-mkimage -O x86_64-efi -p "$_esp_prefix" --sbat sbat.csv -o grubx64.efi "${mods[@]}"
+    sbsign --key "$DELAYOS_SBG_KEY" --cert "$DELAYOS_SBG_CERT" --output grubx64.signed.efi grubx64.efi
+    sbverify --cert "$DELAYOS_SBG_CA" grubx64.signed.efi
+
+    # ---- linux-delayos image, taken from the package that goes into the ISO
+    local kpath
+    kpath="$(bsdtar -tf "$DELAYOS_KERNEL_PKG" | grep -E '^usr/lib/modules/[^/]+/vmlinuz$' | head -n1)"
+    [ -n "$kpath" ] || { error "No kernel image in $DELAYOS_KERNEL_PKG"; return 1; }
+    bsdtar -xOf "$DELAYOS_KERNEL_PKG" "$kpath" > vmlinuz-linux-delayos
+    sha256sum vmlinuz-linux-delayos | awk '{print $1}' > vmlinuz-linux-delayos.sha256
+    echo "$kpath" | cut -d/ -f4 > kernel-release
+    sbsign --key "$DELAYOS_SBG_KEY" --cert "$DELAYOS_SBG_CERT" --output vmlinuz-linux-delayos.signed vmlinuz-linux-delayos
+    sbverify --cert "$DELAYOS_SBG_CA" vmlinuz-linux-delayos.signed
+
+    openssl x509 -in "$DELAYOS_SBG_CA" -outform DER -out delayos-general-ca.cer
+    openssl x509 -in "$DELAYOS_SBG_CA" -out delayos-general-ca.crt
+}
+
+package() {
+    cd "$srcdir"
+    local d="$pkgdir/usr/share/delayos/secureboot/general"
+    install -Dm644 grubx64.signed.efi "$d/grubx64.efi"
+    install -Dm644 sbat.csv "$d/grub-sbat.csv"
+    install -Dm644 vmlinuz-linux-delayos.signed "$d/vmlinuz-linux-delayos.signed"
+    install -Dm644 vmlinuz-linux-delayos.sha256 "$d/vmlinuz-linux-delayos.sha256"
+    install -Dm644 kernel-release "$d/kernel-release"
+    install -Dm644 delayos-general-ca.cer "$d/delayos-general-ca.cer"
+    install -Dm644 delayos-general-ca.crt "$d/delayos-general-ca.crt"
+}

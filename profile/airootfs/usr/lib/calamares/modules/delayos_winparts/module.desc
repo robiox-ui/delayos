@@ -1,0 +1,8 @@
+# DelayOS hidden Windows, stage 1 (docs/windows-switch.md): runs right after "partition".
+---
+type:       "job"
+name:       "delayos_winparts"
+interface:  "python"
+script:     "main.py"
+noconfig:   true
+weight:     2

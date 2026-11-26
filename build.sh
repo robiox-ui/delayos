@@ -132,6 +132,33 @@ else
   warn "No Secure Boot keys in $KEYS: skipping linux-delayos-eac / delayos-sb-signed (anti-cheat mode unavailable)"
 fi
 
+# ------------------- Secure Boot for the normal DelayOS (hidden Windows / Vanguard, optional)
+# docs/windows-switch.md: GRUB + linux-delayos signed with the DelayOS GENERAL key
+# (tools/make-delayos-general-key.sh), never with the anti-cheat key above. Skipped without the keys:
+# the installer then says "Secure Boot 미지원 빌드".
+SBG_BUILT=0
+if [[ -f $KEYS/delayos-general-signing.key && -f $KEYS/delayos-general-signing.crt && -f $KEYS/delayos-general-ca.crt ]]; then
+  GKEYS="/home/$BUILDER/.delayos-general-keys"
+  GDIR="/home/$BUILDER/delayos-sb-general"
+  cleanup_gkeys() { rm -rf "$GKEYS"; }
+  trap 'cleanup_gkeys; declare -F cleanup_keys >/dev/null && cleanup_keys' EXIT
+  install -d -m700 -o "$BUILDER" -g "$BUILDER" "$GKEYS"
+  install -m600 -o "$BUILDER" -g "$BUILDER" "$KEYS"/delayos-general-signing.{key,crt} "$KEYS"/delayos-general-ca.crt "$GKEYS/"
+  KPKG=$(ls "$KDIR"/linux-delayos-[0-9]*.pkg.tar.zst | head -n1)
+  pacman -S --noconfirm --needed sbsigntools grub openssl
+  log "Building delayos-sb-general (GRUB + $(basename "$KPKG") signed with the DelayOS general key)"
+  rm -rf "$GDIR"; cp -r "$HERE/packages/delayos-sb-general" "$GDIR"
+  sed -i 's/\r$//' "$GDIR/PKGBUILD"; chown -R "$BUILDER:$BUILDER" "$GDIR"
+  as_builder "cd ~/delayos-sb-general && DELAYOS_SBG_KEY=$GKEYS/delayos-general-signing.key DELAYOS_SBG_CERT=$GKEYS/delayos-general-signing.crt DELAYOS_SBG_CA=$GKEYS/delayos-general-ca.crt DELAYOS_KERNEL_PKG=$KPKG makepkg -f --noconfirm" \
+    || die "delayos-sb-general failed to build"
+  cleanup_gkeys
+  rm -f "$LOCALREPO"/delayos-sb-general-*.pkg.tar.zst
+  cp "$GDIR"/delayos-sb-general-*.pkg.tar.zst "$LOCALREPO/"
+  SBG_BUILT=1
+else
+  warn "No general Secure Boot keys in $KEYS (delayos-general-*): DelayOS will not boot with Secure Boot on (Vanguard on the hidden Windows needs it)"
+fi
+
 log "Collecting built packages into $LOCALREPO"
 find "/home/$BUILDER/.cache/yay" "/home/$BUILDER/yay-bin" -name '*.pkg.tar.zst' ! -name '*-debug-*' -exec cp -u {} "$LOCALREPO/" \; 2>/dev/null || true
 rm -f "$LOCALREPO"/delayos-local.db* "$LOCALREPO"/delayos-local.files*
@@ -152,11 +179,23 @@ if (( ${#EAC_FILES[@]} )); then
   cp "${EAC_FILES[@]}" "$LOCALREPO"/delayos-sb-signed-*.pkg.tar.zst "$PROFILE/airootfs/var/cache/delayos/eac-pkgs/"
   echo delayos-sb-signed >> "$PROFILE/packages.x86_64"
 fi
+# Signed GRUB + kernel image for Secure Boot next to the hidden Windows (delay-winsetup)
+(( SBG_BUILT )) && echo delayos-sb-general >> "$PROFILE/packages.x86_64"
 
 # Boot splash: plymouth hook in the live initramfs, theme selected inside the image
 sed -i 's/\(HOOKS=([^)]*\bkms\b\)/\1 plymouth/' "$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
 grep -q plymouth "$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf" || \
   sed -i 's/\(HOOKS=(base udev\)/\1 plymouth/' "$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
+# Live initramfs: zstd instead of xz (a little bigger, several times faster to unpack on old CPUs)
+sed -i -e 's/^COMPRESSION=.*/COMPRESSION="zstd"/' -e 's/^COMPRESSION_OPTIONS=.*/COMPRESSION_OPTIONS=(-19 -T0)/' \
+  "$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
+
+# DelayOS apps: ship Python bytecode, so no app compiles its sources at start (/usr is not writable
+# for users, they could never cache it themselves). checked-hash stays valid whatever happens to
+# file times in the image; a Python upgrade re-runs this through 70-delay-pycache.hook.
+log "Precompiling DelayOS app bytecode"
+python3 -m compileall -q -s "$PROFILE/airootfs" -p / --invalidation-mode checked-hash \
+  "$PROFILE/airootfs/usr/share/delayos" || warn "bytecode precompile failed - apps will compile at start"
 
 # ananicy-cpp needs a rule set: use CachyOS's (same as CachyOS ships)
 log "Adding CachyOS ananicy-cpp rules"

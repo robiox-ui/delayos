@@ -1,7 +1,8 @@
 """DelayOS system-apps kit: shared PySide6 bootstrap + async bridge for QML.
 
 Used by Settings, Store, Welcome, Drivers, Windows Engine and Android helpers.
-Design goals: fast start (only QtCore/QtGui/QtQml/QtQuick imported), idle CPU 0
+Design goals: fast start (only QtCore/QtGui/QtQml/QtQuick imported; subprocess, re, the thread
+pool and kreadconfig6 are only touched when a page really needs them), idle CPU 0
 (no timers; everything is event driven), blocking work runs in a small thread pool
 and is delivered back to QML through a JS callback on the GUI thread.
 
@@ -11,13 +12,10 @@ QML usage (the app's main.qml defines a tiny wrapper):
 """
 import json
 import os
-import shlex
-import subprocess
 import sys
 import itertools
-import re
-import importlib
-from concurrent.futures import ThreadPoolExecutor
+
+import kcfg
 
 from PySide6.QtCore import (QObject, Signal, Slot, QProcess, QUrl, QCoreApplication,
                             Qt, QFileSystemWatcher, QProcessEnvironment)
@@ -31,6 +29,7 @@ CONFIG = os.path.expanduser("~/.config/delayosrc")
 
 def sh(cmd, timeout=20, env=None):
     """Run a command (list or string) and return (rc, stdout). Never raises."""
+    import subprocess
     try:
         if isinstance(cmd, str):
             cmd = ["sh", "-c", cmd]
@@ -96,14 +95,14 @@ def _user_kdeglobals_accent():
 def read_accent():
     """The accent the user picked ('#RRGGBB'), or "" to keep DelayUI's default (Theme.accent, blue #4D6BFE).
     Order: ~/.config/delayosrc [Appearance] Accent (written by Settings), then the user's kdeglobals AccentColor."""
-    v = kread("delayosrc", "Appearance", "Accent", "")
-    if re.match(r"^#[0-9A-Fa-f]{6}$", v or ""):
+    v = kcfg.read("delayosrc", "Appearance", "Accent", "")
+    if len(v) == 7 and v[0] == "#" and all(c in "0123456789abcdefABCDEF" for c in v[1:]):
         return v.upper()
     return _user_kdeglobals_accent()
 
 
 def is_dark():
-    scheme = kread("kdeglobals", "General", "ColorScheme", "DelayDark")
+    scheme = kcfg.read("kdeglobals", "General", "ColorScheme", "DelayDark")
     return "light" not in scheme.lower()
 
 
@@ -123,7 +122,7 @@ class Bridge(QObject):
         self._modnames = modules
         self._cbs = {}
         self._ids = itertools.count(1)
-        self._pool = ThreadPoolExecutor(max_workers=4)
+        self._pool_obj = None
         self._procs = {}
         self._done.connect(self._deliver)
         self._accent = read_accent()
@@ -134,6 +133,13 @@ class Bridge(QObject):
         if os.path.exists(kg):
             self._watch.addPath(kg)
         self._watch.fileChanged.connect(self._globals_changed)
+
+    @property
+    def _pool(self):
+        if self._pool_obj is None:      # built on the first async call, not at start-up
+            from concurrent.futures import ThreadPoolExecutor
+            self._pool_obj = ThreadPoolExecutor(max_workers=4)
+        return self._pool_obj
 
     # ---- theme ---------------------------------------------------------
     def _globals_changed(self, path):
@@ -159,6 +165,7 @@ class Bridge(QObject):
     def _resolve(self, name):
         mod, _, fn = name.rpartition(".")
         if mod not in self._modules:
+            import importlib
             self._modules[mod] = importlib.import_module(self._modnames.get(mod, mod))
         return getattr(self._modules[mod], fn)
 

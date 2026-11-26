@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = python
+
+[Action]
+Description = Compiling DelayOS app bytecode...
+When = PostTransaction
+Exec = /usr/bin/python3 -m compileall -q --invalidation-mode checked-hash /usr/share/delayos

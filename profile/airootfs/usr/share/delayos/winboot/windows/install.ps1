@@ -7,7 +7,10 @@
 #   \DelayOS\WinBoot-Launch  on demand, not elevated: starts the game
 #   \DelayOS\WinBoot-Return  on demand, elevated: "back to DelayOS" (Start menu shortcut)
 # Nothing here stores a password. Run again to update or remove.
-param([switch]$Uninstall)
+#   -Unattended   no questions (used by the DelayOS hidden-Windows setup, docs/windows-switch.md):
+#                 installs or updates, hides the boot logo, turns Fast Startup off and leaves the
+#                 logon settings alone (that setup already made a password-less auto-logon account).
+param([switch]$Uninstall, [switch]$Unattended)
 
 $ErrorActionPreference = 'Continue'
 $Version = '1.0'
@@ -32,6 +35,7 @@ function Say([string]$key, $a0 = $null) {
 }
 
 function Ask([string]$key) {
+    if ($Unattended) { return $true }
     Write-Host ''
     Write-Host (T $key)
     $a = Read-Host (T 'i_yes_no')
@@ -113,7 +117,9 @@ if (-not $isAdmin) { Say 'i_need_admin'; exit 1 }
 
 $installed = Test-Path -LiteralPath (Join-Path $Base 'agent.ps1')
 if ($Uninstall) { Remove-Link; Say 'i_uninstalled'; exit 0 }
-if ($installed) {
+if ($Unattended) {
+    # no prompt: install or update in place
+} elseif ($installed) {
     Say 'i_already'
     $a = Read-Host '>'
     if ($a -eq '2') { Remove-Link; Say 'i_uninstalled'; exit 0 }
@@ -197,7 +203,7 @@ if ($fast -ne 0) {
 $auto = $false
 try { $auto = ((Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -ErrorAction Stop).AutoAdminLogon -eq '1') } catch {}
 if ($auto) { Say 'i_autologon_on' }
-else {
+elseif (-not $Unattended) {
     Write-Host ''
     Say 'i_autologon_info'
     if (Ask 'i_autologon_q') {

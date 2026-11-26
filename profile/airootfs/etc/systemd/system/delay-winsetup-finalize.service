@@ -1,0 +1,14 @@
+[Unit]
+Description=DelayOS hidden Windows: finish or report the unattended Windows setup
+ConditionPathExists=/etc/delayos/winsetup.conf
+ConditionPathExists=/sys/firmware/efi
+After=local-fs.target systemd-udev-settle.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/delay-winsetup finalize
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

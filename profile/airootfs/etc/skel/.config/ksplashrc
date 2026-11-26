@@ -1,0 +1,6 @@
+# No login splash: ksplash kept the screen covered after plasmashell was already up, so the
+# desktop now shows as soon as it exists. (In the user's config, not /etc/xdg: the look-and-feel
+# defaults in ~/.config/kdedefaults would override a system-wide file.)
+[KSplash]
+Engine=none
+Theme=None

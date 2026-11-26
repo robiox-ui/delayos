@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=DelayOS Windows game support status
+Name[ko]=Windows 게임 지원 상태 알림
+Exec=/usr/local/bin/delay-winsetup session-notify
+NoDisplay=true
+X-KDE-autostart-phase=2
+OnlyShowIn=KDE;

@@ -182,3 +182,141 @@ delay-winboot --session-start                    로그인 훅 (/etc/xdg/autosta
 Windows 쪽 문제는 `C:\ProgramData\DelayOS\winboot\agent.log` 를 보세요.
 
 개발 참고: `.ps1`은 ASCII로만 작성합니다(Windows PowerShell 5.1은 BOM 없는 파일을 ANSI로 읽음). 한국어 문구는 `messages.ko.json`(UTF-8)에 둡니다.
+
+---
+
+# Windows 게임 지원: 보이지 않는 Windows 자동 설치 (delay-winsetup)
+
+위의 Windows 전환은 **이미 Windows가 설치된 PC**가 전제입니다. Windows가 없는 PC(또는 디스크를 통째로 DelayOS에 쓰는 설치)에서는
+설치 프로그램의 **"Windows 게임 지원"** 옵션이 DelayOS 옆에 실제 Windows 11을 자동으로 설치해 줍니다.
+사용자는 듀얼 부팅을 직접 다루지 않습니다. Windows 파티션은 DelayOS 파일 탐색기에 보이지 않고, 부팅 메뉴에도 나오지 않으며,
+Windows로 가는 길은 시작 메뉴의 Windows 게임(= 위의 Windows 전환)뿐입니다.
+
+## 솔직한 설명
+
+- 가상 머신이 아니라 **진짜 Windows 11**을 별도 파티션에 설치합니다. 그래서 커널 안티치트 게임이 실행됩니다.
+- 디스크 공간을 씁니다: Windows 파티션(기본 100GB, 최소 64GB) + 설치하는 동안만 쓰는 임시 파티션 10GB(끝나면 DelayOS로 되돌림).
+- Windows 설치 파일(약 6~7GB)은 **Microsoft 공식 서버에서만** 내려받습니다(microsoft.com의 소프트웨어 다운로드 API, 한국어 64비트).
+  Microsoft가 공개한 SHA-256과 일치하는지 확인하고, 다르면 버립니다. 비공식 미러는 쓰지 않습니다.
+- 전환은 여전히 재시작입니다(갈 때 한 번, 올 때 한 번). 메인보드 로고는 숨길 수 없습니다.
+- Windows 라이선스는 DelayOS가 주지 않습니다. 아래 "정품 인증"을 읽어 주세요.
+
+## 필요한 것
+
+| 조건 | 이유 |
+|---|---|
+| UEFI 부팅 | 레거시 BIOS에서는 설치하지 않습니다 |
+| TPM 2.0 (`/sys/class/tpm/tpm0`, `tpm_version_major` = 2) | Windows 11과 Vanguard(발로란트)의 요구 사항. 없으면 옵션을 켤 수 없습니다. BIOS에서 fTPM/PTT를 켜세요 |
+| GPT 디스크, Windows + 10GB + DelayOS 20GB 이상의 공간 | |
+| 인터넷 (또는 직접 받은 Windows 11 ISO) | 설치 파일 다운로드 |
+| 디스크 암호화(LUKS)를 쓰지 않는 설치 | 암호화된 설치에서는 이 옵션을 건너뜁니다 |
+| **Secure Boot** | 발로란트(Vanguard)는 Windows 11에서 Secure Boot가 **켜져 있어야** 실행됩니다. 아래 "Secure Boot" 참고 |
+
+같은 EFI 시스템 파티션에 이미 Windows 부팅 파일이 있으면(기존 Windows를 남긴 설치) 아무것도 건드리지 않고 건너뜁니다.
+그 Windows는 위의 Windows 전환으로 그대로 쓸 수 있습니다.
+
+## 정품 인증 (정식 방법만 사용)
+
+DelayOS는 KMS 에뮬레이터나 인증 우회 도구를 쓰지 않으며 앞으로도 넣지 않습니다. 인증되는 길은 세 가지입니다.
+
+1. **PC에 내장된 정품 키 (OEM)**: Windows가 설치된 채로 판매된 PC는 메인보드 펌웨어(ACPI `MSDM` 표)에 제품 키가 들어 있습니다.
+   설치 프로그램이 이를 찾으면 "PC에 내장된 Windows 정품 키를 찾았습니다"라고 알려 줍니다. 그 PC에 원래 들어 있던 에디션(대부분 Home)을
+   고르면 Windows가 그 키를 직접 읽어 인터넷에 연결될 때 자동으로 인증됩니다. DelayOS는 이 키를 파일에 적거나 기록하지 않습니다
+   (Windows 안에서 `slmgr /ipk`로 Windows가 읽은 키를 등록할 뿐입니다). 에디션이 다르면 등록에 실패하고 인증되지 않습니다.
+2. **디지털 라이선스**: 이 PC에서 같은 에디션의 Windows 10/11이 정품 인증된 적이 있으면, 키가 없어도 인터넷에 연결될 때
+   Microsoft 서버가 하드웨어를 알아보고 자동으로 인증합니다.
+3. **제품 키 직접 입력**: 설치 프로그램에 입력한 키는 Windows 첫 로그인 때 `slmgr /ipk`로 등록되고, 임시 파일은 바로 지워집니다.
+   나중에 Windows 설정 › 시스템 › 정품 인증에서 입력해도 됩니다.
+
+어느 것도 해당하지 않으면 **인증되지 않은 Windows**가 설치됩니다. 게임은 실행되지만 화면 구석에 "Windows 정품 인증" 표시가 나오고
+배경·색·테마 같은 개인 설정을 바꿀 수 없으며, 설정에 인증 안내가 계속 나옵니다. 사용 조건은 Microsoft 라이선스를 따릅니다.
+
+참고: 자동 설치 파일에는 Microsoft가 공개한 **설치용 일반 키**(에디션 선택용, 인증되지 않음)만 들어갑니다.
+
+## 설치 과정
+
+1. 설치 프로그램 › 소프트웨어 단계 다음의 **"Windows 게임도 하시나요?"** 에서 스위치를 켭니다(기본은 끔).
+   Windows에 줄 공간, 에디션(Home/Pro, 한국어), 선택 사항인 제품 키와 직접 받은 ISO 경로를 정합니다.
+2. "지금 설치"를 누르면 DelayOS가 평소처럼 설치되고, 그 과정에서
+   - 새로 만든(아직 비어 있는) DelayOS 파티션의 **끝부분**을 줄여 `DelayOS-WinSetup`(FAT32, 10GB)과 `DelayOS-Windows` 파티션을 만들고,
+   - Windows 11 ISO를 내려받아 임시 파티션에 풀고(4GB가 넘는 `install.wim`은 wimlib으로 나눔), 자동 설치 스크립트를 넣고,
+   - 다음 한 번만 Windows 설치 환경으로 부팅하도록 지정합니다(펌웨어 항목 "DelayOS Windows Setup" + `BootNext`).
+3. 마지막 화면: "다시 시작하면 Windows 게임 지원을 자동으로 준비합니다 (약 20~40분, 컴퓨터를 끄지 마세요)".
+4. 다시 시작하면 검은 화면에 진행 상황이 나옵니다(Windows PE). 묻는 것은 없습니다. 이미지 적용 → 재시작 →
+   Windows가 장치를 준비하고 재시작 → `DelayOS` 계정으로 자동 로그인 → 연동 도우미 설치 → DelayOS로 재시작.
+5. DelayOS가 켜질 때 `delay-winsetup-finalize.service`가 임시 파티션을 지워 DelayOS에 돌려주고, 설치용 부팅 항목을 지우고,
+   GRUB/systemd-boot 메뉴에서 Windows를 숨깁니다. "Windows Boot Manager" 펌웨어 항목은 Windows 전환이 쓰므로 남깁니다.
+
+설치되는 Windows의 설정:
+
+- 한국어, 한국어 키보드(Microsoft 입력기), 표준 시간대 Asia/Seoul. 하드웨어 시계는 DelayOS와 같이 UTC로 읽습니다(`RealTimeIsUniversal`).
+- 암호 없는 로컬 관리자 계정 **DelayOS**, 자동 로그인. Microsoft 계정이나 네트워크 연결을 요구하지 않습니다(`BypassNRO`).
+  암호가 없으므로 PC를 켠 사람은 누구나 그 Windows를 쓸 수 있습니다(Windows는 암호 없는 계정의 네트워크 로그온을 기본으로 막습니다).
+  원하면 Windows에서 암호를 설정하세요. 그러면 전환할 때 암호를 한 번 입력해야 합니다.
+- 개인정보 관련 선택 항목은 모두 끔(선택적 진단 데이터, 광고 ID, 맞춤형 환경, 추천 앱, 위치).
+- **VBS + 메모리 무결성(HVCI) 켬.** 일부 안티치트(예: Vanguard, 최신 FACEIT/EA 계열)가 요구하거나 권장합니다. 대신 Windows 게임 성능이
+  조금(보통 몇 %, CPU와 게임에 따라 더) 낮아질 수 있습니다. 끄려면 Windows 보안 › 장치 보안 › 코어 격리 › 메모리 무결성.
+  CPU 가상화(VT-x/AMD-V, SLAT)가 BIOS에서 꺼져 있으면 Windows가 스스로 켜지 않습니다.
+- **BitLocker/장치 암호화 끔**(`PreventDeviceEncryption`), **빠른 시작과 최대 절전 끔**. EFI 파티션과 펌웨어를 DelayOS와 같이 쓰기 때문입니다.
+- 연동 도우미 설치(`install.ps1 -Unattended`): 로그온 작업, 부팅 로고 숨김, "DelayOS로 돌아가기" 바로 가기.
+
+게임 자체(Riot Client, Steam, Epic 등)는 Windows에서 사용자가 설치합니다. 처음 한 번은 DelayOS에서
+설정 › 앱 지원 › Windows 전환으로 Windows에 들어가 설치하세요. 그 Windows에는 메인보드/그래픽 드라이버도 Windows 업데이트나
+제조사 사이트에서 설치해야 합니다(유선 LAN 드라이버가 없는 메인보드는 처음에 인터넷이 안 될 수 있습니다).
+
+## Secure Boot
+
+Secure Boot는 PC 전체에 하나뿐인 펌웨어 설정입니다. 발로란트를 하려면 켜야 하고, 켜면 DelayOS도 서명된 부트로더와 커널로 부팅해야 합니다.
+
+- **Secure Boot 지원 빌드**(ISO를 만들 때 DelayOS 일반 서명 키가 있었던 경우): 설치 프로그램이 Microsoft가 서명한 shim →
+  DelayOS 일반 키로 서명한 GRUB → 서명한 `linux-delayos` 순서로 부팅되게 구성하고, DelayOS 일반 CA를 MOK로 등록 요청합니다.
+  Windows 설치가 끝나고 DelayOS가 처음 켜질 때 **파란 화면(MOK 관리, 영어)** 이 한 번 나옵니다:
+  `Enroll MOK` → `Continue` → `Yes` → 암호 **`delayos`** 입력 → `Reboot`. (10초 안에 아무 키나 눌러야 합니다. 놓쳤으면
+  `sudo delay-winsetup sb-setup` 후 다시 시작.) 그다음 BIOS에서 Secure Boot를 켜세요. 켠 뒤에는:
+  - `linux-delayos`만 부팅됩니다. 예비 커널 `linux-lts`와 직접 설치한 커널은 서명이 없어 부팅되지 않습니다.
+  - 서명되지 않은 모듈(NVIDIA DKMS 등)은 그대로 로드됩니다(일반 커널은 잠금 모드를 강제하지 않음).
+- **Secure Boot 미지원 빌드**: 설치 프로그램에 "Secure Boot 미지원 빌드"라고 나옵니다. 설치는 되지만 Secure Boot를 켜면 DelayOS가
+  부팅되지 않으므로 꺼 둔 채 써야 하고, 그러면 **발로란트는 Windows 11에서 실행을 거부합니다**(Vanguard 오류 VAN9001/9003 등).
+  리그 오브 레전드, 포트나이트, 배틀그라운드 등은 대부분 Secure Boot 없이 실행됩니다.
+- DelayOS **설치 USB 자체는 서명되어 있지 않습니다.** 설치할 때는 Secure Boot를 끄고 부팅한 뒤, 설치가 끝나고 MOK 등록까지 마친 다음 켜세요.
+
+**EAC Linux v2(안티치트 모드, `docs/eac-linux-v2.md`)와의 관계:** 일반 키는 안티치트 키와 **다른 CA**입니다. 안티치트 키는 잠금 모드가 강제된
+`linux-delayos-eac`만 서명한다는 약속을 지키기 위해서입니다. 그 대신 Epic의 "등록된 MOK는 모두 잘 알려진 키여야 한다"는 규칙 때문에,
+일반 CA가 MOK에 들어 있는 동안에는 Linux 쪽 EAC v2 조건을 채울 수 없습니다(`delay-eac status`에 알 수 없는 MOK로 표시).
+Linux에서 EAC v2 게임을 하려면 `sudo mokutil --delete /usr/share/delayos/secureboot/general/delayos-general-ca.cer`로 일반 CA를 빼고
+안티치트 항목으로만 부팅해야 합니다. 보이지 않는 Windows가 있는 PC에서는 EAC 게임도 Windows에서 하는 쪽이 간단합니다.
+
+## 안전 장치와 실패했을 때
+
+- DelayOS 루트 파티션이 있는 디스크만, 그 파티션에서 방금 떼어 낸 공간만 사용합니다. 다른 디스크와 기존 파티션은 건드리지 않습니다.
+  이후 단계는 파티션 GUID와 이름(`DelayOS-WinSetup`, `DelayOS-Windows`)이 모두 맞을 때만 진행합니다.
+- Windows PE 쪽 스크립트는 이번 설치의 무작위 ID가 적힌 표식 파일이 있는 볼륨 하나만 포맷하고, 같은 ID가 있는 EFI 파티션에만 부팅 파일을 씁니다.
+  Windows 설치 프로그램의 디스크 선택 기능은 쓰지 않습니다(DISM으로 이미지를 적용).
+- DelayOS는 부팅 순서의 첫 번째로 남습니다(`bcdboot /addlast`). 설치 중 Windows를 몇 번 시작하는 일은 DelayOS의 GRUB이
+  EFI 파티션의 횟수 제한(6회)과 `pending` 표식을 보고 대신 해 줍니다. Windows가 끝내지 못하면 횟수가 다 되어 **DelayOS가 켜집니다.**
+- 실패하면 DelayOS 로그인 때 알림이 나옵니다. DelayOS는 정상입니다.
+  - 다시 시도: `sudo delay-winsetup retry` (필요하면 `--iso /경로/Win11.iso`, `--edition pro`) 후 다시 시작
+  - 제거하고 공간 되돌리기: `sudo delay-winsetup remove`
+  - 상태: `delay-winsetup status` / 미리 보기(아무것도 바꾸지 않음): `sudo delay-winsetup --dry-run retry`
+- Windows 화면에서 멈춘 채 DelayOS로 돌아오지 않으면 전원 버튼으로 끄고 다시 켜세요. 몇 번 안에 DelayOS가 켜집니다.
+  그래도 Windows만 켜지면 켤 때 부팅 메뉴 키(F8/F11/F12 등)로 "DelayOS"를 고르세요.
+- 기록: `/var/log/delayos-winsetup.log`, EFI 파티션의 `EFI/DelayOS/winsetup/`(`winsetup.log`, `winpe.log`, `finish.log`, `done.json`),
+  Windows 쪽 `C:\ProgramData\DelayOS\winsetup\*.log`.
+
+## 구성 요소
+
+| 경로 | 역할 |
+|---|---|
+| `/usr/local/bin/delay-winsetup` | 전체 로직(Python 표준 라이브러리). `probe`, `parts`, `stage`, `finalize`, `retry`, `remove`, `status`, `sb-setup`, `--dry-run` |
+| `/etc/calamares/branding/delayos/wingames.qml`, `modules/wingames.conf` | 설치 프로그램 페이지 (`notesqml@wingames`) |
+| `/usr/lib/calamares/modules/delayos_winparts`, `delayos_winsetup` | 설치 단계(파티션 직후 / 부트로더 직후) |
+| `/usr/share/delayos/winsetup/` | Windows 쪽 파일: `install.cmd.in`(Windows PE), `unattend.xml.in`, `specialize.cmd`, `finish.ps1`, `winpeshl.ini` 등 |
+| `/etc/grub.d/05_delayos-winsetup` | 설치가 진행 중일 때만 Windows를 대신 시작하는 GRUB 조각 |
+| `/etc/systemd/system/delay-winsetup-finalize.service` | 부팅 시 마무리/실패 처리 |
+| `/usr/lib/udev/rules.d/61-delayos-winsetup.rules` | Windows 파티션을 파일 탐색기에서 숨김(`UDISKS_IGNORE`) |
+| `/etc/delayos/winsetup.conf` | 상태(`STATE=pending|done|failed|removed`)와 파티션 GUID |
+| `packages/delayos-sb-general`, `tools/make-delayos-general-key.sh` | Secure Boot용 일반 키와 서명된 GRUB/커널 (빌드 쪽) |
+
+파티션 속성 참고: Windows 파티션에 GPT "숨김/드라이브 문자 없음" 속성(비트 62, 63)은 **설정하지 않습니다.** 이 속성은 Windows 자신이
+해석하며, 부팅 볼륨에 걸면 Windows가 자기 C: 드라이브를 마운트하지 못합니다. DelayOS에서 숨기는 일은 udev 규칙과
+os-prober 끄기(`GRUB_DISABLE_OS_PROBER=true`)로 합니다.

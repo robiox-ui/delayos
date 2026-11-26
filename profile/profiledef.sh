@@ -57,6 +57,9 @@ file_permissions=(
   # Windows 전환 (dual-boot switch, docs/windows-switch.md)
   ["/usr/bin/delay-winboot"]="0:0:755"
   ["/usr/lib/delayos/delay-winboot-helper"]="0:0:755"
+  # Hidden Windows for anti-cheat games (delay-winsetup, docs/windows-switch.md)
+  ["/usr/local/bin/delay-winsetup"]="0:0:755"
+  ["/etc/grub.d/05_delayos-winsetup"]="0:0:755"
   # Tuning tools taken from CachyOS-Settings
   ["/usr/bin/dlss-swapper"]="0:0:755"
   ["/usr/bin/dlss-swapper-dll"]="0:0:755"

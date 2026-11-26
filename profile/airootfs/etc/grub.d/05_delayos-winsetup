@@ -1,0 +1,47 @@
+#!/bin/sh
+# DelayOS hidden Windows (delay-winsetup, docs/windows-switch.md).
+# While the unattended Windows installation is in progress (STATE=pending), GRUB starts it without
+# showing a menu: first the Windows setup environment on the staging partition (only if the
+# firmware did not already do that through BootNext), then the new Windows for its first starts.
+# A counter on the EFI system partition (FAT, so GRUB can write it) limits this to a few boots,
+# and Windows removes the "pending" marker when it is done, so a failed setup always ends up
+# back in DelayOS. Prints nothing when no setup is pending.
+set -e
+CONF=/etc/delayos/winsetup.conf
+[ -r "$CONF" ] || exit 0
+. "$CONF"
+[ "${STATE:-}" = pending ] || exit 0
+[ -n "${ESP_FSUUID:-}" ] || exit 0
+D=/EFI/DelayOS/winsetup
+cat <<GRUBEOF
+### DelayOS hidden Windows setup in progress (removed by delay-winsetup finalize)
+insmod part_gpt
+insmod fat
+insmod regexp
+insmod loadenv
+insmod chain
+if search --no-floppy --fs-uuid --set=dwesp ${ESP_FSUUID} ; then
+  if [ -f (\$dwesp)${D}/pending -a -f (\$dwesp)${D}/grubenv ]; then
+    set winsetup_tries=
+    load_env --file (\$dwesp)${D}/grubenv winsetup_tries
+    if [ -n "\$winsetup_tries" ]; then
+      set dw_old="\$winsetup_tries"
+      set dw_new=
+      regexp --set=1:dw_new '^x(.*)\$' "\$winsetup_tries"
+      if [ "\$dw_new" = "\$dw_old" ]; then set dw_new= ; fi
+      set winsetup_tries="\$dw_new"
+      save_env --file (\$dwesp)${D}/grubenv winsetup_tries
+      if [ -f (\$dwesp)${D}/pe-pending ]; then
+        if search --no-floppy --fs-uuid --set=dwstg ${STAGE_FSUUID:-none} ; then
+          chainloader (\$dwstg)/efi/boot/bootx64.efi
+          boot
+        fi
+      elif [ -f (\$dwesp)/EFI/Microsoft/Boot/bootmgfw.efi ]; then
+        chainloader (\$dwesp)/EFI/Microsoft/Boot/bootmgfw.efi
+        boot
+      fi
+    fi
+  fi
+fi
+### end of DelayOS hidden Windows setup
+GRUBEOF

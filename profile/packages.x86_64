@@ -32,6 +32,8 @@ dosfstools
 squashfs-tools
 exfatprogs
 ntfs-3g
+# hidden Windows for anti-cheat games (delay-winsetup): wimlib splits/edits the Windows images
+wimlib
 e2fsprogs
 xfsprogs
 f2fs-tools

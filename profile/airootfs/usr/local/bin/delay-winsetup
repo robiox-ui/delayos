@@ -1,0 +1,1444 @@
+#!/usr/bin/python3
+# DelayOS "Windows 게임 지원": installs a real Windows 11 next to DelayOS on a partition that
+# DelayOS never shows, so kernel anti-cheat games run there through "Windows 전환" (delay-winboot).
+# Documentation: docs/windows-switch.md. Python 3 stdlib only. Everything that changes the disk
+# goes through run(), which only logs when --dry-run is given.
+#
+#   probe [--write]                 facts for the installer page (JSON; --write also writes
+#                                   /run/delayos-winsetup/WinFacts.qml for the Calamares page)
+#   parts --root-dev DEV --win-gb N stage 1 (Calamares, after "partition", before "mount"):
+#                                   shrink the new, empty DelayOS root from its end and create
+#                                   "DelayOS-WinSetup" (FAT32 staging) + "DelayOS-Windows" (NTFS)
+#   stage --root DIR [--iso FILE] [--edition home|pro] [--key-file F]
+#                                   stage 2 (Calamares, before "umount"; also used by retry):
+#                                   get the Windows ISO from Microsoft, fill the staging
+#                                   partition, write the unattended files, boot entry + BootNext
+#   finalize                        boot service on the installed system: clean up when Windows
+#                                   is ready, or mark the attempt as failed
+#   retry | remove                  after a failed attempt (root)
+#   status [--json]                 state for Settings / the login notification
+#   session-notify                  login hook: tell the user about a failed attempt
+#   sb-setup | sb-kernel            Secure Boot chain (shim + DelayOS general key), see the doc
+#   iso-url                         only resolve the Microsoft download link (test)
+#
+# Safety rules: only the disk that holds the DelayOS root is touched; only space taken from the
+# end of the freshly created (verified empty) root partition is used; later steps find "their"
+# partitions by GPT partition GUID + partition name and refuse anything else.
+import argparse
+import hashlib
+import http.cookiejar
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+
+os.environ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin"
+os.environ["LC_ALL"] = "C"
+
+CONF = "/etc/delayos/winsetup.conf"
+LOG = "/var/log/delayos-winsetup.log"
+RUN = "/run/delayos-winsetup"
+STATE = RUN + "/state.json"
+SHARE = "/usr/share/delayos/winsetup"
+HELPER_SRC = "/usr/share/delayos/winboot/windows"
+ESP_REL = "EFI/DelayOS/winsetup"
+WIN_NAME = "DelayOS-Windows"
+STG_NAME = "DelayOS-WinSetup"
+SETUP_LABEL = "DelayOS Windows Setup"
+UDEV_RULE = "/etc/udev/rules.d/61-delayos-winsetup-local.rules"
+STAGE_GB = 10
+MIN_WIN_GB = 64
+MIN_ROOT_GB = 20
+GIB = 1024 ** 3
+MIB = 1024 ** 2
+TRIES = "xxxxxx"
+GENERIC_KEYS = {"home": "YTMG3-N6DKC-DKB77-7M9GH-8HVX7", "pro": "VK7JG-NPHTM-C97JM-9MPGT-3V66T"}
+EDITION_IDS = {"home": "Core", "pro": "Professional"}
+KEY_RE = re.compile(r"^[A-Z0-9]{5}(-[A-Z0-9]{5}){4}$")
+SB_DIR = "/usr/share/delayos/secureboot/general"
+SHIM_DIR = "/usr/share/shim-signed"
+MOK_PASSWORD = "delayos"
+UA = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
+
+MSG = {
+    "not_uefi": "이 PC는 UEFI 방식으로 부팅되지 않았습니다. Windows 게임 지원은 UEFI에서만 설치할 수 있습니다.",
+    "no_tpm": "TPM 2.0을 찾지 못했습니다. Windows 11과 Vanguard(발로란트)에 필요합니다. BIOS에서 TPM(fTPM/PTT)을 켜 주세요.",
+    "not_gpt": "DelayOS를 설치한 디스크가 GPT 방식이 아니어서 Windows 파티션을 만들 수 없습니다.",
+    "luks": "디스크 암호화를 사용하는 설치에서는 Windows 게임 지원을 함께 설치할 수 없습니다.",
+    "fs": "이 파일 시스템에서는 DelayOS 파티션 크기를 조정할 수 없습니다 (btrfs, ext4, xfs만 지원).",
+    "not_empty": "DelayOS 파티션이 비어 있지 않아 안전하게 크기를 줄일 수 없습니다.",
+    "too_small": "디스크 공간이 부족합니다. Windows와 설치 파일을 넣고도 DelayOS에 20GB 이상이 남아야 합니다.",
+    "root_dev": "DelayOS 파티션을 확인하지 못했습니다.",
+    "tool": "필요한 도구가 설치되어 있지 않습니다: {0}",
+    "parts_failed": "Windows 파티션을 만들지 못했습니다.",
+    "state": "앞 단계(파티션 준비) 정보가 없습니다.",
+    "verify": "준비된 파티션을 다시 확인하지 못했습니다. 안전을 위해 중단했습니다.",
+    "esp": "EFI 시스템 파티션을 찾지 못했습니다.",
+    "esp_full": "EFI 시스템 파티션에 남은 공간이 부족합니다 (80MB 필요).",
+    "has_windows": "이 PC의 EFI 시스템 파티션에 이미 Windows 부팅 파일이 있습니다. 기존 Windows를 건드리지 않기 위해 중단했습니다. 기존 Windows는 'Windows 전환'으로 그대로 사용할 수 있습니다.",
+    "download": "Microsoft에서 Windows 설치 파일을 받지 못했습니다. 인터넷 연결을 확인하거나, 직접 받은 Windows 11 ISO 파일을 지정해 다시 시도하세요.",
+    "download_api": "Microsoft 다운로드 서버가 요청을 거부했습니다. 잠시 후 다시 시도하거나, microsoft.com/software-download/windows11 에서 직접 받은 ISO 파일을 지정하세요.",
+    "sha": "받은 Windows 설치 파일의 SHA-256이 Microsoft가 공개한 값과 다릅니다. 파일을 버렸습니다.",
+    "iso": "Windows 11 설치 ISO가 아니거나 읽을 수 없는 파일입니다.",
+    "edition": "이 ISO에 선택한 Windows 에디션이 없습니다.",
+    "space": "Windows 설치 파일을 받을 공간이 부족합니다.",
+    "stage_small": "Windows 설치 파일이 준비 파티션보다 큽니다.",
+    "bootentry": "Windows 설치용 부팅 항목을 만들지 못했습니다.",
+    "internal": "Windows 게임 지원을 준비하는 중 오류가 발생했습니다.",
+    "not_pending": "진행 중이거나 실패한 Windows 게임 지원 설치가 없습니다.",
+}
+
+DRY = False
+LOGS = [LOG]
+
+
+class Fail(Exception):
+    def __init__(self, code, *args, detail=""):
+        super().__init__(code)
+        self.code, self.detail = code, detail
+        self.message = MSG.get(code, code).format(*args)
+
+
+def log(msg):
+    line = "%s %s%s" % (time.strftime("%Y-%m-%d %H:%M:%S"), "[dry-run] " if DRY else "", msg)
+    for p in LOGS:
+        try:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except OSError:
+            pass
+    if sys.stderr.isatty():
+        sys.stderr.write(line + "\n")
+
+
+def progress(frac, msg):
+    print("PROGRESS %.4f %s" % (max(0.0, min(1.0, frac)), msg), flush=True)
+
+
+def run(cmd, mutate=False, check=False, timeout=600, stdin=None, quiet=False):
+    """mutate=True marks commands that change something: they are skipped in dry-run mode."""
+    if mutate and DRY:
+        log("would run: " + " ".join(cmd))
+        return 0, ""
+    try:
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                           errors="replace", timeout=timeout, input=stdin)
+        rc, out = p.returncode, p.stdout
+    except Exception as e:  # noqa
+        rc, out = 127, str(e)
+    if mutate or (rc != 0 and not quiet):
+        log("run rc=%d: %s%s" % (rc, " ".join(cmd), ("\n    " + out.strip()[-800:].replace("\n", "\n    ")) if out.strip() and rc != 0 else ""))
+    if check and rc != 0:
+        raise Fail("internal", detail="%s: %s" % (cmd[0], out.strip()[-300:]))
+    return rc, out
+
+
+def have(b):
+    return shutil.which(b) is not None
+
+
+def need_tools(*names):
+    missing = [n for n in names if not have(n)]
+    if missing:
+        raise Fail("tool", ", ".join(missing))
+
+
+def read_text(path, default=""):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return default
+
+
+def write_file(path, data, mode=0o644):
+    if DRY:
+        log("would write %s (%d bytes)" % (path, len(data)))
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def remove_file(path):
+    if DRY:
+        if os.path.exists(path):
+            log("would remove " + path)
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+# ---- configuration (shell style KEY='value', also sourced by /etc/grub.d/05_delayos-winsetup) -------
+def load_conf(root="/"):
+    conf = {}
+    for line in read_text(os.path.join(root, CONF.lstrip("/"))).splitlines():
+        m = re.match(r"^([A-Z_][A-Z0-9_]*)='?([^']*)'?$", line.strip())
+        if m:
+            conf[m.group(1)] = m.group(2)
+    return conf
+
+
+def save_conf(conf, root="/"):
+    body = "# DelayOS hidden Windows (delay-winsetup). Do not edit by hand.\n"
+    body += "".join("%s='%s'\n" % (k, str(v).replace("'", "")) for k, v in sorted(conf.items()))
+    write_file(os.path.join(root, CONF.lstrip("/")), body)
+
+
+# ---- block devices -------------------------------------------------------------------------------
+def lsblk(dev=None):
+    cmd = ["lsblk", "-J", "-b", "-l", "-o", "PATH,PKNAME,TYPE,FSTYPE,PARTUUID,PARTLABEL,SIZE,UUID,MOUNTPOINT,RM,MODEL,TRAN,PTTYPE,LABEL"]
+    if dev:
+        cmd.append(dev)
+    rc, out = run(cmd, quiet=True)
+    try:
+        return json.loads(out)["blockdevices"]
+    except Exception:
+        return []
+
+
+def settle(disk=None):
+    if DRY:
+        return
+    if disk:
+        if run(["partprobe", disk], quiet=True)[0] != 0:
+            run(["partx", "-u", disk], quiet=True)
+    run(["udevadm", "settle", "--timeout=15"], quiet=True)
+
+
+def sfdisk_table(disk):
+    rc, out = run(["sfdisk", "-J", disk])
+    try:
+        return json.loads(out)["partitiontable"]
+    except Exception:
+        raise Fail("not_gpt", detail=out.strip()[-200:])
+
+
+def partnum(node):
+    m = re.search(r"(\d+)$", node)
+    return int(m.group(1)) if m else 0
+
+
+def partnode(disk, n):
+    return "%s%s%d" % (disk, "p" if disk[-1].isdigit() else "", n)
+
+
+def by_partuuid(pu):
+    p = "/dev/disk/by-partuuid/" + pu.lower()
+    return os.path.realpath(p) if os.path.exists(p) else None
+
+
+def blkid(dev, tag):
+    rc, out = run(["blkid", "-p", "-s", tag, "-o", "value", dev], quiet=True)
+    return out.strip() if rc == 0 else ""
+
+
+def verify_part(pu, name, disk):
+    """Device node of the partition with GPT GUID pu, only if its name and disk are what we made."""
+    if DRY and not pu:
+        return "/dev/null"
+    settle()
+    dev = by_partuuid(pu) if pu else None
+    if not dev:
+        raise Fail("verify", detail="partuuid %s not found" % pu)
+    for d in lsblk(dev):
+        if d.get("path") == dev and (d.get("partlabel") or "") == name and "/dev/" + (d.get("pkname") or "") == disk:
+            return dev
+    raise Fail("verify", detail="%s is not %s on %s" % (dev, name, disk))
+
+
+class Mount:
+    def __init__(self, dev, fstype=None, opts="rw"):
+        self.dev, self.fstype, self.opts, self.path = dev, fstype, opts, None
+
+    def __enter__(self):
+        os.makedirs(RUN, 0o700, exist_ok=True)
+        self.path = tempfile.mkdtemp(prefix="mnt-", dir=RUN)
+        cmd = ["mount", "-o", self.opts]
+        if self.fstype:
+            cmd += ["-t", self.fstype]
+        rc, out = run(cmd + [self.dev, self.path], timeout=120)
+        if rc != 0:
+            os.rmdir(self.path)
+            raise Fail("internal", detail="mount %s: %s" % (self.dev, out.strip()[-200:]))
+        return self.path
+
+    def __exit__(self, *a):
+        run(["sync"], quiet=True, timeout=900)
+        for _ in range(10):
+            if run(["umount", self.path], quiet=True)[0] == 0:
+                break
+            time.sleep(1)
+        try:
+            os.rmdir(self.path)
+        except OSError:
+            log("could not remove mount point " + self.path)
+        return False
+
+
+def find_ci(root, rel):
+    cur = root
+    for part in rel.split("/"):
+        try:
+            hit = next((n for n in os.listdir(cur) if n.lower() == part.lower()), None)
+        except OSError:
+            return None
+        if hit is None:
+            return None
+        cur = os.path.join(cur, hit)
+    return cur
+
+
+# ---- facts (installer page) ----------------------------------------------------------------------
+def tpm_facts():
+    base = "/sys/class/tpm/tpm0"
+    if not os.path.isdir(base):
+        return {"present": False, "version": 0}
+    v = read_text(base + "/tpm_version_major").strip()
+    return {"present": True, "version": int(v) if v.isdigit() else 0}
+
+
+def secure_boot():
+    """True/False, or None when unknown (no UEFI)."""
+    try:
+        with open("/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c", "rb") as f:
+            d = f.read()
+        return len(d) >= 5 and d[4] == 1
+    except OSError:
+        return None
+
+
+def msdm_key():
+    """OEM Windows key stored in the firmware (ACPI MSDM table), or ''. Root only. Never logged."""
+    try:
+        with open("/sys/firmware/acpi/tables/MSDM", "rb") as f:
+            d = f.read()
+        key = d[-29:].decode("ascii", "replace").strip().upper()
+        return key if KEY_RE.match(key) else ""
+    except OSError:
+        return ""
+
+
+def sb_available(root="/"):
+    j = lambda p: os.path.join(root, p.lstrip("/"))
+    return all(os.path.isfile(j(p)) for p in (SB_DIR + "/grubx64.efi", SB_DIR + "/delayos-general-ca.cer",
+                                              SB_DIR + "/vmlinuz-linux-delayos.signed",
+                                              SHIM_DIR + "/shimx64.efi", SHIM_DIR + "/mmx64.efi"))
+
+
+def tpm_bypass():
+    return os.environ.get("DELAYOS_WINSETUP_SKIP_TPM") == "1" or os.path.exists(RUN + "/skip-tpm")
+
+
+def facts():
+    live_src = ""
+    rc, out = run(["findmnt", "-no", "SOURCE", "/run/archiso/bootmnt"], quiet=True)
+    if rc == 0:
+        live_src = out.strip()
+    disks = []
+    for d in lsblk():
+        if d.get("type") != "disk" or (d.get("path") or "").startswith(("/dev/loop", "/dev/zram", "/dev/sr", "/dev/ram")):
+            continue
+        if live_src.startswith(d["path"]):
+            continue
+        disks.append({"path": d["path"], "size_gb": round(int(d.get("size") or 0) / GIB, 1),
+                      "model": (d.get("model") or "").strip(), "removable": bool(d.get("rm")) or d.get("tran") == "usb"})
+    existing = any((d.get("fstype") in ("ntfs", "BitLocker")) and int(d.get("size") or 0) >= 30 * GIB for d in lsblk())
+    t = tpm_facts()
+    return {
+        "schema": 1,
+        "uefi": os.path.isdir("/sys/firmware/efi"),
+        "tpm": t, "tpm_ok": (t["present"] and t["version"] >= 2) or tpm_bypass(), "tpm_bypass": tpm_bypass(),
+        "secure_boot": secure_boot(), "sb_build": sb_available(),
+        "oem_key": bool(msdm_key()) if os.geteuid() == 0 else os.path.exists("/sys/firmware/acpi/tables/MSDM"),
+        "existing_windows": existing,
+        "disks": disks, "stage_gb": STAGE_GB, "min_win_gb": MIN_WIN_GB, "min_root_gb": MIN_ROOT_GB,
+        "tools": {t_: have(t_) for t_ in ("wimlib-imagex", "sgdisk", "sfdisk", "mkfs.vfat", "efibootmgr")},
+    }
+
+
+def cmd_probe(a):
+    f = facts()
+    if a.write:
+        os.makedirs(RUN, 0o755, exist_ok=True)
+        os.chmod(RUN, 0o755)
+        qml = "// generated by delay-winsetup probe\nimport QtQuick\nItem {\n    readonly property var facts: (%s)\n}\n" % json.dumps(f, ensure_ascii=False)
+        write_file(RUN + "/WinFacts.qml", qml)
+    print(json.dumps(f, ensure_ascii=False, indent=1))
+    return 0
+
+
+# ---- stage 1: partitions -------------------------------------------------------------------------
+def cmd_parts(a):
+    need_tools("sfdisk", "sgdisk", "mkfs.vfat", "lsblk", "blkid")
+    if not os.path.isdir("/sys/firmware/efi"):
+        raise Fail("not_uefi")
+    t = tpm_facts()
+    if not ((t["present"] and t["version"] >= 2) or tpm_bypass()):
+        raise Fail("no_tpm")
+    win_gb = max(MIN_WIN_GB, int(a.win_gb))
+    root_dev = os.path.realpath(a.root_dev)
+    info = next((d for d in lsblk(root_dev) if d.get("path") == root_dev), None)
+    if not info or info.get("type") != "part" or not info.get("pkname"):
+        raise Fail("luks" if info and info.get("type") == "crypt" else "root_dev", detail=str(info))
+    if info.get("mountpoint"):
+        raise Fail("root_dev", detail="mounted")
+    disk = "/dev/" + info["pkname"]
+    fstype = blkid(root_dev, "TYPE")
+    if fstype == "crypto_LUKS":
+        raise Fail("luks")
+    if fstype not in ("btrfs", "ext4", "xfs"):
+        raise Fail("fs", detail=fstype)
+    table = sfdisk_table(disk)
+    if table.get("label") != "gpt":
+        raise Fail("not_gpt")
+    ss = int(table.get("sectorsize") or 512)
+    al = MIB // ss
+    entry = next((p for p in table["partitions"] if os.path.realpath(p["node"]) == root_dev), None)
+    if not entry:
+        raise Fail("root_dev", detail="not in table")
+    n_root, start, size = partnum(entry["node"]), int(entry["start"]), int(entry["size"])
+    old_end = start + size                                  # exclusive
+    stage_s, win_s = STAGE_GB * GIB // ss, win_gb * GIB // ss
+    new_size = ((size - stage_s - win_s) // al) * al
+    if new_size * ss < MIN_ROOT_GB * GIB:
+        raise Fail("too_small", detail="root %d GiB, need %d" % (size * ss // GIB, win_gb + STAGE_GB + MIN_ROOT_GB))
+    stg_start = -(-(start + new_size) // al) * al
+    stg_end = stg_start + stage_s - 1
+    win_start = stg_end + 1
+    win_end = (old_end // al) * al - 1
+    used = sorted(partnum(p["node"]) for p in table["partitions"])
+    free = [n for n in range(1, 129) if n not in used]
+    n_stg, n_win = free[0], free[1]
+    fs_uuid, fs_label = blkid(root_dev, "UUID"), blkid(root_dev, "LABEL")
+    log("parts: disk=%s root=%s (#%d %s uuid=%s) start=%d size=%d -> %d sectors; staging #%d %d-%d; windows #%d %d-%d (%d GiB)"
+        % (disk, root_dev, n_root, fstype, fs_uuid, start, size, new_size, n_stg, stg_start, stg_end, n_win, win_start, win_end, win_gb))
+
+    # 1. the root file system must be the brand-new, empty one Calamares just made
+    new_bytes = new_size * ss
+    if fstype in ("btrfs", "ext4"):
+        with Mount(root_dev, fstype, "ro" if DRY else "rw") as m:
+            extra = [n for n in os.listdir(m) if n != "lost+found"]
+            if extra:
+                raise Fail("not_empty", detail=", ".join(extra[:5]))
+            if fstype == "btrfs":
+                run(["btrfs", "filesystem", "resize", str(new_bytes), m], mutate=True, check=True)
+        if fstype == "ext4":
+            run(["e2fsck", "-f", "-p", root_dev], mutate=True)
+            run(["resize2fs", root_dev, "%dK" % (new_bytes // 1024)], mutate=True, check=True)
+    else:
+        with Mount(root_dev, "xfs", "ro") as m:
+            extra = os.listdir(m)
+        if extra:
+            raise Fail("not_empty", detail=", ".join(extra[:5]))
+    # 2. shrink the partition entry (GUID, name, type and start stay as they are)
+    run(["sfdisk", "--no-reread", "-N", str(n_root), disk], mutate=True, check=True, stdin=", %d\n" % new_size)
+    settle(disk)
+    if fstype == "xfs":          # XFS cannot shrink: make the (empty) file system again, same UUID/label
+        cmd = ["mkfs.xfs", "-f", "-m", "uuid=" + fs_uuid]
+        if fs_label:
+            cmd += ["-L", fs_label]
+        run(cmd + [root_dev], mutate=True, check=True)
+    # 3. the two new partitions, only inside the space that was just freed
+    run(["sgdisk", "-n", "%d:%d:%d" % (n_stg, stg_start, stg_end), "-t", "%d:0700" % n_stg, "-c", "%d:%s" % (n_stg, STG_NAME),
+         "-n", "%d:%d:%d" % (n_win, win_start, win_end), "-t", "%d:0700" % n_win, "-c", "%d:%s" % (n_win, WIN_NAME), disk],
+        mutate=True, check=True)
+    settle(disk)
+    state = {"disk": disk, "root_dev": root_dev, "root_n": n_root, "root_fstype": fstype, "stage_n": n_stg, "win_n": n_win,
+             "win_gb": win_gb, "nonce": uuid.uuid4().hex, "time": int(time.time()), "dry": DRY}
+    if not DRY:
+        t2 = sfdisk_table(disk)
+        byn = {partnum(p["node"]): p for p in t2["partitions"]}
+        if n_stg not in byn or n_win not in byn or byn[n_stg].get("name") != STG_NAME or byn[n_win].get("name") != WIN_NAME:
+            raise Fail("parts_failed", detail="new partitions missing")
+        if blkid(root_dev, "UUID") != fs_uuid:
+            raise Fail("parts_failed", detail="root file system UUID changed")
+        state.update(disk_ptuuid=t2.get("id", ""), root_partuuid=byn[n_root]["uuid"].lower(),
+                     stage_partuuid=byn[n_stg]["uuid"].lower(), win_partuuid=byn[n_win]["uuid"].lower())
+        stg_dev = verify_part(state["stage_partuuid"], STG_NAME, disk)
+        win_dev = verify_part(state["win_partuuid"], WIN_NAME, disk)
+        run(["wipefs", "-a", stg_dev], mutate=True)
+        run(["wipefs", "-a", win_dev], mutate=True)
+        run(["mkfs.vfat", "-F", "32", "-n", "DELAYWINSET", stg_dev], mutate=True, check=True)
+        os.makedirs(RUN, 0o755, exist_ok=True)
+    write_file(STATE, json.dumps(state, indent=1), 0o600)
+    print(json.dumps({"ok": True, "state": state}, ensure_ascii=False))
+    return 0
+
+
+# ---- Microsoft download (same public API flow as the open-source Fido / Mido scripts) -------------
+class MsDownload:
+    PAGE = "https://www.microsoft.com/en-us/software-download/windows11"
+    REFERER = "https://www.microsoft.com/software-download/windows11"
+    API = "https://www.microsoft.com/software-download-connector/api/"
+    ORG_ID, PROFILE, INSTANCE = "y6jn8c31", "606624d44113", "560dc9f3-1aa5-4a2f-b63c-9e18f8d0e175"
+    FALLBACK_EDITIONS = ("3813", "3262", "3113", "2935")
+
+    def __init__(self):
+        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.sha = ""
+
+    def get(self, url, referer=None, timeout=40):
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*", "Accept-Language": "en-US,en;q=0.8"})
+        if referer:
+            req.add_header("Referer", referer)
+        with self.opener.open(req, timeout=timeout) as r:
+            return r.read().decode("utf-8", "replace")
+
+    @staticmethod
+    def allowed(url):
+        host = (urllib.parse.urlparse(url).hostname or "").lower()
+        return url.startswith("https://") and (host.endswith(".microsoft.com") or host == "microsoft.com")
+
+    def resolve(self, language="Korean"):
+        """(url, sha256 or '') of the official Windows 11 x64 ISO in the given language."""
+        editions = []
+        try:
+            page = self.get(self.PAGE)
+            editions = re.findall(r'<option[^>]*value="(\d+)"[^>]*>\s*Windows 11', page)
+            m = re.search(re.escape(language) + r"\s*64-bit\s*</td>\s*<td[^>]*>\s*([A-Fa-f0-9]{64})", page)
+            if m:
+                self.sha = m.group(1).lower()
+        except Exception as e:  # noqa
+            log("download page: %s" % e)
+        last = ""
+        for ed in list(dict.fromkeys(editions + list(self.FALLBACK_EDITIONS))):
+            sid = str(uuid.uuid4())
+            try:
+                try:
+                    self.get("https://vlscppe.microsoft.com/tags?org_id=%s&session_id=%s" % (self.ORG_ID, sid))
+                    js = self.get("https://ov-df.microsoft.com/mdt.js?instanceId=%s&PageId=si&session_id=%s" % (self.INSTANCE, sid))
+                    w, rt = re.search(r"[?&]w=([A-F0-9]+)", js), re.search(r'rticks\="\+?(\d+)', js)
+                    if w and rt:
+                        self.get("https://ov-df.microsoft.com/?session_id=%s&CustomerId=%s&PageId=si&w=%s&mdt=%d&rticks=%s"
+                                 % (sid, self.INSTANCE, w.group(1), int(time.time() * 1000), rt.group(1)))
+                except Exception as e:  # noqa
+                    log("session whitelist: %s" % e)
+                q = "?profile=%s&productEditionId=%s&SKU=undefined&friendlyFileName=undefined&Locale=en-US&sessionID=%s" % (self.PROFILE, ed, sid)
+                skus = json.loads(self.get(self.API + "getskuinformationbyproductedition" + q))
+                sku = next((s for s in skus.get("Skus", []) if s.get("Language") == language), None)
+                if not sku:
+                    last = "edition %s: no %s SKU (%s)" % (ed, language, str(skus.get("Errors"))[:200])
+                    continue
+                q = "?profile=%s&productEditionId=undefined&SKU=%s&friendlyFileName=undefined&Locale=en-US&sessionID=%s" % (self.PROFILE, sku["Id"], sid)
+                txt = self.get(self.API + "GetProductDownloadLinksBySku" + q, referer=self.REFERER)
+                links = json.loads(txt)
+                if links.get("Errors"):
+                    last = "edition %s: %s" % (ed, str(links["Errors"])[:300])
+                    continue
+                opts = [o.get("Uri", "") for o in links.get("ProductDownloadOptions", [])]
+                opts = [u for u in opts if self.allowed(u)]
+                x64 = [u for u in opts if "x64" in u.lower()] or [u for u in opts if "arm64" not in u.lower()]
+                if x64:
+                    if not self.sha:
+                        m = re.search(r'"(?:Sha256|DownloadHash|Hash)"\s*:\s*"([A-Fa-f0-9]{64})"', txt)
+                        if m:
+                            self.sha = m.group(1).lower()
+                    log("resolved Windows ISO: edition id %s, %s, sha256 %s" % (ed, x64[0].split("?")[0], self.sha or "not published"))
+                    return x64[0], self.sha
+                last = "edition %s: no x64 link" % ed
+            except Exception as e:  # noqa
+                last = "edition %s: %s" % (ed, e)
+            log("download api: " + last)
+        raise Fail("download_api", detail=last)
+
+    def download(self, url, dest, cb):
+        """Resumable download; returns the size."""
+        if not self.allowed(url):
+            raise Fail("download", detail="not a Microsoft URL")
+        part = dest + ".part"
+        for attempt in range(8):
+            have_ = os.path.getsize(part) if os.path.exists(part) else 0
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
+            if have_:
+                req.add_header("Range", "bytes=%d-" % have_)
+            try:
+                with self.opener.open(req, timeout=60) as r:
+                    if not self.allowed(r.geturl()):
+                        raise Fail("download", detail="redirected outside microsoft.com")
+                    if have_ and r.status != 206:
+                        have_ = 0
+                    total = have_ + int(r.headers.get("Content-Length") or 0)
+                    last = 0.0
+                    with open(part, "ab" if have_ else "wb") as f:
+                        while True:
+                            b = r.read(MIB)
+                            if not b:
+                                break
+                            f.write(b)
+                            have_ += len(b)
+                            if time.time() - last > 1.0:
+                                last = time.time()
+                                cb(have_, total)
+                    if total and have_ < total:
+                        raise IOError("short read %d/%d" % (have_, total))
+                os.replace(part, dest)
+                return have_
+            except Fail:
+                raise
+            except urllib.error.HTTPError as e:
+                log("download attempt %d: HTTP %s" % (attempt + 1, e.code))
+                if e.code in (403, 404, 410):
+                    break
+                if e.code == 416:
+                    os.unlink(part)
+            except Exception as e:  # noqa
+                log("download attempt %d: %s" % (attempt + 1, e))
+            time.sleep(3 + attempt * 2)
+        raise Fail("download")
+
+
+def sha256_file(path, cb=None):
+    h, done, total = hashlib.sha256(), 0, os.path.getsize(path)
+    with open(path, "rb") as f:
+        while True:
+            b = f.read(4 * MIB)
+            if not b:
+                break
+            h.update(b)
+            done += len(b)
+            if cb:
+                cb(done, total)
+    return h.hexdigest()
+
+
+def cmd_iso_url(a):
+    d = MsDownload()
+    url, sha = d.resolve(a.language)
+    print(json.dumps({"url": url, "sha256": sha}, indent=1))
+    return 0
+
+
+# ---- WIM helpers ---------------------------------------------------------------------------------
+def wim_editions(path):
+    """{EDITIONID: image index} of a WIM/ESD."""
+    try:
+        raw = subprocess.run(["wimlib-imagex", "info", path, "--xml"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=120).stdout
+    except Exception:
+        return {}
+    txt = raw.decode("utf-16", "replace") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8", "replace")
+    res = {}
+    for m in re.finditer(r'<IMAGE INDEX="(\d+)">(.*?)</IMAGE>', txt, re.S):
+        e = re.search(r"<EDITIONID>([^<]+)</EDITIONID>", m.group(2))
+        if e:
+            res.setdefault(e.group(1), int(m.group(1)))
+    return res
+
+
+def wim_boot_index(path):
+    rc, out = run(["wimlib-imagex", "info", path, "--header"], quiet=True)
+    m = re.search(r"Boot Index\s*[:=]\s*(\d+)", out)
+    return int(m.group(1)) if m and int(m.group(1)) > 0 else 2
+
+
+def copy_progress(src, dst, cb):
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    total, done = os.path.getsize(src), 0
+    with open(src, "rb") as fi, open(dst, "wb") as fo:
+        while True:
+            b = fi.read(4 * MIB)
+            if not b:
+                break
+            fo.write(b)
+            done += len(b)
+            cb(done, total)
+
+
+def copy_tree(src, dst):
+    for base, dirs, files in os.walk(src):
+        rel = os.path.relpath(base, src)
+        os.makedirs(os.path.join(dst, rel), exist_ok=True)
+        for f in files:
+            shutil.copyfile(os.path.join(base, f), os.path.join(dst, rel, f))
+
+
+def template(name, subst=None, crlf=True, encoding="ascii"):
+    t = read_text(os.path.join(SHARE, name))
+    if not t:
+        raise Fail("internal", detail="missing " + name)
+    for k, v in (subst or {}).items():
+        t = t.replace("@%s@" % k, str(v))
+    t = t.replace("\r\n", "\n")
+    if crlf:
+        t = t.replace("\n", "\r\n")
+    return t.encode(encoding, "replace")
+
+
+# ---- firmware boot entries -----------------------------------------------------------------------
+def efi_entries():
+    rc, out = run(["efibootmgr"], quiet=True)
+    order, nxt, entries = [], "", []
+    for line in out.splitlines():
+        m = re.match(r"^BootOrder: (.*)$", line)
+        if m:
+            order = [x for x in m.group(1).strip().split(",") if x]
+        m = re.match(r"^BootNext: ([0-9A-Fa-f]{4})", line)
+        if m:
+            nxt = m.group(1).upper()
+        m = re.match(r"^Boot([0-9A-Fa-f]{4})(\*?) ([^\t]*)(?:\t(.*))?$", line)
+        if m:
+            entries.append({"num": m.group(1).upper(), "label": m.group(3).strip(), "path": m.group(4) or ""})
+    return order, nxt, entries
+
+
+def set_order_first(first_nums):
+    order, _n, entries = efi_entries()
+    known = [e["num"] for e in entries]
+    new = [n for n in first_nums if n in known] + [n for n in order if n not in first_nums]
+    if new and new != order:
+        run(["efibootmgr", "-q", "-o", ",".join(new)], mutate=True)
+
+
+def delayos_entry(entries):
+    cands = [e for e in entries if e["label"] != SETUP_LABEL and "bootmgfw" not in e["path"].lower()
+             and (e["label"].lower().startswith("delayos") or "\\efi\\delayos\\" in e["path"].lower())]
+    return cands[0] if cands else None
+
+
+def remove_setup_entries():
+    for e in efi_entries()[2]:
+        if e["label"] == SETUP_LABEL:
+            run(["efibootmgr", "-q", "-b", e["num"], "-B"], mutate=True)
+
+
+def create_setup_entry(disk, n_stg):
+    """Firmware entry for the staging partition; DelayOS stays first, the entry is used once (BootNext)."""
+    need_tools("efibootmgr")
+    remove_setup_entries()
+    order_before = efi_entries()[0]
+    rc, out = run(["efibootmgr", "-q", "-c", "-d", disk, "-p", str(n_stg), "-L", SETUP_LABEL, "-l", "\\efi\\boot\\bootx64.efi"], mutate=True)
+    if DRY:
+        return "0000"
+    order, _n, entries = efi_entries()
+    num = next((e["num"] for e in entries if e["label"] == SETUP_LABEL), None)
+    if rc != 0 or not num:
+        raise Fail("bootentry", detail=out.strip()[-200:])
+    run(["efibootmgr", "-q", "-o", ",".join([n for n in order_before if n != num] + [num])], mutate=True)
+    rc, _ = run(["efibootmgr", "-q", "-n", num], mutate=True)
+    if rc != 0:
+        log("BootNext could not be set; GRUB starts the Windows setup instead")
+    return num
+
+
+# ---- Secure Boot (shim + DelayOS general key) ------------------------------------------------------
+def sb_setup(root, esp, disk, esp_n):
+    """Boot DelayOS through the Microsoft-signed shim: shim -> GRUB and linux-delayos signed with the
+    DelayOS *general* key (not the anti-cheat key, see docs). The CA is queued for MOK enrollment."""
+    j = lambda p: os.path.join(root, p.lstrip("/"))
+    if not sb_available(root):
+        return False
+    inroot = (lambda c: c) if root == "/" else (lambda c: ["chroot", root] + c)
+    rc, fsuuid = run(inroot(["grub-probe", "--target=fs_uuid", "/boot/grub"]))
+    rc2, rel = run(inroot(["grub-mkrelpath", "/boot/grub"]))
+    if rc != 0 or rc2 != 0 or not fsuuid.strip():
+        log("sb: cannot locate /boot/grub for GRUB")
+        return False
+    stub = ("# DelayOS Secure Boot: signed GRUB -> the normal configuration\n"
+            "search --no-floppy --fs-uuid --set=root %s\nset prefix=($root)%s\nconfigfile ($root)%s/grub.cfg\n"
+            % (fsuuid.strip(), rel.strip(), rel.strip()))
+    if DRY:
+        log("would install shim + signed GRUB to %s/EFI/DelayOS and EFI/BOOT, signed kernel to /boot, queue MOK" % esp)
+        return True
+    for sub, shim_name in (("EFI/DelayOS", "shimx64.efi"), ("EFI/BOOT", "BOOTX64.EFI")):
+        d = find_ci(esp, sub) or os.path.join(esp, sub)
+        os.makedirs(d, exist_ok=True)
+        old = find_ci(d, "grubx64.efi")
+        if old and not os.path.exists(os.path.join(d, "grubx64-unsigned.efi")) and sub == "EFI/DelayOS":
+            shutil.copyfile(old, os.path.join(d, "grubx64-unsigned.efi"))
+        shutil.copyfile(j(SHIM_DIR + "/shimx64.efi"), os.path.join(d, shim_name))
+        shutil.copyfile(j(SHIM_DIR + "/mmx64.efi"), os.path.join(d, "mmx64.efi"))
+        shutil.copyfile(j(SB_DIR + "/grubx64.efi"), os.path.join(d, "grubx64.efi"))
+        shutil.copyfile(j(SB_DIR + "/delayos-general-ca.cer"), os.path.join(d, "delayos-general-ca.cer"))
+        write_file(os.path.join(d, "grub.cfg"), stub)
+    sb_kernel(root)
+    for e in efi_entries()[2]:
+        if e["label"] == "DelayOS":
+            run(["efibootmgr", "-q", "-b", e["num"], "-B"], mutate=True)
+    run(["efibootmgr", "-q", "-c", "-d", disk, "-p", str(esp_n), "-L", "DelayOS", "-l", "\\EFI\\DelayOS\\shimx64.efi"], mutate=True)
+    cer = SB_DIR + "/delayos-general-ca.cer"
+    rc, out = run(inroot(["mokutil", "--test-key", cer]), quiet=True)
+    if "already enrolled" in out:
+        log("sb: DelayOS general CA already enrolled")
+    else:
+        rc, h = run(inroot(["mokutil", "--generate-hash=" + MOK_PASSWORD]), quiet=True)
+        hf = j("/run/delayos-mok.hash") if root != "/" else RUN + "/mok.hash"
+        os.makedirs(os.path.dirname(hf), exist_ok=True)
+        write_file(hf, h.strip() + "\n", 0o600)
+        rc, out = run(inroot(["mokutil", "--import", cer, "--hash-file", "/run/delayos-mok.hash" if root != "/" else hf]), mutate=True)
+        remove_file(hf)
+        if rc != 0:
+            log("sb: MOK import failed; run 'sudo mokutil --import %s' later" % cer)
+    return True
+
+
+def sb_kernel(root="/"):
+    """Put the DelayOS-signed linux-delayos image into /boot when it matches the installed kernel."""
+    j = lambda p: os.path.join(root, p.lstrip("/"))
+    signed, want = j(SB_DIR + "/vmlinuz-linux-delayos.signed"), read_text(j(SB_DIR + "/vmlinuz-linux-delayos.sha256")).split()
+    boot = j("/boot/vmlinuz-linux-delayos")
+    if not os.path.isfile(signed) or not os.path.isfile(boot):
+        return False
+    cur = sha256_file(boot)
+    if cur == sha256_file(signed):
+        return True
+    if not want or cur != want[0]:
+        log("sb: /boot/vmlinuz-linux-delayos is not the kernel the signed image was made from; it stays unsigned "
+            "(it will not boot with Secure Boot on)")
+        return False
+    if DRY:
+        log("would install the signed kernel image")
+        return True
+    shutil.copyfile(signed, boot + ".tmp")
+    os.replace(boot + ".tmp", boot)
+    log("sb: signed linux-delayos image installed")
+    return True
+
+
+def cmd_sb_kernel(a):
+    conf = load_conf()
+    if conf.get("SB") == "1":
+        sb_kernel("/")
+    return 0
+
+
+def cmd_sb_setup(a):
+    esp, esp_dev = find_esp("/")
+    info = next((d for d in lsblk(esp_dev) if d.get("path") == esp_dev), {})
+    ok = sb_setup("/", esp, "/dev/" + info.get("pkname", ""), partnum(esp_dev))
+    if ok:
+        conf = load_conf()
+        conf["SB"] = "1"
+        save_conf(conf)
+        print("Secure Boot 준비가 끝났습니다. 다시 시작하면 파란 화면(MOK 관리)이 나옵니다: "
+              "Enroll MOK > Continue > Yes > 암호 '%s' 입력 > Reboot. 그다음 BIOS에서 Secure Boot를 켜세요." % MOK_PASSWORD)
+        return 0
+    print("이 DelayOS 빌드에는 Secure Boot용 서명 파일이 없습니다 (Secure Boot 미지원 빌드).")
+    return 1
+
+
+# ---- stage 2 -------------------------------------------------------------------------------------
+def find_esp(root):
+    for mp in ("boot/efi", "efi", "boot"):
+        p = os.path.join(root, mp)
+        rc, out = run(["findmnt", "-no", "SOURCE,FSTYPE", "-M", p], quiet=True)
+        f = out.split()
+        if rc == 0 and len(f) >= 2 and f[1] == "vfat":
+            return p, os.path.realpath(f[0])
+    raise Fail("esp")
+
+
+def find_local_iso():
+    """A Windows 11 ISO on plugged-in media (e.g. next to the DelayOS USB), newest first."""
+    hits = []
+    for base in ("/run/media", "/mnt", "/media", "/run/archiso/bootmnt"):
+        for dp, dn, fn in os.walk(base):
+            if dp.count(os.sep) - base.count(os.sep) > 3:
+                dn[:] = []
+            for f in fn:
+                if re.match(r"(?i)^win(dows)?[ _-]?11.*\.iso$", f):
+                    hits.append(os.path.join(dp, f))
+    hits.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    return hits[0] if hits else ""
+
+
+def obtain_iso(root, iso_arg, p0, p1):
+    """Returns (iso path, downloaded?). Downloads only from Microsoft."""
+    span = p1 - p0
+    if iso_arg:
+        if not os.path.isfile(iso_arg):
+            raise Fail("iso", detail=iso_arg)
+        log("using the ISO given by the user: " + iso_arg)
+        return iso_arg, False
+    cache = os.path.join(root, "var/cache/delayos/winsetup")
+    dest = os.path.join(cache, "windows.iso")
+    if DRY:
+        d = MsDownload()
+        try:
+            url, sha = d.resolve()
+            log("would download %s (sha256 %s)" % (url.split("?")[0], sha or "not published"))
+        except Fail as e:
+            log("download link could not be resolved in dry-run: %s" % e.detail)
+        return dest, True
+    os.makedirs(cache, exist_ok=True)
+    d = MsDownload()
+    progress(p0, "Microsoft에서 Windows 11 다운로드 주소를 확인하는 중…")
+    try:
+        url, sha = d.resolve()
+    except Fail:
+        local = find_local_iso()
+        if local:
+            log("download API failed, using local ISO " + local)
+            return local, False
+        raise
+    st = os.statvfs(cache)
+    if st.f_bavail * st.f_frsize < 9 * GIB:
+        raise Fail("space")
+
+    def cb(done, total):
+        frac = done / total if total else 0
+        progress(p0 + span * 0.9 * frac, "Windows 11 다운로드 중… %.1f / %.1f GB" % (done / GIB, total / GIB))
+    size = d.download(url, dest, cb)
+    log("downloaded %d bytes" % size)
+    if sha:
+        progress(p0 + span * 0.9, "받은 파일을 확인하는 중 (SHA-256)…")
+        got = sha256_file(dest, lambda a_, b_: progress(p0 + span * (0.9 + 0.1 * a_ / b_), "받은 파일을 확인하는 중 (SHA-256)…"))
+        if got != sha:
+            os.unlink(dest)
+            raise Fail("sha", detail="got %s want %s" % (got, sha))
+        log("SHA-256 matches the value Microsoft publishes: " + got)
+    else:
+        log("Microsoft did not publish a SHA-256 for this download in the page; size %d, TLS download from %s"
+            % (size, urllib.parse.urlparse(url).hostname))
+    return dest, True
+
+
+def fill_staging(iso, stg_dev, win_dev, st, edition, key, p0, p1):
+    """ISO -> staging partition (boot files, boot.wim, split install.wim) + unattended payload."""
+    span = p1 - p0
+    nonce = st["nonce"]
+    if DRY:
+        log("would extract %s to %s, add the unattended files (edition %s) and mark %s" % (iso, stg_dev, edition, win_dev))
+        return
+    run(["wipefs", "-a", stg_dev], mutate=True)
+    run(["mkfs.vfat", "-F", "32", "-n", "DELAYWINSET", stg_dev], mutate=True, check=True)
+    try:
+        isom = Mount(iso, "udf", "loop,ro")
+        im = isom.__enter__()
+    except Fail:
+        isom = Mount(iso, None, "loop,ro")
+        im = isom.__enter__()
+    try:
+        boot_wim = find_ci(im, "sources/boot.wim")
+        inst = find_ci(im, "sources/install.wim") or find_ci(im, "sources/install.esd")
+        if not boot_wim or not inst or not find_ci(im, "efi/boot/bootx64.efi"):
+            raise Fail("iso", detail="no sources/boot.wim, install.wim or efi/boot/bootx64.efi")
+        eds = wim_editions(inst)
+        index = eds.get(EDITION_IDS[edition])
+        log("editions in the ISO: %s" % eds)
+        if not index:
+            raise Fail("edition", detail=str(eds))
+        with Mount(stg_dev, "vfat", "rw,utf8") as sm:
+            fs = os.statvfs(sm)
+            need = os.path.getsize(boot_wim) + os.path.getsize(inst) + 300 * MIB
+            if fs.f_bavail * fs.f_frsize < need:
+                raise Fail("stage_small", detail="need %d MiB" % (need // MIB))
+            progress(p0, "Windows 설치 파일을 준비하는 중…")
+            for d in ("efi", "boot"):
+                src = find_ci(im, d)
+                if src:
+                    copy_tree(src, os.path.join(sm, d))
+            for f in ("bootmgr.efi", "bootmgr"):
+                src = find_ci(im, f)
+                if src:
+                    shutil.copyfile(src, os.path.join(sm, f))
+            os.makedirs(os.path.join(sm, "sources"), exist_ok=True)
+            bw = os.path.join(sm, "sources", "boot.wim")
+            copy_progress(boot_wim, bw, lambda a_, b_: progress(p0 + span * 0.12 * a_ / b_, "Windows 설치 파일을 준비하는 중…"))
+            isize = os.path.getsize(inst)
+            if inst.lower().endswith(".wim") and isize > 3800 * MIB:
+                wimfile, swm = "install.swm", "/SWMFile:%STG%:\\sources\\install*.swm"
+                proc = subprocess.Popen(["wimlib-imagex", "split", inst, os.path.join(sm, "sources", "install.swm"), "3800"],
+                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+                tail = ""
+                while proc.poll() is None:
+                    time.sleep(2)
+                    done = sum(os.path.getsize(os.path.join(sm, "sources", f)) for f in os.listdir(os.path.join(sm, "sources")) if f.lower().endswith(".swm"))
+                    progress(p0 + span * (0.12 + 0.75 * min(1.0, done / isize)), "Windows 이미지를 복사하는 중… %.1f / %.1f GB" % (done / GIB, isize / GIB))
+                tail = (proc.stdout.read() or "")[-400:]
+                if proc.returncode != 0:
+                    raise Fail("internal", detail="wimlib split: " + tail)
+            else:
+                wimfile, swm = os.path.basename(inst).lower(), ""
+                copy_progress(inst, os.path.join(sm, "sources", wimfile),
+                              lambda a_, b_: progress(p0 + span * (0.12 + 0.75 * a_ / b_), "Windows 이미지를 복사하는 중… %.1f / %.1f GB" % (a_ / GIB, b_ / GIB)))
+            progress(p0 + span * 0.88, "자동 설치를 구성하는 중…")
+            # payload that WinPE copies to C:\ProgramData\DelayOS\winsetup
+            dd = os.path.join(sm, "delayos")
+            pay = os.path.join(dd, "payload")
+            os.makedirs(os.path.join(pay, "helper"), exist_ok=True)
+            write_file(os.path.join(dd, "staging.tag"), nonce + "\r\n")
+            sub = {"NONCE": nonce, "INDEX": index, "WIMFILE": wimfile, "SWM": swm, "GENERIC_KEY": GENERIC_KEYS[edition]}
+            write_file(os.path.join(dd, "install.cmd"), template("install.cmd.in", sub, encoding="cp949"))
+            write_file(os.path.join(dd, "unattend.xml"), template("unattend.xml.in", sub, encoding="utf-8"))
+            write_file(os.path.join(pay, "specialize.cmd"), template("specialize.cmd"))
+            write_file(os.path.join(pay, "finish.ps1"), template("finish.ps1"))
+            if key:
+                write_file(os.path.join(pay, "productkey.txt"), key + "\r\n")
+            for f in os.listdir(HELPER_SRC):
+                if f.endswith((".ps1", ".json")):
+                    shutil.copyfile(os.path.join(HELPER_SRC, f), os.path.join(pay, "helper", f))
+            # WinPE: run our script instead of Windows Setup (winpeshl.ini), with an answer-file fallback
+            tmp = tempfile.mkdtemp(prefix="pe-", dir=RUN)
+            try:
+                files = {"winpeshl.ini": ("/Windows/System32/winpeshl.ini", template("winpeshl.ini")),
+                         "delayos-start.cmd": ("/delayos-start.cmd", template("delayos-start.cmd")),
+                         "autounattend.xml": ("/autounattend.xml", template("autounattend.xml", encoding="utf-8"))}
+                cmds = ""
+                for name, (dst, data) in files.items():
+                    write_file(os.path.join(tmp, name), data)
+                    cmds += "add '%s' '%s'\n" % (os.path.join(tmp, name), dst)
+                run(["wimlib-imagex", "update", bw, str(wim_boot_index(bw))], mutate=True, check=True, stdin=cmds, timeout=900)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            progress(p0 + span * 0.95, "자동 설치를 구성하는 중…")
+    finally:
+        isom.__exit__()
+    # the Windows partition: an empty FAT32 volume that only carries our marker, so WinPE finds exactly
+    # this volume; WinPE then formats it as NTFS itself (no NTFS tools needed on the DelayOS side)
+    run(["wipefs", "-a", win_dev], mutate=True)
+    run(["mkfs.vfat", "-F", "32", "-n", "DELAYOSWIN", win_dev], mutate=True, check=True, timeout=900)
+    with Mount(win_dev, "vfat", "rw") as wm:
+        write_file(os.path.join(wm, "DelayOS-WinTarget.tag"), nonce + "\r\n")
+
+
+def arm_esp(esp, st):
+    d = os.path.join(find_ci(esp, "EFI") or os.path.join(esp, "EFI"), "DelayOS", "winsetup")
+    if DRY:
+        log("would write markers to " + d)
+        return d
+    os.makedirs(d, exist_ok=True)
+    for f in ("done.json", "pe-done", "winpe.log", "finish.log", "failed"):
+        remove_file(os.path.join(d, f))
+    write_file(os.path.join(d, "esp.tag"), st["nonce"] + "\r\n")
+    write_file(os.path.join(d, "pending"), "1\r\n")
+    write_file(os.path.join(d, "pe-pending"), "1\r\n")
+    env = os.path.join(d, "grubenv")
+    remove_file(env)
+    run(["grub-editenv", env, "create"], mutate=True)
+    run(["grub-editenv", env, "set", "winsetup_tries=" + TRIES], mutate=True)
+    # the Windows helper installer, same place delay-winboot uses
+    hd = os.path.join(os.path.dirname(d), "winboot")
+    os.makedirs(hd, exist_ok=True)
+    for f in os.listdir(HELPER_SRC):
+        if f.endswith((".ps1", ".json")):
+            shutil.copyfile(os.path.join(HELPER_SRC, f), os.path.join(hd, f))
+        elif f.endswith(".cmd"):
+            shutil.copyfile(os.path.join(HELPER_SRC, f), os.path.join(hd, "setup.cmd"))
+    return d
+
+
+def copy_log(esp_dir):
+    if DRY or not esp_dir:
+        return
+    try:
+        shutil.copyfile(LOGS[0], os.path.join(esp_dir, "winsetup.log"))
+    except OSError:
+        pass
+
+
+def do_stage(root, st, edition, key, iso_arg, win_gb):
+    need_tools("wimlib-imagex", "mkfs.vfat", "grub-editenv", "efibootmgr")
+    disk = st["disk"]
+    stg_dev = verify_part(st.get("stage_partuuid"), STG_NAME, disk)
+    win_dev = verify_part(st.get("win_partuuid"), WIN_NAME, disk)
+    esp, esp_dev = find_esp(root)
+    if find_ci(esp, "EFI/Microsoft/Boot/bootmgfw.efi"):
+        raise Fail("has_windows")
+    fs = os.statvfs(esp)
+    if fs.f_bavail * fs.f_frsize < 80 * MIB:
+        raise Fail("esp_full")
+    conf = load_conf(root)
+    conf.update(ENABLED="1", STATE="preparing", REASON="", DISK=disk, DISK_PTUUID=st.get("disk_ptuuid", ""),
+                ROOT_PARTUUID=st.get("root_partuuid", ""), STAGE_PARTUUID=st.get("stage_partuuid", ""),
+                WIN_PARTUUID=st.get("win_partuuid", ""), ESP_PARTUUID=blkid(esp_dev, "PART_ENTRY_UUID").lower(),
+                ESP_FSUUID=blkid(esp_dev, "UUID"), NONCE=st["nonce"], EDITION=edition, WIN_GB=str(win_gb),
+                STAGE_GB=str(STAGE_GB), RECLAIM=conf.get("RECLAIM", "grow-root"), CREATED=str(int(time.time())),
+                SB=conf.get("SB", "0"), USER_KEY="1" if key else "0")
+    save_conf(conf, root)
+    iso, downloaded = obtain_iso(root, iso_arg, 0.02, 0.62)
+    try:
+        fill_staging(iso, stg_dev, win_dev, st, edition, key, 0.62, 0.93)
+    finally:
+        if downloaded and not DRY:
+            remove_file(iso)
+    progress(0.94, "부팅 항목을 준비하는 중…")
+    conf["STAGE_FSUUID"] = blkid(stg_dev, "UUID") if not DRY else ""
+    esp_dir = arm_esp(esp, st)
+    # hide the Windows partition from the DelayOS desktop (udisks: Dolphin, Files, automount)
+    rule = ("# DelayOS hidden Windows (delay-winsetup)\n"
+            'ENV{ID_PART_ENTRY_UUID}=="%s", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"\n'
+            'ENV{ID_PART_ENTRY_UUID}=="%s", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"\n'
+            % (st.get("win_partuuid", ""), st.get("stage_partuuid", "")))
+    write_file(os.path.join(root, UDEV_RULE.lstrip("/")), rule)
+    if not DRY:
+        wants = os.path.join(root, "etc/systemd/system/multi-user.target.wants")
+        os.makedirs(wants, exist_ok=True)
+        link = os.path.join(wants, "delay-winsetup-finalize.service")
+        if not os.path.lexists(link):
+            os.symlink("/etc/systemd/system/delay-winsetup-finalize.service", link)
+    # Secure Boot chain (only when this build ships the signed files)
+    if sb_available(root):
+        try:
+            if sb_setup(root, esp, disk, partnum(esp_dev)):
+                conf["SB"] = "1"
+        except Exception as e:  # noqa
+            log("sb setup failed: %s" % e)
+    conf["STATE"] = "pending"
+    save_conf(conf, root)
+    grub_mkconfig(root)
+    num = create_setup_entry(disk, st["stage_n"])
+    conf["SETUP_BOOTNUM"] = num
+    save_conf(conf, root)
+    log("stage finished: Windows setup armed (Boot%s), edition %s, Secure Boot chain %s" % (num, edition, conf["SB"]))
+    copy_log(esp_dir)
+    progress(1.0, "Windows 게임 지원 준비 완료")
+    return conf
+
+
+def grub_mkconfig(root):
+    cmd = ["grub-mkconfig", "-o", "/boot/grub/grub.cfg"]
+    if not os.path.exists(os.path.join(root, "boot/grub/grub.cfg")):
+        return
+    rc, out = run(cmd if root == "/" else ["chroot", root] + cmd, mutate=True, timeout=300)
+    if rc != 0:
+        log("grub-mkconfig failed: the firmware BootNext entry is still used for the Windows setup")
+
+
+def mark_failed(root, e):
+    try:
+        conf = load_conf(root)
+        if conf.get("ENABLED") == "1":
+            conf.update(STATE="failed", REASON=e.code if isinstance(e, Fail) else "internal")
+            save_conf(conf, root)
+    except Exception:
+        pass
+
+
+def cmd_stage(a):
+    root = os.path.realpath(a.root)
+    if root != "/":
+        LOGS.append(os.path.join(root, LOG.lstrip("/")))
+        try:        # carry the stage-1 log over into the installed system
+            os.makedirs(os.path.dirname(LOGS[1]), exist_ok=True)
+            shutil.copyfile(LOG, LOGS[1])
+        except OSError:
+            pass
+    try:
+        st = json.loads(read_text(STATE) or "{}")
+    except ValueError:
+        st = {}
+    if not st.get("disk"):
+        raise Fail("state")
+    edition = a.edition if a.edition in EDITION_IDS else "home"
+    key = ""
+    if a.key_file:
+        key = read_text(a.key_file).strip().upper()
+        if not KEY_RE.match(key):
+            log("the product key has the wrong format and is ignored")
+            key = ""
+    try:
+        conf = do_stage(root, st, edition, key, a.iso or "", st.get("win_gb", MIN_WIN_GB))
+    except Exception as e:  # noqa
+        mark_failed(root, e)
+        raise
+    print(json.dumps({"ok": True, "sb": conf.get("SB") == "1", "secure_boot": secure_boot()}, ensure_ascii=False))
+    return 0
+
+
+# ---- installed system ------------------------------------------------------------------------------
+def state_from_conf(conf):
+    disk = conf.get("DISK", "")
+    rootp = by_partuuid(conf.get("ROOT_PARTUUID", "")) or ""
+    if rootp:
+        info = next((d for d in lsblk(rootp) if d.get("path") == rootp), {})
+        disk = "/dev/" + info.get("pkname", "") if info.get("pkname") else disk
+    st = {"disk": disk, "nonce": conf.get("NONCE", ""), "root_partuuid": conf.get("ROOT_PARTUUID", ""),
+          "stage_partuuid": conf.get("STAGE_PARTUUID", ""), "win_partuuid": conf.get("WIN_PARTUUID", ""),
+          "disk_ptuuid": conf.get("DISK_PTUUID", ""), "win_gb": int(conf.get("WIN_GB") or MIN_WIN_GB)}
+    for k, pu in (("stage_n", st["stage_partuuid"]), ("win_n", st["win_partuuid"]), ("root_n", st["root_partuuid"])):
+        dev = by_partuuid(pu) if pu else None
+        st[k] = partnum(dev) if dev else 0
+    return st
+
+
+def esp_state():
+    try:
+        esp, _dev = find_esp("/")
+    except Fail:
+        return None, {}
+    d = find_ci(esp, ESP_REL)
+    if not d:
+        return None, {}
+    s = {f: os.path.exists(os.path.join(d, f)) for f in ("pending", "pe-pending", "pe-done", "done.json", "grubenv")}
+    s["tries"] = ""
+    if s["grubenv"]:
+        m = re.search(r"^winsetup_tries=(.*)$", read_text(os.path.join(d, "grubenv")), re.M)
+        s["tries"] = m.group(1) if m else ""
+    s["done"] = {}
+    if s["done.json"]:
+        try:
+            with open(os.path.join(d, "done.json"), encoding="utf-8-sig") as f:
+                s["done"] = json.load(f)
+        except Exception:
+            pass
+    s["winpe_log"] = read_text(os.path.join(d, "winpe.log"))[-4000:]
+    return d, s
+
+
+def grow_root(conf, st):
+    """Give the space of the removed partition(s) back to the DelayOS root (online, grow only)."""
+    disk, n = st["disk"], st["root_n"]
+    rootp = by_partuuid(conf.get("ROOT_PARTUUID", ""))
+    rc, out = run(["findmnt", "-no", "SOURCE,FSTYPE", "/"], quiet=True)
+    f = out.split()
+    if not rootp or not n or len(f) < 2 or os.path.realpath(re.sub(r"\[.*\]$", "", f[0])) != rootp:
+        log("grow: root is not the plain partition from the installation, leaving the space unallocated")
+        return False
+    rc, _ = run(["sfdisk", "--no-reread", "--force", "-N", str(n), disk], mutate=True, stdin=", +\n")
+    if rc != 0:
+        return False
+    run(["partx", "-u", "--nr", str(n), disk], mutate=True)
+    settle()
+    cmd = {"btrfs": ["btrfs", "filesystem", "resize", "max", "/"], "ext4": ["resize2fs", rootp], "xfs": ["xfs_growfs", "/"]}.get(f[1])
+    if cmd:
+        run(cmd, mutate=True)
+    return True
+
+
+def delete_part(disk, pu, name):
+    dev = verify_part(pu, name, disk)
+    n = partnum(dev)
+    rc, out = run(["findmnt", "-rno", "TARGET", "-S", dev], quiet=True)
+    for mp in out.split():
+        run(["umount", mp], mutate=True)
+    run(["wipefs", "-a", dev], mutate=True)
+    run(["sgdisk", "-d", str(n), disk], mutate=True, check=True)
+    run(["partx", "-d", "--nr", str(n), disk], mutate=True)
+    settle()
+
+
+def hide_from_loaders():
+    for lc in ("/boot/efi/loader/loader.conf", "/efi/loader/loader.conf", "/boot/loader/loader.conf"):
+        t = read_text(lc)
+        if t and not re.search(r"^auto-entries", t, re.M):
+            write_file(lc, t.rstrip("\n") + "\nauto-entries no\n")
+    g = read_text("/etc/default/grub")
+    if g and not re.search(r"^GRUB_DISABLE_OS_PROBER=true", g, re.M):
+        g = re.sub(r"^#?GRUB_DISABLE_OS_PROBER=.*\n", "", g, flags=re.M).rstrip("\n") + "\nGRUB_DISABLE_OS_PROBER=true\n"
+        write_file("/etc/default/grub", g)
+
+
+def cmd_finalize(a):
+    conf = load_conf()
+    if conf.get("ENABLED") != "1" or conf.get("STATE") not in ("pending", "preparing"):
+        return 0
+    if conf.get("STATE") == "preparing":
+        conf.update(STATE="failed", REASON="download")
+        save_conf(conf)
+        return 0
+    d, s = esp_state()
+    if d is None:
+        log("finalize: ESP state not readable")
+        return 0
+    st = state_from_conf(conf)
+    order, nxt, entries = efi_entries()
+    me = delayos_entry(entries)
+    if s["done.json"] and not s["pending"]:
+        log("finalize: Windows reports success: %s" % json.dumps(s["done"], ensure_ascii=False))
+        for f in ("finish.log", "winpe.log"):
+            src = os.path.join(d, f)
+            if os.path.exists(src) and not DRY:
+                with open(LOG, "a", encoding="utf-8") as out:
+                    out.write("---- %s (from Windows) ----\n%s\n" % (f, read_text(src)[-20000:]))
+        remove_setup_entries()
+        if me:
+            set_order_first([me["num"]])
+        try:
+            delete_part(st["disk"], conf.get("STAGE_PARTUUID", ""), STG_NAME)
+            conf["STAGE_PARTUUID"] = ""
+            if conf.get("RECLAIM", "grow-root") == "grow-root":
+                grow_root(conf, st)
+        except Fail as e:
+            log("finalize: staging partition not removed: %s %s" % (e.code, e.detail))
+        for f in ("grubenv", "pe-done", "esp.tag", "pe-pending"):
+            remove_file(os.path.join(d, f))
+        hide_from_loaders()
+        conf.update(STATE="done", REASON="", ACTIVATED="1" if s["done"].get("activated") else "0",
+                    HVCI="1" if s["done"].get("hvci") else "0", FINISHED=str(int(time.time())))
+        save_conf(conf)
+        grub_mkconfig("/")
+        copy_log(d)
+        return 0
+    # not finished: still on its way (tries left), or failed
+    if s["pending"] and s["tries"] and not ("FAIL" in s["winpe_log"]):
+        age = time.time() - int(conf.get("CREATED") or 0)
+        if s["pe-pending"] and age < 86400:
+            log("finalize: Windows setup has not started yet; it starts at the next restart")
+            if nxt == "" and conf.get("SETUP_BOOTNUM"):
+                run(["efibootmgr", "-q", "-n", conf["SETUP_BOOTNUM"]], mutate=True)
+            return 0
+        if not s["pe-pending"] and age < 86400:
+            log("finalize: Windows is still being set up; it continues at the next restart")
+            return 0
+    reason = "winpe" if "FAIL" in s["winpe_log"] else ("windows" if s["pe-done"] else "not-started")
+    log("finalize: Windows setup did not finish (reason %s, tries left '%s')\n%s" % (reason, s["tries"], s["winpe_log"][-1500:]))
+    remove_file(os.path.join(d, "pending"))        # GRUB stops starting Windows on its own
+    if me:
+        set_order_first([me["num"]])
+    conf.update(STATE="failed", REASON=reason)
+    save_conf(conf)
+    grub_mkconfig("/")
+    copy_log(d)
+    return 0
+
+
+def cmd_retry(a):
+    conf = load_conf()
+    if conf.get("ENABLED") != "1" or conf.get("STATE") not in ("failed", "pending", "preparing"):
+        raise Fail("not_pending")
+    st = state_from_conf(conf)
+    key = ""
+    if a.key_file:
+        key = read_text(a.key_file).strip().upper()
+    os.makedirs(RUN, 0o755, exist_ok=True)
+    try:
+        do_stage("/", st, a.edition or conf.get("EDITION", "home"), key if KEY_RE.match(key) else "", a.iso or "", st["win_gb"])
+    except Exception as e:  # noqa
+        mark_failed("/", e)
+        raise
+    print("준비가 끝났습니다. 컴퓨터를 다시 시작하면 Windows 게임 지원 설치가 자동으로 진행됩니다 (약 20~40분).")
+    return 0
+
+
+def cmd_remove(a):
+    conf = load_conf()
+    if conf.get("ENABLED") != "1":
+        raise Fail("not_pending")
+    st = state_from_conf(conf)
+    d, s = esp_state()
+    remove_setup_entries()
+    esp, _dev = find_esp("/")
+    ms = find_ci(esp, "EFI/Microsoft")
+    for e in efi_entries()[2]:
+        if "bootmgfw" in e["path"].lower() and conf.get("ESP_PARTUUID") and conf["ESP_PARTUUID"] in e["path"].lower():
+            run(["efibootmgr", "-q", "-b", e["num"], "-B"], mutate=True)
+    if ms and not DRY:
+        shutil.rmtree(ms, ignore_errors=True)       # only ever created by this Windows installation
+    elif ms:
+        log("would remove " + ms)
+    for pu, name, k in ((conf.get("STAGE_PARTUUID"), STG_NAME, "STAGE_PARTUUID"), (conf.get("WIN_PARTUUID"), WIN_NAME, "WIN_PARTUUID")):
+        if pu:
+            try:
+                delete_part(st["disk"], pu, name)
+                conf[k] = ""
+            except Fail as e:
+                log("remove: %s: %s %s" % (name, e.code, e.detail))
+    if conf.get("RECLAIM", "grow-root") == "grow-root":
+        grow_root(conf, st)
+    if d and not DRY:
+        shutil.rmtree(d, ignore_errors=True)
+    remove_file(UDEV_RULE)
+    conf.update(STATE="removed", ENABLED="0")
+    save_conf(conf)
+    grub_mkconfig("/")
+    print("Windows 게임 지원을 제거했습니다. 사용하던 공간은 DelayOS로 돌아갑니다.")
+    return 0
+
+
+def status():
+    conf = load_conf()
+    st = {"enabled": conf.get("ENABLED") == "1", "state": conf.get("STATE", "none"), "reason": conf.get("REASON", ""),
+          "edition": conf.get("EDITION", ""), "win_gb": conf.get("WIN_GB", ""), "secure_boot": secure_boot(),
+          "sb_chain": conf.get("SB") == "1", "sb_build": sb_available(), "activated": conf.get("ACTIVATED", ""),
+          "hvci": conf.get("HVCI", ""), "tpm": tpm_facts(), "log": LOG}
+    text = {"none": "설치되지 않음", "preparing": "준비 중 중단됨", "pending": "다시 시작하면 Windows 설치가 진행됩니다",
+            "done": "사용 가능", "failed": "설치 실패 (다시 시도하거나 제거할 수 있습니다)", "removed": "제거됨"}
+    st["summary"] = text.get(st["state"], st["state"])
+    return st
+
+
+def cmd_status(a):
+    st = status()
+    if a.json:
+        print(json.dumps(st, ensure_ascii=False, indent=1))
+    else:
+        print("Windows 게임 지원: %s" % st["summary"])
+        if st["state"] == "done":
+            print("  Windows 정품 인증: %s" % ("완료" if st["activated"] == "1" else "안 됨 (인터넷 연결 후 자동 인증되거나, Windows 설정에서 제품 키를 입력하세요)"))
+        if st["secure_boot"] is False:
+            print("  Secure Boot가 꺼져 있습니다. 발로란트(Vanguard)는 Windows 11에서 Secure Boot가 켜져 있어야 실행됩니다.")
+    return 0
+
+
+def cmd_session_notify(a):
+    """Login hook (user): one notification per failed attempt."""
+    st = status()
+    if st["state"] != "failed":
+        return 0
+    mark = os.path.expanduser("~/.cache/delayos-winsetup-notified")
+    stamp = load_conf().get("CREATED", "")
+    if read_text(mark).strip() == stamp:
+        return 0
+    try:
+        os.makedirs(os.path.dirname(mark), exist_ok=True)
+        with open(mark, "w") as f:
+            f.write(stamp)
+    except OSError:
+        pass
+    body = ("Windows 게임 지원 설치가 끝나지 않았습니다. DelayOS는 정상입니다.\n"
+            "다시 시도: 터미널에서 sudo delay-winsetup retry\n제거(공간 되돌리기): sudo delay-winsetup remove\n"
+            "기록: /var/log/delayos-winsetup.log")
+    if have("kdialog"):
+        subprocess.Popen(["kdialog", "--title", "Windows 게임 지원", "--sorry", body])
+    elif have("notify-send"):
+        subprocess.Popen(["notify-send", "-a", "DelayOS", "-u", "critical", "Windows 게임 지원", body])
+    return 0
+
+
+def main(argv):
+    global DRY
+    ap = argparse.ArgumentParser(prog="delay-winsetup")
+    ap.add_argument("--dry-run", action="store_true", help="log what would be done, change nothing")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("probe"); p.add_argument("--write", action="store_true"); p.set_defaults(fn=cmd_probe, need_root=False)
+    p = sub.add_parser("parts"); p.add_argument("--root-dev", required=True); p.add_argument("--win-gb", type=int, default=100); p.set_defaults(fn=cmd_parts, need_root=True)
+    p = sub.add_parser("stage"); p.add_argument("--root", required=True); p.add_argument("--iso"); p.add_argument("--edition", default="home"); p.add_argument("--key-file"); p.set_defaults(fn=cmd_stage, need_root=True)
+    p = sub.add_parser("finalize"); p.set_defaults(fn=cmd_finalize, need_root=True)
+    p = sub.add_parser("retry"); p.add_argument("--iso"); p.add_argument("--edition"); p.add_argument("--key-file"); p.set_defaults(fn=cmd_retry, need_root=True)
+    p = sub.add_parser("remove"); p.set_defaults(fn=cmd_remove, need_root=True)
+    p = sub.add_parser("status"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_status, need_root=False)
+    p = sub.add_parser("session-notify"); p.set_defaults(fn=cmd_session_notify, need_root=False)
+    p = sub.add_parser("sb-setup"); p.set_defaults(fn=cmd_sb_setup, need_root=True)
+    p = sub.add_parser("sb-kernel"); p.set_defaults(fn=cmd_sb_kernel, need_root=True)
+    p = sub.add_parser("iso-url"); p.add_argument("--language", default="Korean"); p.set_defaults(fn=cmd_iso_url, need_root=False)
+    a = ap.parse_args(argv)
+    DRY = a.dry_run
+    if a.need_root and os.geteuid() != 0:
+        print(json.dumps({"ok": False, "code": "root", "error": "root 권한이 필요합니다 (sudo delay-winsetup …)."}, ensure_ascii=False))
+        return 1
+    if not a.need_root:
+        LOGS.clear()
+    try:
+        if a.need_root:
+            log("---- %s %s" % (a.cmd, " ".join(x for x in argv if x != a.cmd)))
+        return a.fn(a)
+    except Fail as e:
+        log("FAILED %s: %s %s" % (a.cmd, e.code, e.detail))
+        print(json.dumps({"ok": False, "code": e.code, "error": e.message, "detail": e.detail}, ensure_ascii=False))
+        return 1
+    except Exception as e:  # noqa
+        log("FAILED %s: %s: %s" % (a.cmd, type(e).__name__, e))
+        print(json.dumps({"ok": False, "code": "internal", "error": MSG["internal"], "detail": "%s: %s" % (type(e).__name__, e)}, ensure_ascii=False))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -23,6 +23,8 @@ Rectangle {
         else
             r.push("권장 DelayOS, 바로 사용 가능: 일상 앱과 DelayOS Store가 포함됩니다.")
         r.push("Windows 및 Android 앱 지원은 처음 로그인할 때 추가할 수 있습니다.")
+        if (gs("delayos_win_enable", false) === true)
+            r.push("Windows 게임 지원: 보이지 않는 파티션(" + gs("delayos_win_size_gb", 100) + "GB)에 Windows 11 " + (gs("delayos_win_edition", "home") === "pro" ? "Pro" : "Home") + "을 설치합니다. Windows 설치 파일을 Microsoft에서 내려받으므로 시간이 더 걸리고, DelayOS 설치가 끝난 뒤 다시 시작하면 자동으로 진행됩니다(약 20~40분).")
         var user = gs("username", "")
         if (user !== "")
             r.push("\"" + user + "\" 계정이 만들어집니다.")

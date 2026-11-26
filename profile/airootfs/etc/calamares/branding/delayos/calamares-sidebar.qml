@@ -13,9 +13,9 @@ Rectangle {
     height: 56
 
     // settings.conf show order: 0 welcomeq, 1 partition, 2 users, 3 locale, 4 keyboard,
-    // 5 notesqml@software, 6 summaryq, 7 (exec), 8 finishedq
+    // 5 notesqml (software), 6 notesqml@wingames, 7 summaryq, 8 (exec), 9 finishedq
     readonly property var labels: ["네트워크", "드라이브", "사용자", "지역", "소프트웨어", "설치"]
-    readonly property var stepOf: [-1, 1, 2, 3, 3, 4, 5, -1, -1]
+    readonly property var stepOf: [-1, 1, 2, 3, 3, 4, 4, 5, -1, -1]
     readonly property int cur: ViewManager.currentStepIndex
     readonly property int curStep: (cur >= 0 && cur < stepOf.length) ? stepOf[cur] : -1
     // The spec shows the stepper only on the Drive … Ready pages.
