@@ -119,11 +119,11 @@ def _index_app(pkg, build=False):
         return None
 
 
-def _cand(c, inst, build=False):
+def _cand(c, inst, build=False, default=""):
     """One install candidate of the table -> what the UI needs."""
     src, pkg = c["source"], c["pkg"]
     a = _index_app(pkg, build) if src != "aur" else None
-    r = {"id": pkg, "source": src, "pkg": pkg, "name": c.get("name") or (a["name"] if a else pkg),
+    r = {"id": pkg, "source": src, "pkg": pkg, "name": c.get("name") or (a["name"] if a else (default or pkg)),
          "icon": (a["icon"] if a else "") or (pkg if src == "flathub" else ""),
          "summary": a["summary"] if a else ""}
     if src == "flathub":
@@ -138,7 +138,7 @@ def resolve(e, inst=None, build=False):
     inst = inst or _installed()
     r = {"name": e["name"], "cat": e.get("cat", ""), "note": e.get("note", ""), "win": e.get("win", ""),
          "web": e.get("web", ""), "link": e.get("link", ""), "builtin": e.get("builtin"),
-         "linux": [_cand(c, inst, build) for c in e.get("linux", [])],
+         "linux": [_cand(c, inst, build, e["name"]) for c in e.get("linux", [])],
          "alt": [_cand(c, inst, build) for c in e.get("alt", [])]}
     # an installed candidate goes first (e.g. Chrome is preinstalled from the DelayOS repo)
     r["linux"].sort(key=lambda c: not c["installed"])
@@ -272,8 +272,18 @@ def _pick_app(paths):
     return best
 
 
+def _top_apps(paths):
+    """Names of the app bundles that are not nested inside another bundle."""
+    res = set()
+    for p in paths:
+        m = _APP_PLIST.search(p)
+        if m and ".app/" not in p[:m.start(2)]:
+            res.add(m.group(2))
+    return sorted(res)
+
+
 def _7z_list(archive, timeout=120):
-    rc, o = sh(["7z", "l", "-slt", "-ba", "-sccUTF-8", archive], timeout)
+    rc, o = sh(["7z", "l", "-slt", "-ba", "-sns-", "-sccUTF-8", archive], timeout)
     paths, sizes, cur = [], {}, None
     for line in o.splitlines():
         if line.startswith("Path = "):
@@ -291,7 +301,7 @@ def _7z_read(archive, member, limit=8 * 1024 * 1024):
     """Bytes of one member (to stdout; nothing is written to disk)."""
     import subprocess
     try:
-        p = subprocess.run(["7z", "x", "-so", "-y", archive, member], stdout=subprocess.PIPE,
+        p = subprocess.run(["7z", "x", "-so", "-y", "-sns-", archive, member], stdout=subprocess.PIPE,
                            stderr=subprocess.DEVNULL, timeout=120)
         return p.stdout[:limit] if p.returncode == 0 or p.stdout else b""
     except Exception:
@@ -310,19 +320,19 @@ def _from_archive_7z(archive, info, icon_dest):
         # pull the one volume out to the cache and look inside (only when it is reasonably small)
         vols = [p for p in paths if p.lower().endswith((".hfs", ".hfsx", ".apfs"))]
         vols.sort(key=lambda p: -sizes.get(p, 0))
-        if vols and sizes.get(vols[0], 0) < 3 * 1024 ** 3:
+        if vols and sizes.get(vols[0], 0) < 4 * 1024 ** 3:
             free = shutil.disk_usage(os.path.expanduser("~")).free
             if sizes.get(vols[0], 0) * 1.2 < free:
                 os.makedirs(CACHE, exist_ok=True)
                 tmp = tempfile.mkdtemp(prefix="vol-", dir=CACHE)
-                sh(["7z", "x", "-y", "-o" + tmp, archive, vols[0]], 600)
+                sh(["7z", "x", "-y", "-sns-", "-o" + tmp, archive, vols[0]], 600)
                 inner = os.path.join(tmp, vols[0])
                 if os.path.exists(inner):
                     archive = inner
                     rc, paths, sizes = _7z_list(archive)
                     plist = _pick_app(paths)
     try:
-        apps = sorted({m.group(2) for m in (_APP_PLIST.search(p) for p in paths) if m and ".app/" not in p[:m.start(2)]})
+        apps = _top_apps(paths)
         info["apps"] = apps
         info["readOk"] = True
         if plist:
@@ -398,7 +408,7 @@ def _from_zip(path, info, icon_dest):
         if not plist:
             return
         info["readOk"] = True
-        info["apps"] = sorted({m.group(2) for m in (_APP_PLIST.search(p) for p in names) if m and ".app/" not in p[:m.start(2)]})
+        info["apps"] = _top_apps(names)
         pi = _plist_info(z.read(plist))
         _apply_plist(info, pi, os.path.basename(plist[:-len("/Contents/Info.plist")]))
         base = plist[:-len("Info.plist")] + "Resources/"
@@ -489,8 +499,10 @@ def kind_of(path):
             head = f.read(8)
     except OSError:
         return "unknown"
-    if head[:4] in MACHO_MAGIC and not low.endswith(".class"):
-        return "macho"
+    if head[:4] in MACHO_MAGIC:
+        # a fat binary shares its magic with Java class files: there bytes 4-7 are the class version (>= 45)
+        if head[:4] not in MACHO_MAGIC[4:] or int.from_bytes(head[4:8], "big") < 30:
+            return "macho"
     if head[:4] == b"xar!":
         return "pkg"
     if low.endswith(".zip") and head[:2] == b"PK":

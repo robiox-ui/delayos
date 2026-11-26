@@ -15,11 +15,11 @@ Item {
     signal edited()
 
     function focusEditor() { area.forceActiveFocus() }
+    // asked on every cursor move: the backend looks the block up in the QTextDocument (O(log n)); the old
+    // JS version copied the whole text out of the document and split it, tens of ms per key in a large file
     function lineCol() {
-        const before = area.text.substring(0, area.cursorPosition)
-        const ln = before.split("\n").length
-        const col = area.cursorPosition - before.lastIndexOf("\n")
-        return { line: ln, col: col }
+        const r = backend.lineCol(area.textDocument, area.cursorPosition)
+        return { line: r[0], col: r[1] }
     }
 
     Flickable {
@@ -47,7 +47,7 @@ Item {
                 required property int index
                 readonly property rect a: area.positionToRectangle(modelData.s)
                 readonly property rect b: area.positionToRectangle(modelData.e)
-                visible: index !== root.currentMatch && Math.abs(a.y - b.y) < 2 && area.text.length >= 0
+                visible: index !== root.currentMatch && Math.abs(a.y - b.y) < 2 && area.length >= 0
                 x: area.x + a.x
                 y: area.y + a.y
                 width: Math.max(2, b.x - a.x)

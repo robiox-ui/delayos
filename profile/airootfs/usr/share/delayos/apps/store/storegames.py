@@ -26,9 +26,9 @@ DATA = "/usr/share/delayos/store/games.json"
 DATA_D = "/etc/delayos/store/games.d"
 WINBOOT = "/usr/share/delayos/winboot"
 STEAM_FLATPAK = "com.valvesoftware.Steam"
-LAUNCHERS = {  # how.type -> (flatpak ref, name)
-    "lutris": ("net.lutris.Lutris", "Lutris"),
-    "heroic": ("com.heroicgameslauncher.hgl", "Heroic"),
+LAUNCHERS = {  # how.type -> (flatpak ref, name, native binary)
+    "lutris": ("net.lutris.Lutris", "Lutris", "lutris"),
+    "heroic": ("com.heroicgameslauncher.hgl", "Heroic", "heroic"),
 }
 PLATFORMS = ("native", "windows", "unsupported")
 BADGES = {"native": "DelayOS에서 바로", "windows": "Windows로 전환", "unsupported": "지원 안 됨"}
@@ -240,9 +240,10 @@ def _act(g, st):
         return False, {"kind": "flatpak", "label": "설치", "icon": "download",
                        "app": {"id": ref, "name": g["nameKo"], "source": "flathub", "pkg": ref}}
     if t in LAUNCHERS:
-        ref, lname = LAUNCHERS[t]
-        if _flatpak_installed(ref):
-            return False, {"kind": "run", "label": lname + " 열기", "icon": "window-new", "argv": ["flatpak", "run", ref],
+        ref, lname, binary = LAUNCHERS[t]
+        argv = [binary] if shutil.which(binary) else (["flatpak", "run", ref] if _flatpak_installed(ref) else None)
+        if argv:
+            return False, {"kind": "run", "label": lname + " 열기", "icon": "window-new", "argv": argv,
                            "toast": lname + "에서 " + (h.get("service") or "게임") + "에 로그인해 설치하세요"}
         return False, {"kind": "flatpak", "label": lname + " 설치", "icon": "download",
                        "app": {"id": ref, "name": lname, "source": "flathub", "pkg": ref}}
@@ -304,11 +305,9 @@ def search(q, limit=24):
         flat = [n.replace(" ", "") for n in names]
         if q in names or qn in flat:
             s = 0
-        elif any(n.startswith(q) for n in names) or any(n.startswith(qn) for n in flat):
+        elif any(n.startswith(q) for n in names) or any(n.startswith(qn) for n in flat) or q in g["kw"].split():
             s = 1
         elif any(q in n for n in names) or any(qn in n for n in flat):
-            s = 2
-        elif q in g["kw"].split() or qn in g["kw"].split():
             s = 2
         elif q in g["kw"] or q in g["id"]:
             s = 3

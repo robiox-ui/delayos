@@ -25,6 +25,8 @@ T.Dialog {
     modal: true
     focus: true
     width: Math.min(dialogWidth, parent ? parent.width - 32 : dialogWidth)
+    // T.Dialog has no implicit size of its own: without this the card is 0 px tall and only the text shows
+    implicitHeight: implicitContentHeight + topPadding + bottomPadding
     padding: 22
     topPadding: 20
     closePolicy: T.Popup.CloseOnEscape

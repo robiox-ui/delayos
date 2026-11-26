@@ -56,12 +56,10 @@ def have(binary):
 
 
 def kread(file, group, key, default=""):
-    """Read a KConfig value. group may be a list for nested groups."""
-    args = ["kreadconfig6", "--file", file]
-    for g in (group if isinstance(group, list) else [group]):
-        args += ["--group", g]
-    args += ["--key", key, "--default", str(default)]
-    return out(args)
+    """Read a KConfig value. group may be a list for nested groups.
+    Parsed in-process (kcfg follows KConfig's cascade, like kreadconfig6): a Settings page reads up to a
+    dozen keys when it opens, and one kreadconfig6 process per key was a spawn each, some on the GUI thread."""
+    return kcfg.read(file, group, key, str(default)).strip()
 
 
 def kwrite(file, group, key, value, typ=None):

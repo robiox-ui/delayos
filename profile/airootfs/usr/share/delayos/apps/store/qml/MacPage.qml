@@ -150,7 +150,7 @@ Flickable {
                                 SButton { visible: !!row.a.win && (!!row.p || row.a.verdict !== "win"); implicitHeight: 30; radius: 8; icon: "download"; text: "Windows 버전 내려받기"; onClicked: sys.openUrl(row.a.win) }
                                 SButton { visible: !!row.a.web && (!!row.p || row.a.verdict !== "web"); implicitHeight: 30; radius: 8; icon: "g:web"; text: "웹 버전 열기"; onClicked: sys.openUrl(row.a.web) }
                                 SButton { visible: !!row.p && row.a.verdict === "builtin" && !!row.a.builtin.label; implicitHeight: 30; radius: 8; text: visible ? row.a.builtin.label : ""; onClicked: sys.detach(row.a.builtin.argv) } }
-                            SText { width: parent.width; visible: !!row.a.win; role: "muted"; font.pixelSize: 11.5; wrapMode: Text.Wrap; elide: Text.ElideNone
+                            SText { width: parent.width; visible: !!row.a.win; role: "muted"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
                                 text: "Windows용 설치 파일(.exe)을 내려받아 두 번 클릭하면 Windows 앱 엔진에서 실행됩니다. 모든 프로그램이 동작하는 것은 아닙니다." }
                         }
                     }
@@ -160,7 +160,7 @@ Flickable {
         SText { visible: !!page.d && page.filter.trim() !== "" && page.d.cats.every(function(c) { return c.apps.filter(page.match).length === 0 })
             width: parent.width; role: "sub"; font.pixelSize: 13; wrapMode: Text.Wrap; elide: Text.ElideNone
             text: "목록에 없는 앱입니다. 위의 검색창에서 같은 이름으로 Store 전체를 검색해 보세요. Linux 버전이 있는 앱이 많습니다." }
-        SText { visible: !!page.d; width: parent.width; role: "muted"; font.pixelSize: 11.5; wrapMode: Text.Wrap; elide: Text.ElideNone; topPadding: 8
+        SText { visible: !!page.d; width: parent.width; role: "muted"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone; topPadding: 8
             text: "앱 " + (page.d ? page.d.count : 0) + "개 · macOS 자체를 가상 머신으로 실행하는 기능은 Apple 사용권 계약상 Apple 하드웨어에서만 허용되므로 DelayOS는 제공하지 않습니다. 명령줄 Mac 프로그램은 실험적인 Darling(AUR darling-bin)으로 시도할 수 있습니다." }
     }
 }

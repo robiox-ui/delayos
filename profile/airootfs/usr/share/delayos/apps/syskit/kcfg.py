@@ -17,6 +17,22 @@ def _files(name):
     return out
 
 
+_ESC = {"s": " ", "t": "\t", "n": "\n", "r": "\r", "\\": "\\"}
+
+
+def _unescape(v):
+    """KConfig's value escapes (\\s \\t \\n \\r \\\\), decoded the way kreadconfig6 prints them."""
+    out, i, n = [], 0, len(v)
+    while i < n:
+        if v[i] == "\\" and i + 1 < n and v[i + 1] in _ESC:
+            out.append(_ESC[v[i + 1]])
+            i += 2
+        else:
+            out.append(v[i])
+            i += 1
+    return "".join(out)
+
+
 def read(name, group, key, default=""):
     """group: "General" or ["A", "B"] for the nested group [A][B]."""
     header = "".join("[%s]" % g for g in (group if isinstance(group, (list, tuple)) else [group]))
@@ -34,7 +50,8 @@ def read(name, group, key, default=""):
                         if k.endswith("]") and "[$" in k:      # key[$i] / key[$e] markers
                             k = k[:k.index("[$")]
                         if k == key:
-                            return v.strip()
+                            v = v.strip()
+                            return _unescape(v) if "\\" in v else v
         except OSError:
             continue
     return default

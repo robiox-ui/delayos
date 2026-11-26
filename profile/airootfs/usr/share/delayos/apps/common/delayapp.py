@@ -30,7 +30,7 @@ def software_render():
 if software_render():
     # Qt Quick's CPU scene graph instead of OpenGL on llvmpipe: it repaints only what changed. Measured on
     # 파일 탐색기 in a VM without 3D: scrolling 33 % -> 17 % of a core, pointer hover 26 % -> 4 %, 137 MB less
-    # memory, first frame 218 -> 182 ms (docs/reports/smooth-nogpu.md). No DelayOS app uses shaders or layers.
+    # memory, first frame 218 -> 182 ms. No DelayOS app uses shaders or layers.
     os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QObject, Signal, Slot, Property, QFileSystemWatcher, QTimer, QUrl, Qt  # noqa: E402

@@ -44,7 +44,7 @@ Item {
             }
 
             // ---- 고정됨 ----
-            TSectionHeader { visible: sb.pins.length > 0 || drop.containsDrag; text: "고정됨"; small: true; x: 8; width: parent.width - 8 }
+            TSectionHeader { visible: sb.pins.length > 0; text: "고정됨"; small: true; x: 8; width: parent.width - 8 }
             Repeater {
                 model: sb.pins
                 delegate: TNavItem {
@@ -58,23 +58,6 @@ Item {
                     DropTarget { anchors.fill: parent; ctl: sb.ctl; target: modelData.path; springLoaded: sb.current !== modelData.path; onSprung: sb.navigate(modelData.path) }
                 }
             }
-            Rectangle {
-                id: dropBox
-                visible: drop.containsDrag
-                width: parent.width; height: 40; radius: 6
-                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.10)
-                border.width: 0
-                Canvas {      // dashed accent border
-                    anchors.fill: parent
-                    onPaint: {
-                        const c = getContext("2d"); c.reset()
-                        c.strokeStyle = Theme.accent; c.lineWidth = 1.2; c.setLineDash([4, 3])
-                        c.beginPath(); c.roundedRect(0.5, 0.5, width - 1, height - 1, 6, 6); c.stroke()
-                    }
-                }
-                Text { anchors.centerIn: parent; text: "폴더를 여기에 놓아 고정하세요"; font.family: Theme.font; font.pixelSize: 12; color: Theme.accentText }
-            }
-
             // ---- 즐겨찾기 ----
             TSectionHeader { text: "즐겨찾기"; small: true; x: 8; width: parent.width - 8 }
             Repeater {
@@ -99,6 +82,7 @@ Item {
                 height: 50
                 hoverEnabled: true
                 onClicked: sb.navigate("/")
+                DropTarget { anchors.fill: parent; ctl: sb.ctl; target: "/"; springLoaded: sb.current !== "/"; onSprung: sb.navigate("/") }
                 background: Rectangle { radius: 6; color: sb.current === "/" ? Theme.accentSoft : pc.hovered ? Theme.hover : "transparent" }
                 contentItem: Item {
                     TIcon { x: 2; y: 8; name: "drive"; size: 16; color: Theme.text2 }
@@ -136,5 +120,24 @@ Item {
                 DropTarget { anchors.fill: parent; ctl: sb.ctl; target: trashUrl }
             }
         }
+    }
+
+    Rectangle {      // pin hint while a drag is over empty sidebar space; fixed at the bottom so no item moves under the pointer
+        id: dropBox
+        visible: drop.containsDrag
+        x: 8
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 8
+        width: parent.width - 16; height: 40; radius: 6
+        color: Theme.dark ? "#1B2340" : "#E9EDFF"
+        Canvas {      // dashed accent border
+            anchors.fill: parent
+            onPaint: {
+                const c = getContext("2d"); c.reset()
+                c.strokeStyle = Theme.accent; c.lineWidth = 1.2; c.setLineDash([4, 3])
+                c.beginPath(); c.roundedRect(0.5, 0.5, width - 1, height - 1, 6, 6); c.stroke()
+            }
+        }
+        Text { anchors.centerIn: parent; text: "폴더를 여기에 놓아 고정하세요"; font.family: Theme.font; font.pixelSize: 12; color: Theme.accentText }
     }
 }

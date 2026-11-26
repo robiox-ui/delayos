@@ -10,4 +10,20 @@
     <glob pattern="*.pkg" weight="60"/>
     <glob pattern="*.mpkg" weight="60"/>
   </mime-type>
+  <!-- macOS executable (Mach-O). Fat binaries share 0xCAFEBABE with Java classes, so only 2..4 architectures match. -->
+  <mime-type type="application/x-mach-binary">
+    <comment>macOS program</comment>
+    <comment xml:lang="ko">macOS 프로그램</comment>
+    <magic priority="60">
+      <match type="big32" value="0xfeedface" offset="0"/>
+      <match type="big32" value="0xfeedfacf" offset="0"/>
+      <match type="big32" value="0xcefaedfe" offset="0"/>
+      <match type="big32" value="0xcffaedfe" offset="0"/>
+      <match type="big32" value="0xcafebabe" offset="0">
+        <match type="big32" value="2" offset="4"/>
+        <match type="big32" value="3" offset="4"/>
+        <match type="big32" value="4" offset="4"/>
+      </match>
+    </magic>
+  </mime-type>
 </mime-info>

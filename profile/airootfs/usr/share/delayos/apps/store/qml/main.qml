@@ -15,12 +15,13 @@ Window {
     title: "DelayOS Store"
     color: Theme.windowBg
 
-    property string view: "home"         // home | browse | installed | wingames | macapps | search | app
+    property string view: "home"         // home | browse | games | installed | wingames | macapps | search | app
     property string prevView: "home"
     property string category: "popular"
     property string query: ""
     property string appId: ""
     property var homeData: null
+    property string gameId: ""          // 게임 page: game whose detail panel is open (GamesPage.qml)
     property var winData: null           // storeback.wingames(): Windows games page (only with a Windows install + helper)
     readonly property bool hasWin: !!winData && winData.available === true
     function loadWin() { call("storeback.wingames", [], function(r) { if (r && r.games) win.winData = r }) }
@@ -39,6 +40,7 @@ Window {
         if (!a || !a.length) return
         if (a[0] === "--installed" || a[0] === "--updates") view = "installed"
         else if (a[0] === "--windows") view = "wingames"
+        else if (a[0] === "--games") { gameId = a.length > 1 ? a[1] : ""; view = "games" }
         else if (a[0] === "--mac") view = "macapps"
         else if (a[0] === "--search" && a.length > 1) search.text = a[1]
         else if (a[0].indexOf("-") !== 0) { appId = a[0].replace(/^appstream:\/*/, "").replace(/\.desktop$/, ""); view = "app" }
@@ -126,7 +128,7 @@ Window {
         Column {
             x: 14; y: 76; spacing: 6
             Repeater {
-                model: [{ id: "home", label: "홈", icon: "go-home" }, { id: "browse", label: "둘러보기", icon: "view-app-grid-symbolic" }, { id: "installed", label: "설치됨", icon: "view-list-details" }]
+                model: [{ id: "home", label: "홈", icon: "go-home" }, { id: "browse", label: "둘러보기", icon: "view-app-grid-symbolic" }, { id: "games", label: "게임", icon: "g:gamepad" }, { id: "installed", label: "설치됨", icon: "view-list-details" }]
                        .concat(win.hasWin ? [{ id: "wingames", label: "Windows 게임", icon: "g:gamepad" }] : [])
                        .concat([{ id: "macapps", label: "Mac 앱", icon: "g:mac" }])
                 Rectangle {
@@ -164,7 +166,7 @@ Window {
             y: 14
             width: parent.width; implicitHeight: 36
             radius: 8
-            placeholder: "앱 검색"
+            placeholder: "앱 및 게임 검색"
             fontSize: 13
             border.color: text.length > 0 || input.activeFocus ? Theme.accent : Theme.fieldBorder
             onTextChanged: searchTimer.restart()
@@ -175,6 +177,7 @@ Window {
             anchors.fill: parent
             anchors.topMargin: 62
             sourceComponent: win.view === "home" ? homePage : win.view === "browse" ? browsePage : win.view === "installed" ? installedPage
+                           : win.view === "games" ? gamesPage
                            : win.view === "wingames" ? winPage : win.view === "macapps" ? macPage : win.view === "search" ? searchPage : appPage
         }
         // install banner (§9.8 state 3)
@@ -187,6 +190,8 @@ Window {
             SText { x: 14; anchors.verticalCenter: parent.verticalCenter; text: "앱을 설치하고 있습니다. 계속 둘러보셔도 됩니다."; font.pixelSize: 12; font.weight: Font.DemiBold }
         }
         SToast { id: toast; bottomMargin: 56 }
+        // 게임 catalog state shared by the 게임 page and the search results (storegames.py)
+        GameStore { id: gstore }
     }
 
     // ---- pages -------------------------------------------------------------------
@@ -283,8 +288,10 @@ Window {
             Component.onCompleted: load()
             Connections { target: win; function onQueryChanged() { sp.load() } }
             SText { text: "“" + win.query + "” 검색 결과"; font.pixelSize: 22; font.weight: Font.DemiBold }
+            // games first: 발로란트, 배그, 롤 ... are not in AppStream (storegames.search)
+            GameResults { id: gres; width: content.width; query: win.query }
             SText { visible: sp.loading; text: "불러오는 중…"; role: "sub"; font.pixelSize: 13 }
-            SText { visible: !sp.loading && sp.res.length === 0; text: "찾는 앱이 없습니다. 다른 이름으로 검색해 보세요."; role: "sub"; font.pixelSize: 13 }
+            SText { visible: !sp.loading && sp.res.length === 0 && gres.count === 0; text: "찾는 앱이 없습니다. 다른 이름으로 검색해 보세요."; role: "sub"; font.pixelSize: 13 }
             CardGrid { width: content.width; showDev: true; apps: sp.res }
         }
     }
@@ -427,6 +434,11 @@ Window {
     Component {
         id: macPage
         MacPage { width: content.width }
+    }
+    // "게임": the game catalog with an honest badge per game (DelayOS에서 바로 / Windows로 전환 / 지원 안 됨)
+    Component {
+        id: gamesPage
+        GamesPage { width: content.width }
     }
     Component {
         id: appPage

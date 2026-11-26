@@ -64,6 +64,17 @@ class Backend(QObject):
             return {"ok": False, "error": e.strerror or str(e)}
         return {"ok": True, "path": path, "name": os.path.basename(path)}
 
+    @Slot(QObject, int, result="QVariantList")
+    def lineCol(self, qdoc, pos):
+        """[line, column] (1-based) of a cursor position; qdoc is the TextArea's textDocument."""
+        try:
+            block = qdoc.textDocument().findBlock(pos)
+            if block.isValid():
+                return [block.blockNumber() + 1, pos - block.position() + 1]
+        except Exception:
+            pass
+        return [1, pos + 1]
+
     @Slot(str, result=str)
     def baseName(self, path):
         return os.path.basename(self._local(path))

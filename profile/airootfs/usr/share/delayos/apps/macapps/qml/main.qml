@@ -9,9 +9,10 @@ import DelaySys
 Window {
     id: win
     width: 560
-    height: Math.min(Screen.desktopAvailableHeight - 80, body.implicitHeight + 40)
+    readonly property int wantH: Math.max(150, Math.min(Screen.desktopAvailableHeight - 80, body.implicitHeight + 40))
+    height: wantH
     minimumWidth: 560; maximumWidth: 560
-    minimumHeight: height; maximumHeight: height
+    minimumHeight: wantH; maximumHeight: wantH
     visible: true
     title: "Mac 앱"
     color: Theme.windowBg
@@ -125,7 +126,7 @@ Window {
                     text: win.info ? win.appName : "파일 확인 중…" }
                 SText { width: parent.width; role: "sub"; font.pixelSize: 12
                     visible: text !== ""
-                    text: !win.info ? "" : ["Mac 앱", win.info.version ? "버전 " + win.info.version : "", win.info.bundleId].filter(function(s) { return !!s }).join(" · ") }
+                    text: !win.info ? "" : [win.info.kind === "macho" ? "Mac 명령줄 프로그램" : win.info.kind === "pkg" ? "Mac 설치 꾸러미" : "Mac 앱", win.info.version ? "버전 " + win.info.version : "", win.info.bundleId].filter(function(s) { return !!s }).join(" · ") }
                 SText { width: parent.width; role: "muted"; font.pixelSize: 12; elide: Text.ElideMiddle
                     text: win.info ? win.info.file : (appArgs[0] || "") }
             }
@@ -145,8 +146,8 @@ Window {
                     spacing: 8
                     Rectangle { width: 20; height: 20; radius: 10; anchors.verticalCenter: parent.verticalCenter
                         readonly property bool good: ["linux", "builtin", "link"].indexOf(win.verdict) >= 0
-                        color: good ? Theme.success : (["alt", "win", "web"].indexOf(win.verdict) >= 0 ? "#E8A23A" : Theme.danger)
-                        SIcon { anchors.centerIn: parent; size: 12; tint: "white"; name: parent.good ? "g:check" : (["alt", "win", "web"].indexOf(win.verdict) >= 0 ? "g:swap" : "g:cross") } }
+                        color: good ? Theme.success : (["alt", "win", "web", "cli"].indexOf(win.verdict) >= 0 ? "#E8A23A" : Theme.danger)
+                        SIcon { anchors.centerIn: parent; size: 12; tint: "white"; name: parent.good ? "g:check" : win.verdict === "cli" ? "g:terminal" : (["alt", "win", "web"].indexOf(win.verdict) >= 0 ? "g:swap" : "g:cross") } }
                     SText { font.pixelSize: 15; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter
                         text: ({ linux: (win.entry && win.entry.linux.length && win.isInstalled(win.entry.linux[0])) ? "Linux 버전이 이미 설치되어 있습니다" : "Linux 버전이 있습니다",
                                  builtin: "DelayOS에 이미 들어 있는 기능입니다", link: "제작사가 Linux 버전을 제공합니다",
@@ -154,7 +155,7 @@ Window {
                                  web: "웹 버전을 쓸 수 있습니다", cli: "명령줄 Mac 프로그램입니다",
                                  none: "이 Mac 앱은 DelayOS에서 실행할 수 없습니다" })[win.verdict] || "" }
                 }
-                SText { width: parent.width; role: "sub"; font.pixelSize: 12.5; wrapMode: Text.Wrap; elide: Text.ElideNone; lineHeight: 1.25
+                SText { width: parent.width; role: "sub"; font.pixelSize: 13; wrapMode: Text.Wrap; elide: Text.ElideNone; lineHeight: 1.25
                     text: win.entry && win.entry.note ? win.entry.note
                         : ({ linux: win.entry && win.entry.guessed ? "Store에서 같은 이름의 앱을 찾았습니다. Mac용 파일 대신 Linux 버전을 설치하세요. 다른 앱일 수 있으니 이름과 제작자를 확인하세요."
                                                                    : "Mac용 설치 파일은 DelayOS에서 실행되지 않습니다. 같은 앱의 Linux 버전을 설치하면 됩니다.",
@@ -211,13 +212,13 @@ Window {
                         onClicked: call("macback.darling_argv", [win.info.path, win.info.kind], function(a) { if (a) { sys.detach(a); Qt.quit() } }) }
                 }
                 SText { visible: (win.verdict === "cli" || (win.verdict === "none" && !!win.info && win.info.kind === "pkg")) && !win.darling.installed
-                    width: parent.width; role: "muted"; font.pixelSize: 11.5; wrapMode: Text.Wrap; elide: Text.ElideNone
+                    width: parent.width; role: "muted"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
                     text: win.verdict === "cli" ? "터미널이 열리고 AUR의 " + (win.darling.pkg || "darling-bin") + " 꾸러미를 설치합니다. 내려받는 양이 크고 DelayOS가 검증한 꾸러미가 아닙니다."
                                                 : "이 설치 파일이 명령줄 도구라면 Darling으로 시도해 볼 수 있습니다. 화면이 있는 앱은 Darling으로도 실행되지 않습니다." }
             }
         }
         SText { visible: !!win.info && win.info.kind === "dmg" && !win.info.readOk && win.verdict !== "loading"
-            width: parent.width; role: "muted"; font.pixelSize: 11.5; wrapMode: Text.Wrap; elide: Text.ElideNone
+            width: parent.width; role: "muted"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
             text: win.info && !win.info.have7z ? "7-Zip이 없어서 디스크 이미지 안을 읽지 못했습니다. 파일 이름으로만 판단했습니다."
                                                 : "디스크 이미지 안을 읽지 못했습니다(암호화되었거나 지원하지 않는 형식). 파일 이름으로만 판단했습니다." }
 
