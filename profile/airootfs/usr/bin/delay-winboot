@@ -3,6 +3,9 @@
 # See docs/windows-switch.md.
 #
 #   delay-winboot --game ID [--yes] [--dry-run]   switch to Windows and start the game there
+#   delay-winboot --install ID [--yes]            switch to Windows and install the curated game there
+#   delay-winboot --install-launcher LID [--yes]  ... or a launcher: steam|epic|riot|battlenet|ea|ubisoft
+#   delay-winboot --store-json                    what the Store's "Windows 게임" page shows (no root)
 #   delay-winboot --offer ID --file FILE.exe      asked by delay-winengine for anti-cheat games
 #   delay-winboot --setup                         explain/prepare the one-time Windows helper install
 #   delay-winboot --add [--file FILE.exe]         "Windows 게임 추가" dialog
@@ -53,6 +56,9 @@ def main(args):
         wb.sync_menu()
         print(json.dumps(st, ensure_ascii=False))
         return 0 if st.get("ok") else 1
+    if "--store-json" in args:
+        print(json.dumps(wb.store_view(), ensure_ascii=False))
+        return 0
     if "--list" in args:
         games = wb.catalog()
         if "--json" in args:
@@ -74,10 +80,14 @@ def main(args):
         action, gid = "setup", ""
     elif "--offer" in args:
         action, gid = "offer", opt(args, "--offer")
+    elif "--install-launcher" in args:
+        action, gid = "install-launcher", opt(args, "--install-launcher")
+    elif "--install" in args:
+        action, gid = "install", opt(args, "--install")
     elif "--game" in args:
         action, gid = "game", opt(args, "--game")
     else:
-        sys.stderr.write("usage: delay-winboot --game ID | --add | --setup | --list | --status | --sync-menu\n")
+        sys.stderr.write("usage: delay-winboot --game ID | --install ID | --install-launcher ID | --add | --setup | --list | --status | --sync-menu\n")
         return 2
     file = opt(args, "--file")
     if file.startswith("file://"):

@@ -65,5 +65,9 @@ fi
 
 # ---- Flathub for the app store (Discover) ----
 flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null
+# Korean system: Flatpak apps download the Korean (and English) locale data (Locale extensions).
+# Same as: pkexec /usr/lib/delayos/delay-sys-helper flatpak-lang
+flatpak config --system --set languages "ko;en" 2>/dev/null
+flatpak config --system --set extra-languages "ko_KR.UTF-8" 2>/dev/null
 
 touch "$STAMP"

@@ -29,7 +29,7 @@ DelayOS에서 클릭 한 번으로 **이 PC에 설치된 실제 Windows**에서 
 - 같은 PC에 설치된 Windows 10/11 (듀얼 부팅). Windows가 없으면 시작 메뉴에 Windows 게임이 나타나지 않습니다.
 - Windows에서 **한 번** 연동 도우미 설치 (아래).
 - 클릭 없이 게임까지 가려면 Windows 자동 로그인.
-- 게임 자체는 Windows에 설치되어 있어야 합니다.
+- 게임은 Windows에 설치되어 있어야 합니다. 없으면 DelayOS Store › Windows 게임에서 설치를 시작할 수 있습니다(아래 "Windows 게임 설치").
 
 ## 한 번만 하는 설치
 
@@ -59,7 +59,7 @@ DelayOS에서 클릭 한 번으로 **이 PC에 설치된 실제 Windows**에서 
 
 | 항목 | 내용 |
 |---|---|
-| `C:\ProgramData\DelayOS\winboot\` | `agent.ps1`, `messages.ko.json`, 설정/로그 (관리자만 쓰기 가능) |
+| `C:\ProgramData\DelayOS\winboot\` | `agent.ps1`, `messages.ko.json`, 설정/로그, `downloads\`(설치 파일 임시 보관, 설치 후 삭제) (관리자만 쓰기 가능) |
 | 예약된 작업 `\DelayOS\WinBoot-Agent` | 로그온 시/절전 해제 시, 가장 높은 권한. 요청 확인 → 게임 실행 → 종료 대기 → 복귀 |
 | 예약된 작업 `\DelayOS\WinBoot-Launch` | 요청 시, **일반 권한**. 게임은 항상 관리자 권한 없이 실행됩니다 |
 | 예약된 작업 `\DelayOS\WinBoot-Return` | 요청 시, 가장 높은 권한. "DelayOS로 돌아가기" |
@@ -106,6 +106,85 @@ Wine 실행에 실패한 프로그램의 오류 창에도 "실제 Windows에서 
   알림 영역(트레이)의 DelayOS 아이콘이나 시작 메뉴의 **"DelayOS로 돌아가기"** 를 쓰세요. 이 수동 복귀는 항상 사용할 수 있습니다.
 - 게임이 30분 안에 시작되지 않으면 자동 복귀를 끕니다. 카운트다운 중에 게임이 다시 뜨면(패치 후 재실행 등) 복귀를 취소합니다.
 - 대기 시간은 `~/.config/delayosrc` 의 `[WinBoot] ReturnDelay=10` (초, 0이면 즉시)로 바꿉니다.
+
+## Windows 게임 설치 (DelayOS Store › Windows 게임)
+
+게임이 아직 Windows에 없어도 DelayOS에서 클릭 한 번으로 설치를 시작할 수 있습니다.
+DelayOS Store 왼쪽의 **Windows 게임**(Windows와 연동 도우미가 있을 때만 보임)에서 **설치**를 누르거나
+`delay-winboot --install <게임 ID>` / `delay-winboot --install-launcher <steam|epic|riot|battlenet|ea|ubisoft>` 를 실행합니다.
+이미 설치된 게임은 버튼이 **플레이**로 바뀝니다. 버튼마다 "Windows로 전환해서 설치합니다. 로그인은 직접 해야 합니다."라고 적혀 있습니다.
+
+### 솔직한 설명
+
+- 설치는 **Windows 안에서** 일어납니다. DelayOS는 "무엇을 설치할지"만 적어 Windows로 다시 시작합니다(위의 전환과 같은 방식).
+- **로그인은 대신 해 드리지 않습니다.** Riot, Epic Games, Steam 계정의 아이디·암호·2단계 인증은 Windows에서 직접 입력해야 하고,
+  런처 안의 "설치" 버튼(설치 위치 확인)도 직접 눌러야 합니다. DelayOS와 도우미는 계정 정보를 다루지 않습니다.
+- 설치하는 동안에는 **자동으로 돌아오지 않습니다.** 수십 GB를 내려받는 동안 PC는 Windows에 머뭅니다.
+  알림 영역(트레이)의 DelayOS 아이콘과 오른쪽 아래 안내 창의 **"DelayOS로 돌아가기"** 는 언제든 쓸 수 있고,
+  **"설치가 끝나면 DelayOS로 돌아가기"** 를 체크하면 설치가 끝난 것을 감지했을 때 카운트다운 후 돌아옵니다(기본은 꺼짐).
+- 설치 파일은 **각 회사의 공식 서버에서만** 내려받습니다. 비공식 미러는 쓰지 않습니다.
+
+### Windows에서 일어나는 순서
+
+1. 로그인하면 도우미(`agent.ps1`, 1.1 이상)가 요청(`"type": "install"`)을 읽고 지운 뒤 오른쪽 아래에 안내 창을 띄웁니다.
+2. 런처가 이미 있으면 내려받기를 건너뜁니다. 없으면 공식 설치 파일을 `C:\ProgramData\DelayOS\winboot\downloads`
+   (관리자만 쓸 수 있는 폴더)에 내려받습니다(`curl.exe`, https만 허용, 실패하면 여러 번 다시 시도).
+3. **디지털 서명 확인**: `Get-AuthenticodeSignature`의 상태가 `Valid`이고 서명자가 그 회사일 때만 실행합니다.
+   아니면 파일을 지우고 "설치를 중단했습니다"라는 창을 띄웁니다. 주소의 호스트와 서명자 목록은 도우미 안에 따로 들어 있어,
+   DelayOS가 보낸 요청이 잘못되어 있어도 다른 곳의 파일은 실행되지 않습니다.
+4. 설치 프로그램 실행. 회사가 지원하는 경우에만 조용히 설치합니다(아래 표). 나머지는 설치 창이 뜨고 안내 창이 무엇을 누를지 알려 줍니다.
+5. 런처가 설치되면 런처 안의 게임 설치를 엽니다(Steam `steam://install/<appid>`, Epic `com.epicgames.launcher://apps/<AppName>?action=install`,
+   Riot `RiotClientServices.exe --launch-product=<게임> --launch-patchline=live`). 여기서 **직접 로그인**하고 설치를 누릅니다.
+6. 도우미가 30초마다 설치 여부를 확인합니다. 끝나면 게임 목록(`inventory.json`)을 바로 다시 내보내므로,
+   DelayOS로 돌아가면 시작 메뉴의 **Windows 게임**과 Store에 게임이 나타납니다("DelayOS로 돌아가기"를 누를 때도 목록을 한 번 더 내보냅니다).
+7. 자동 다운로드가 끝내 실패하거나 주소가 없는 항목(Riot Client 단독)은 **공식 다운로드 페이지**를 기본 브라우저로 엽니다.
+
+| 런처 | 공식 설치 파일 | 서명자 | 설치 방식 | 설치 완료 감지 |
+|---|---|---|---|---|
+| Steam | `cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe` | Valve Corp. | 조용히(`/S`, UAC 창 없음) | `appmanifest_<appid>.acf`의 `StateFlags`에 4(설치 완료) |
+| Epic Games Launcher | `launcher-public-service-prod06.ol.epicgames.com/…/EpicGamesLauncherInstaller.msi` | Epic Games Inc. | 조용히(`msiexec /i … /qn /norestart`) | `Manifests\*.item`이 있고 `bIsIncompleteInstall`이 아님 |
+| Riot (발로란트, 리그 오브 레전드) | `valorant.secure.dyn.riotcdn.net/…/live.live.kr.exe`, `lol.secure.dyn.riotcdn.net/…/live.kr.exe` (한국 서버용) | Riot Games, Inc. | 설치 창에서 직접 클릭 (조용한 설치를 지원하지 않음) | 추정: 설치 폴더가 일정 크기(발로란트 15GB, 롤 8GB) 이상이 되고 2분 동안 커지지 않음 |
+| Battle.net | `downloader.battle.net/download/getInstallerForGame?…BATTLENET_APP…` | Blizzard Entertainment, Inc. | 설치 창에서 직접 클릭 | 런처 실행 파일 |
+| EA app | `origin-a.akamaihd.net/EA-Desktop-Client-Download/installer-releases/EAappInstaller.exe` (ea.com의 다운로드 버튼이 가리키는 주소) | Electronic Arts, Inc. | 설치 창에서 직접 클릭 | 런처 실행 파일 |
+| Ubisoft Connect | `static3.cdn.ubi.com/orbit/launcher_installer/UbisoftConnectInstaller.exe` | Ubisoft Entertainment | 설치 창에서 직접 클릭 | 런처 실행 파일 |
+| Riot Client (단독) | 단독 설치 파일이 없음 → `riotgames.com/ko` 페이지를 엶 | | | |
+
+기본 목록의 게임: 발로란트·리그 오브 레전드(Riot), 포트나이트(Epic), 배틀그라운드·에이펙스 레전드·레인보우 식스 시즈(Steam).
+다른 게임은 런처를 설치한 뒤 Windows에서 직접 설치하면 다음부터 자동 감지됩니다.
+주소와 설치 방법은 `/usr/share/delayos/winboot/games.json`의 `launchers`와 각 게임의 `install`에 있습니다(관리자 추가: `/etc/delayos/winboot/games.d/*.json`).
+직접 추가한 게임(`~/.config`)과 Windows가 보고한 목록은 설치 요청이 될 수 없습니다(설치 프로그램은 관리자 권한으로 실행되므로 root 소유 목록만 신뢰).
+
+### 한국어
+
+DelayOS는 한국어 시스템이므로 설치도 한국어 기준입니다.
+
+- Riot: 한국 공식 사이트(playvalorant.com/ko-kr, leagueoflegends.com/ko-kr)가 주는 **한국 서버용 설치 파일**을 씁니다.
+- Steam: 도우미가 새로 설치할 때 `HKCU\Software\Valve\Steam\Language`를 `koreana`로 설정합니다(Steam 설치 프로그램이 쓰는 값과 같음).
+  Steam으로 설치하는 게임은 기본적으로 클라이언트 언어를 따릅니다. 이미 Steam이 설치되어 있으면 사용자가 고른 언어를 바꾸지 않습니다.
+- 강제할 수 없는 것: Epic Games Launcher, Battle.net, EA app, Ubisoft Connect는 **Windows 표시 언어**를 따르며 지원되는 언어 지정 방법이 없습니다
+  (DelayOS가 자동 설치한 Windows는 한국어이므로 한국어로 나옵니다). Riot Client와 게임 안의 언어는 계정 지역/클라이언트 설정을 따릅니다.
+  다른 언어로 나오면 각 런처의 설정 › 언어에서 바꾸세요.
+- 다운로드 페이지를 여는 경우에도 한국어 페이지(`/ko-kr`, `?l=koreana`)를 엽니다.
+
+### 안티치트 요구 사항
+
+Store의 Windows 게임 화면과 설치 확인 창은 이 PC의 **TPM 2.0 / Secure Boot 상태**를 보여 줍니다
+(`delay-winboot --status`의 `requirements`: `tpm2`, `secureBoot`, `win11`. 같은 메인보드이므로 DelayOS에서 읽은 값이 Windows에도 적용됩니다).
+
+| 게임 | 안티치트 | Windows 11에서 필요한 것 |
+|---|---|---|
+| 발로란트 | Riot Vanguard | TPM 2.0 + Secure Boot (없으면 VAN9001/9003). Vanguard 설치 후 Windows를 한 번 다시 시작해야 함 |
+| 리그 오브 레전드 | Riot Vanguard | TPM 2.0 (Secure Boot 권장) |
+| 포트나이트 | Easy Anti-Cheat / BattlEye | 일반 플레이는 없음. 대회 참가에는 TPM 2.0 + Secure Boot |
+| 배틀그라운드, 에이펙스 레전드, 레인보우 식스 시즈 | BattlEye / Easy Anti-Cheat | 없음 |
+
+요구 사항이 꺼져 있는 게임의 설치를 누르면 바로 전환하지 않고 확인 창에서 먼저 알려 줍니다. 그 밖에는 "전환 전에 확인" 설정을 따릅니다(기본: 바로 전환).
+
+### 도우미 버전
+
+게임 설치에는 Windows 도우미 **1.1 이상**이 필요합니다. 1.0이 설치된 PC에서 설치를 누르면 DelayOS가 새 설치 파일을 준비하고
+"Windows 연동 도우미를 업데이트해야 합니다" 안내를 띄웁니다. Windows에서 `DelayOS-Windows-연동.cmd`(또는 `setup.cmd`)를 다시 실행해
+`1`(다시 설치/업데이트)을 고르면 됩니다. 1.0 도우미는 설치 요청을 무시합니다(요청에 `launch` 항목이 없기 때문).
 
 ## 설정
 
@@ -163,6 +242,9 @@ Wine 실행에 실패한 프로그램의 오류 창에도 "실제 Windows에서 
 
 ```
 delay-winboot --game <id> [--yes] [--dry-run]   전환 (--dry-run: 전환 화면만 4초 보여 줌)
+delay-winboot --install <id> [--yes]            Windows로 전환해서 기본 목록의 게임을 설치
+delay-winboot --install-launcher <런처> [--yes]  런처만 설치 (steam|epic|riot|battlenet|ea|ubisoft)
+delay-winboot --store-json                      Store의 Windows 게임 화면 데이터 (root 불필요)
 delay-winboot --add [--file X.exe] | --remove <id> | --list [--json]
 delay-winboot --setup                            연동 도우미 설치 안내
 delay-winboot --status                           JSON 상태 (게임 목록 캐시도 갱신)
@@ -172,9 +254,10 @@ delay-winboot --session-start                    로그인 훅 (/etc/xdg/autosta
 | 경로 | 역할 |
 |---|---|
 | `/usr/bin/delay-winboot`, `/usr/share/delayos/winboot/{wbgames.py,wbui.py,qml/}` | 사용자 쪽 (PySide6 + QML) |
-| `/usr/lib/delayos/delay-winboot-helper` | root 쪽: `status`, `arm`, `disarm`, `install-helper` |
+| `/usr/lib/delayos/delay-winboot-helper` | root 쪽: `status`, `arm` (`--install`, `--install-launcher`), `disarm`, `install-helper` |
 | `/usr/share/polkit-1/actions/org.delayos.winboot.policy` | 암호 없는 pkexec |
-| `/usr/share/delayos/winboot/games.json` | 기본 게임 목록 |
+| `/usr/share/delayos/winboot/games.json` | 기본 게임 목록 + 설치 정보(`launchers`, `install`) |
+| `/usr/share/delayos/apps/store/` (`storeback.wingames`, `qml/main.qml`) | Store의 Windows 게임 화면 (`delay-store --windows`) |
 | `/usr/share/delayos/winboot/windows/` | Windows 도우미 (`DelayOS-Windows-연동.cmd`, `install.ps1`, `agent.ps1`, `messages.ko.json`) |
 | `/var/cache/delayos/winboot/` | ESP에서 읽어 온 게임 목록과 아이콘 |
 | `/etc/xdg/menus/applications-merged/delayos-windows-games.menu` | 시작 메뉴 "Windows 게임" 분류 |
@@ -261,8 +344,8 @@ DelayOS는 KMS 에뮬레이터나 인증 우회 도구를 쓰지 않으며 앞�
 - **BitLocker/장치 암호화 끔**(`PreventDeviceEncryption`), **빠른 시작과 최대 절전 끔**. EFI 파티션과 펌웨어를 DelayOS와 같이 쓰기 때문입니다.
 - 연동 도우미 설치(`install.ps1 -Unattended`): 로그온 작업, 부팅 로고 숨김, "DelayOS로 돌아가기" 바로 가기.
 
-게임 자체(Riot Client, Steam, Epic 등)는 Windows에서 사용자가 설치합니다. 처음 한 번은 DelayOS에서
-설정 › 앱 지원 › Windows 전환으로 Windows에 들어가 설치하세요. 그 Windows에는 메인보드/그래픽 드라이버도 Windows 업데이트나
+게임과 런처(Riot Client, Steam, Epic 등)는 DelayOS Store › **Windows 게임**에서 설치를 시작할 수 있습니다(위의 "Windows 게임 설치"; 로그인은 직접).
+그 밖의 프로그램은 설정 › 앱 지원 › Windows 전환으로 Windows에 들어가 설치하세요. 그 Windows에는 메인보드/그래픽 드라이버도 Windows 업데이트나
 제조사 사이트에서 설치해야 합니다(유선 LAN 드라이버가 없는 메인보드는 처음에 인터넷이 안 될 수 있습니다).
 
 ## Secure Boot

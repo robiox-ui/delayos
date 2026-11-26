@@ -1,12 +1,16 @@
 #!/bin/bash
 # delay-sys-helper: the only privileged entry point of the DelayOS system apps (Settings, Store, Drivers, Welcome).
 # Run through pkexec (polkit action org.delayos.syshelper). Arguments are validated; nothing is passed to a shell.
-#   install PKG...      pacman -S --needed (falls back to -Syu --needed when the sync DB is missing/stale)
+#   install PKG...      pacman -S --needed (falls back to -Syu --needed when the sync DB is missing/stale);
+#                       also installs the Korean language pack of PKG where it is a separate package
+#   flatpak-lang        flatpak config (system): languages = ko;en, so installs pull the Korean locale
 #   remove PKG...       pacman -Rns
 #   upgrade             pacman -Syu
 #   clean-cache         paccache -rk1 (or pacman -Sc)
 #   android-init        waydroid init -s GAPPS -f + enable waydroid-container
 #   enable-service UNIT systemctl enable --now (whitelisted units only)
+#   cpu-opt enable|disable|kernel-install|kernel-remove   delay-cpu-opt (CPU-optimized packages)
+#   gpu-setup           delay-gpu-setup (drivers that match the GPUs)
 set -u
 export LC_ALL=C
 cmd="${1:-}"; shift || true
@@ -19,19 +23,47 @@ valid_pkgs() {
 PACMAN=(pacman --noconfirm --noprogressbar --color never)
 wait_lock() { for _ in $(seq 60); do [[ -e /var/lib/pacman/db.lck ]] || return 0; echo "waiting for another package manager"; sleep 2; done; }
 
+# DelayOS is a Korean system: packages whose translations are split out get their Korean pack too
+# (names checked against the official repositories; apps not listed ship Korean inside the package).
+ko_packs() {
+  local p
+  for p in "$@"; do
+    case "$p" in
+      firefox|firefox-developer-edition|thunderbird) echo "$p-i18n-ko" ;;
+      libreoffice-fresh|libreoffice-still) echo "$p-ko" ;;
+    esac
+  done
+}
+
 case "$cmd" in
   install)
     valid_pkgs "$@"; wait_lock
+    mapfile -t ko < <(ko_packs "$@")
     if [[ -z "$(ls -A /var/lib/pacman/sync 2>/dev/null)" ]]; then
-      exec "${PACMAN[@]}" -Syu --needed "$@"
+      "${PACMAN[@]}" -Syu --needed "$@"; rc=$?
+    else
+      "${PACMAN[@]}" -S --needed "$@"; rc=$?
+      if [[ $rc -ne 0 ]]; then
+        echo ":: retrying with a full sync"
+        "${PACMAN[@]}" -Syu --needed "$@"; rc=$?
+      fi
     fi
-    "${PACMAN[@]}" -S --needed "$@" && exit 0
-    echo ":: retrying with a full sync"
-    exec "${PACMAN[@]}" -Syu --needed "$@"
+    if [[ $rc -eq 0 && ${#ko[@]} -gt 0 ]]; then
+      "${PACMAN[@]}" -S --needed "${ko[@]}" || echo ":: Korean language pack not installed: ${ko[*]}"
+    fi
+    exit $rc
     ;;
   remove)
     valid_pkgs "$@"; wait_lock
-    exec "${PACMAN[@]}" -Rns "$@"
+    # the Korean pack depends on its app: remove it together or pacman refuses
+    mapfile -t ko < <(ko_packs "$@" | while read -r k; do pacman -Qq "$k" 2>/dev/null; done)
+    exec "${PACMAN[@]}" -Rns "$@" "${ko[@]}"
+    ;;
+  flatpak-lang)
+    # Flatpak apps download only the locales listed here (Locale extensions): Korean + English
+    command -v flatpak >/dev/null || exit 0
+    flatpak config --system --set languages "ko;en" || exit $?
+    exec flatpak config --system --set extra-languages "ko_KR.UTF-8"
     ;;
   upgrade)
     wait_lock
@@ -46,6 +78,20 @@ case "$cmd" in
     waydroid init -s GAPPS -f || exit $?
     exec systemctl enable --now waydroid-container.service
     ;;
+  cpu-opt)
+    # CPU-optimized (CachyOS x86-64-v3/v4/znver4) repositories and the matching kernel
+    case "${1:-}" in
+      enable)         exec /usr/local/bin/delay-cpu-opt enable ;;
+      disable)        exec /usr/local/bin/delay-cpu-opt disable ;;
+      kernel-install) exec /usr/local/bin/delay-cpu-opt kernel install ;;
+      kernel-remove)  exec /usr/local/bin/delay-cpu-opt kernel remove ;;
+      *) echo "usage: delay-sys-helper cpu-opt enable|disable|kernel-install|kernel-remove" >&2; exit 2 ;;
+    esac
+    ;;
+  gpu-setup)
+    # make the installed graphics drivers match the GPUs in this PC
+    exec /usr/local/bin/delay-gpu-setup
+    ;;
   enable-service)
     case "${1:-}" in
       waydroid-container.service|bluetooth.service|docker.service|libvirtd.service) exec systemctl enable --now "$1" ;;
@@ -53,5 +99,5 @@ case "$cmd" in
     esac
     ;;
   *)
-    echo "usage: delay-sys-helper install|remove|upgrade|clean-cache|enable-service ..." >&2; exit 2 ;;
+    echo "usage: delay-sys-helper install|remove|upgrade|clean-cache|flatpak-lang|enable-service|cpu-opt|gpu-setup ..." >&2; exit 2 ;;
 esac

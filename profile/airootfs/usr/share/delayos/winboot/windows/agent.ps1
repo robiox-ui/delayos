@@ -7,6 +7,10 @@
 #                    starts the game through the non-elevated task "\DelayOS\WinBoot-Launch", exports
 #                    the game inventory for DelayOS, waits for the game to end and reboots to DelayOS.
 #                    No request -> only the inventory is refreshed; Windows starts normally.
+#                    A request of type "install" (DelayOS Store, delay-winboot --install) instead
+#                    downloads the official installer of the launcher, checks its Authenticode
+#                    signature, runs it, starts the game install inside the launcher and stays in
+#                    Windows (tray icon + guide window; "return when the install is done" is opt-in).
 #   -Mode Launch     non-elevated: start the game described in pending.json
 #   -Mode Return     elevated, on demand (Start menu shortcut): reboot to DelayOS now
 #   -Mode Inventory  export the game inventory only
@@ -15,7 +19,7 @@
 param([ValidateSet('Agent', 'Launch', 'Return', 'Inventory', 'Probe', 'Cleanup')][string]$Mode = 'Agent')
 
 $ErrorActionPreference = 'Continue'
-$Version = '1.0'
+$Version = '1.1'
 $Base = Join-Path $env:ProgramData 'DelayOS\winboot'
 $EspRel = 'EFI\DelayOS\winboot'
 $TaskPath = '\DelayOS\'
@@ -25,6 +29,8 @@ $script:EspRoot = $null
 $script:NoGuidPath = $false
 $script:ReturnInfo = $null
 $script:M = $null
+$script:ReturnTextKey = 'return_text'
+$script:Prompt = $null
 
 function Write-Log([string]$msg) {
     try {
@@ -130,7 +136,10 @@ function Read-Request {
                 $txt = [IO.File]::ReadAllText($f, $Utf8)
                 [IO.File]::Delete($f)
                 $r = $txt | ConvertFrom-Json
-                if (($r.version -eq 1) -and $r.launch -and $r.launch.type) { return $r }
+                if ($r.version -eq 1) {
+                    if (([string]$r.type -eq 'install') -and $r.install -and $r.install.launcher) { return $r }
+                    if (([string]$r.type -ne 'install') -and $r.launch -and $r.launch.type) { return $r }
+                }
                 Write-Log "ignored request in $f"
             }
         } catch { Write-Log "request error: $_" }
@@ -279,23 +288,34 @@ function Save-Icon([string]$src, [string]$dst) {
     } catch { return $false }
 }
 
-function Get-SteamGames {
-    $res = @()
+function Get-SteamRoot {
     $root = $null
     foreach ($k in 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam', 'HKLM:\SOFTWARE\Valve\Steam') {
         try { $root = (Get-ItemProperty -LiteralPath $k -ErrorAction Stop).InstallPath } catch {}
         if ($root) { break }
     }
     if (-not $root) { try { $root = ((Get-ItemProperty -LiteralPath 'HKCU:\Software\Valve\Steam' -ErrorAction Stop).SteamPath) -replace '/', '\' } catch {} }
-    if ((-not $root) -or (-not (Test-Path -LiteralPath $root))) { return $res }
+    if ((-not $root) -or (-not (Test-Path -LiteralPath $root))) { return $null }
+    return [string]$root
+}
+
+function Get-SteamLibs {
+    $root = Get-SteamRoot
+    if (-not $root) { return @() }
     $libs = @($root)
     $vdf = Join-Path $root 'steamapps\libraryfolders.vdf'
     if (Test-Path -LiteralPath $vdf) {
         foreach ($m in [regex]::Matches([IO.File]::ReadAllText($vdf, $Utf8), '"path"\s+"([^"]+)"')) {
-            $p = $m.Groups[1].Value -replace '\\\\', '\'
+            $p = $m.Groups[1].Value -replace '\\', '\'
             if ($libs -notcontains $p) { $libs += $p }
         }
     }
+    return $libs
+}
+
+function Get-SteamGames {
+    $res = @()
+    $libs = @(Get-SteamLibs)
     $tools = '228980', '250820', '1070560', '1391110', '1628350', '1493710', '2180100', '1887720', '2348590', '2805730', '3658110'
     foreach ($lib in $libs) {
         $sa = Join-Path $lib 'steamapps'
@@ -417,13 +437,17 @@ function Export-Inventory {
     $cfg = Get-Config
     $autologon = $false
     try { $autologon = ((Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -ErrorAction Stop).AutoAdminLogon -eq '1') } catch {}
-    $helper = [ordered]@{ version = $Version; autologon = $autologon; bootux = [bool]$cfg.bootux_set
+    $build = 0
+    try { $build = [int][Environment]::OSVersion.Version.Build } catch {}
+    $launchers = [ordered]@{}
+    foreach ($k in $LauncherIds) { $launchers[$k] = [bool](Get-LauncherExe $k) }
+    $helper = [ordered]@{ version = $Version; autologon = $autologon; bootux = [bool]$cfg.bootux_set; win_build = $build
                           return_entry = [bool]$cfg.return_guid; user = $env:USERNAME }
-    $sigSrc = (@{ helper = $helper; games = $list } | ConvertTo-Json -Depth 8 -Compress)
+    $sigSrc = ([ordered]@{ helper = $helper; launchers = $launchers; games = $list } | ConvertTo-Json -Depth 8 -Compress)
     $sha = [Security.Cryptography.SHA1]::Create()
     $sig = [BitConverter]::ToString($sha.ComputeHash($Utf8.GetBytes($sigSrc))) -replace '-', ''
     $helper.updated = (Get-Date).ToString('s')
-    $doc = [ordered]@{ version = 1; signature = $sig; helper = $helper; games = $list }
+    $doc = [ordered]@{ version = 1; signature = $sig; helper = $helper; launchers = $launchers; games = $list }
     $local = Join-Path $Base 'inventory.json'
     $old = Read-Json $local
     if ((-not $old) -or ($old.signature -ne $sig)) { Write-Json $local $doc }
@@ -467,6 +491,539 @@ function Copy-InventoryToEsp($doc, $list, [string]$sig, [string]$iconDir) {
         Write-Json ($dst + '\inventory.json') $doc
         Write-Log "inventory exported: $($list.Count) games"
     }
+}
+
+# ---- installing games and launchers (request type "install", docs/windows-switch.md) ---------------
+# DelayOS sends install = { launcher, launcher_name, publisher, url, page, file, args, silent, elevate,
+# bundled, game, trigger, detect } built from its root-owned games.json. Nothing in it is trusted
+# blindly: the launcher must be one of the six below, the download and the page must be https on a
+# host of that vendor, and the downloaded file must carry a valid Authenticode signature of that
+# vendor. Files are downloaded to $DlDir (only administrators can write there, so a verified file
+# cannot be swapped before it runs). Switches are passed only when the vendor supports them.
+$DlDir = Join-Path $Base 'downloads'
+$LauncherIds = 'steam', 'epic', 'riot', 'battlenet', 'ea', 'ubisoft'
+$Launchers = @{
+    steam     = @{ signer = '^Valve Corp\.$'; hosts = @('steamstatic.com', 'steampowered.com') }
+    epic      = @{ signer = '^Epic Games,? Inc\.$'; hosts = @('epicgames.com') }
+    riot      = @{ signer = '^Riot Games, Inc\.$'; hosts = @('riotcdn.net', 'riotgames.com', 'playvalorant.com', 'leagueoflegends.com') }
+    battlenet = @{ signer = '^Blizzard Entertainment, Inc\.$'; hosts = @('battle.net', 'blizzard.com') }
+    ea        = @{ signer = '^Electronic Arts, Inc\.$'; hosts = @('origin-a.akamaihd.net', 'ea.com') }
+    ubisoft   = @{ signer = '^Ubisoft Entertainment( Inc\.| Sweden AB| SA)?$'; hosts = @('ubi.com', 'ubisoft.com') }
+}
+$TriggerSchemes = '^(steam|com\.epicgames\.launcher|uplay|battlenet|origin2|link2ea)://'
+
+function Get-RegValue([string]$key, [string]$name) {
+    try { return [string](Get-ItemProperty -LiteralPath $key -ErrorAction Stop).$name } catch { return '' }
+}
+
+function Get-LauncherExe([string]$lid) {
+    $c = @()
+    $pf86 = ${env:ProgramFiles(x86)}
+    if (-not $pf86) { $pf86 = $env:ProgramFiles }
+    switch ($lid) {
+        'steam' {
+            $r = Get-SteamRoot
+            if ($r) { $c += (Join-Path $r 'steam.exe') }
+        }
+        'epic' {
+            foreach ($a in 'Win64', 'Win32') { $c += (Join-Path $pf86 "Epic Games\Launcher\Portal\Binaries\$a\EpicGamesLauncher.exe") }
+        }
+        'riot' {
+            $r = Get-RiotClient
+            if ($r) { $c += $r }
+        }
+        'battlenet' {
+            $r = Get-RegValue 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Battle.net' 'InstallLocation'
+            if ($r) { $c += (Join-Path $r 'Battle.net Launcher.exe') }
+            $c += (Join-Path $pf86 'Battle.net\Battle.net Launcher.exe')
+        }
+        'ea' {
+            $r = Get-RegValue 'HKLM:\SOFTWARE\Electronic Arts\EA Desktop' 'LauncherAppPath'
+            if ($r) { $c += $r }
+            $c += (Join-Path $env:ProgramFiles 'Electronic Arts\EA Desktop\EA Desktop\EALauncher.exe')
+        }
+        'ubisoft' {
+            $r = Get-RegValue 'HKLM:\SOFTWARE\WOW6432Node\Ubisoft\Launcher' 'InstallDir'
+            if ($r) { foreach ($n in 'UbisoftConnect.exe', 'upc.exe') { $c += (Join-Path $r $n) } }
+            $c += (Join-Path $pf86 'Ubisoft\Ubisoft Game Launcher\UbisoftConnect.exe')
+        }
+    }
+    foreach ($p in $c) {
+        try { if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) { return [string]$p } } catch {}
+    }
+    return $null
+}
+
+function Test-OfficialUrl([string]$url, [string]$lid) {
+    if ((-not $url) -or (-not $Launchers.ContainsKey($lid))) { return $false }
+    if ($url -notmatch '^https://[A-Za-z0-9.-]+/[A-Za-z0-9/_.~%?=&+-]*$') { return $false }
+    $h = ''
+    try { $h = ([Uri]$url).Host.ToLower() } catch { return $false }
+    foreach ($s in $Launchers[$lid].hosts) {
+        if (($h -eq $s) -or $h.EndsWith('.' + $s)) { return $true }
+    }
+    return $false
+}
+
+# '' when the file is signed by the vendor of this launcher, else the Korean reason
+function Test-Installer([string]$file, [string]$lid) {
+    $expected = [string]$script:Req.install.publisher
+    if (-not $expected) { $expected = [string]$script:Req.install.launcher_name }
+    $sig = $null
+    try { $sig = Get-AuthenticodeSignature -LiteralPath $file -ErrorAction Stop } catch { return ((T 'in_err_sig') -f $_.Exception.Message) }
+    if ((-not $sig) -or ([string]$sig.Status -ne 'Valid') -or (-not $sig.SignerCertificate)) {
+        return ((T 'in_err_sig') -f [string]$sig.Status)
+    }
+    $cn = ''
+    try { $cn = $sig.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) } catch {}
+    Write-Log "installer signed by '$cn'"
+    if ((-not $cn) -or ($cn -notmatch $Launchers[$lid].signer)) { return ((T 'in_err_signer') -f $expected, $cn) }
+    return ''
+}
+
+function Start-Download([string]$url, [string]$file) {
+    $curl = Join-Path $env:SystemRoot 'System32\curl.exe'
+    if (Test-Path -LiteralPath $curl) {
+        $a = '-fsSL --proto =https --proto-redir =https --max-redirs 5 --connect-timeout 30 -A "DelayOS-WinBoot" -o "{0}" "{1}"' -f $file, $url
+        $p = Start-Process -FilePath $curl -ArgumentList $a -WindowStyle Hidden -PassThru
+    } else {
+        # no curl.exe (Windows 10 before 1803): a hidden PowerShell child; values travel in the environment
+        $env:DELAYOS_DL_URL = $url
+        $env:DELAYOS_DL_FILE = $file
+        $cmd = '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile($env:DELAYOS_DL_URL, $env:DELAYOS_DL_FILE)'
+        $p = Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', $cmd) -WindowStyle Hidden -PassThru
+    }
+    try { [void]$p.Handle } catch {}      # keeps ExitCode readable after the process ended
+    return $p
+}
+
+function Remove-Downloads {
+    try {
+        if ([IO.Directory]::Exists($DlDir)) {
+            foreach ($f in [IO.Directory]::GetFiles($DlDir)) { try { [IO.File]::Delete($f) } catch {} }
+        }
+    } catch {}
+}
+
+function Get-RiotInstallDir([string]$product) {
+    $f = Join-Path $env:ProgramData ('Riot Games\Metadata\{0}.live\{0}.live.product_settings.yaml' -f $product)
+    try {
+        if ([IO.File]::Exists($f)) {
+            $m = [regex]::Match([IO.File]::ReadAllText($f, $Utf8), '(?m)^\s*product_install_full_path:\s*"?([^"\r\n]+)"?')
+            if ($m.Success) { return ($m.Groups[1].Value.Trim() -replace '/', '\') }
+        }
+    } catch {}
+    return ''
+}
+
+function Get-DirSize([string]$dir) {
+    $sum = [long]0
+    try {
+        foreach ($f in (New-Object IO.DirectoryInfo($dir)).EnumerateFiles('*', [IO.SearchOption]::AllDirectories)) { $sum += $f.Length }
+    } catch {}
+    return $sum
+}
+
+# 0 = not there, 1 = there but still downloading (or cannot tell), 2 = installed
+function Get-InstallState {
+    $ins = $script:Req.install
+    if (-not $ins.game) {
+        if (Get-LauncherExe ([string]$ins.launcher)) { return 2 }
+        return 0
+    }
+    $d = $ins.detect
+    if (-not $d) { return 0 }
+    $type = [string]$d.type
+    if ($type -eq 'steam') {
+        foreach ($lib in Get-SteamLibs) {
+            $f = Join-Path $lib ('steamapps\appmanifest_{0}.acf' -f $d.appid)
+            if ([IO.File]::Exists($f)) {
+                $flags = 0
+                try { $flags = [int]([regex]::Match([IO.File]::ReadAllText($f, $Utf8), '"StateFlags"\s+"(\d+)"').Groups[1].Value) } catch {}
+                if (($flags -band 4) -ne 0) { return 2 }
+                return 1
+            }
+        }
+        return 0
+    }
+    if ($type -eq 'epic') {
+        $dir = Join-Path $env:ProgramData 'Epic\EpicGamesLauncher\Data\Manifests'
+        if (-not (Test-Path -LiteralPath $dir)) { return 0 }
+        foreach ($f in Get-ChildItem -LiteralPath $dir -Filter '*.item' -File -ErrorAction SilentlyContinue) {
+            $j = Read-Json $f.FullName
+            if ($j -and ([string]$j.AppName -eq [string]$d.app)) {
+                if ($j.bIsIncompleteInstall) { return 1 }
+                return 2
+            }
+        }
+        return 0
+    }
+    if ($type -eq 'riot') {
+        $product = [string]$d.product
+        if ($product -notmatch '^[a-z0-9_]{1,64}$') { return 0 }
+        if (-not (Test-Path -LiteralPath (Join-Path $env:ProgramData ('Riot Games\Metadata\{0}.live' -f $product)))) { return 0 }
+        # the Riot Client keeps no "finished" flag we can read: installed = the folder has reached a
+        # plausible size and stopped growing for four checks in a row
+        $dir = Get-RiotInstallDir $product
+        if ((-not $dir) -or (-not [IO.Directory]::Exists($dir))) { return 1 }
+        $size = Get-DirSize $dir
+        if (($size -ge ([long]$d.min_gb * 1gb)) -and ($size -eq $script:LastSize)) { $script:Stable++ } else { $script:Stable = 0 }
+        $script:LastSize = $size
+        if ($script:Stable -ge 4) { return 2 }
+        return 1
+    }
+    return 0
+}
+
+function Show-Guide {
+    try { $script:Guide.Show(); $script:Guide.Activate() } catch {}
+}
+
+function Set-InstallStatus([string]$text, [bool]$notify) {
+    try { $script:GuideLabel.Text = $text } catch {}
+    if ($notify) {
+        Write-Log "status: $text"
+        $tip = $text
+        if ($tip.Length -gt 250) { $tip = $tip.Substring(0, 250) }
+        try { $script:Tray.ShowBalloonTip(10000, (T 'in_title'), $tip, [System.Windows.Forms.ToolTipIcon]::Info) } catch {}
+        Show-Guide
+    }
+}
+
+function Stop-Install([string]$text) {
+    $script:Phase = 'idle'
+    try { $script:Timer.Stop() } catch {}
+    Write-Log "install stopped: $text"
+    Set-InstallStatus $text $false
+    Show-Guide
+    [void][System.Windows.Forms.MessageBox]::Show($text, (T 'in_title'), [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+}
+
+function Complete-Install([string]$text) {
+    $script:Phase = 'done'
+    try { $script:Timer.Stop() } catch {}
+    Write-Log "install complete: $($script:Req.id)"
+    # tell DelayOS right away, so the game shows up in its Windows games menu however the user goes back
+    try { Export-Inventory; Close-Esp } catch { Write-Log "inventory: $_" }
+    Remove-Downloads
+    Set-InstallStatus ($text + ' ' + (T 'in_done_hint')) $true
+    if ($script:AutoReturn) {
+        $script:ReturnTextKey = 'in_return_text'
+        Show-ReturnPrompt
+    }
+}
+
+function Invoke-InstallReturn {
+    try { $script:Timer.Stop() } catch {}
+    try { Export-Inventory; Close-Esp } catch { Write-Log "inventory: $_" }
+    Stop-Agent
+    Invoke-Return $false
+}
+
+function Start-AsUser($launch) {
+    Start-GameAsUser (@{ name = [string]$script:Req.name; launch = $launch })
+}
+
+function Open-OfficialPage([string]$textKey) {
+    $ins = $script:Req.install
+    $page = [string]$ins.page
+    if (Test-OfficialUrl $page ([string]$ins.launcher)) {
+        Start-AsUser @{ type = 'uri'; target = $page }
+        $script:Phase = 'waitlauncher'
+        $script:PhaseStart = Get-Date
+        Set-InstallStatus ((T $textKey) -f $ins.launcher_name) $true
+    } else {
+        Stop-Install ((T 'in_err_nosource') -f $ins.launcher_name)
+    }
+}
+
+function Start-Fetch {
+    $ins = $script:Req.install
+    $lid = [string]$ins.launcher
+    $url = [string]$ins.url
+    $file = [string]$ins.file
+    if ($url -and (Test-OfficialUrl $url $lid) -and ($file -match '^[A-Za-z0-9][A-Za-z0-9 ._-]{0,60}\.(exe|msi)$')) {
+        try {
+            [void][IO.Directory]::CreateDirectory($DlDir)
+            $script:DlFile = Join-Path $DlDir $file
+            if ([IO.File]::Exists($script:DlFile)) { [IO.File]::Delete($script:DlFile) }
+            $script:Dl = Start-Download $url $script:DlFile
+            $script:Phase = 'download'
+            $script:PhaseStart = Get-Date
+            Set-InstallStatus ((T 'in_downloading') -f $ins.launcher_name, '') $false
+            return
+        } catch { Write-Log "download start: $_" }
+    } elseif ($url) { Write-Log "refused download url: $url" }
+    Open-OfficialPage 'in_page'
+}
+
+# DelayOS is a Korean system (request: lang = "ko"): make the launcher start in Korean where the vendor
+# offers a setting for it, and never override a language the user chose in an existing install. Steam reads
+# HKCU\Software\Valve\Steam\Language (its installer writes the same value; a silent install would leave
+# English). Riot uses the Korean installers; Epic, Battle.net, EA app and Ubisoft Connect follow the
+# Windows display language and have no supported switch, so nothing is forced there.
+function Set-LauncherLanguage([string]$lid, [bool]$force) {
+    if ([string]$script:Req.install.lang -ne 'ko') { return }
+    if ($lid -eq 'steam') {
+        try {
+            $k = 'HKCU:\Software\Valve\Steam'
+            if (-not (Test-Path -LiteralPath $k)) { [void](New-Item -Path $k -Force) }
+            if ($force -or (-not (Get-RegValue $k 'Language'))) {
+                Set-ItemProperty -LiteralPath $k -Name 'Language' -Value 'koreana' -Type String -ErrorAction Stop
+                Write-Log 'steam language: koreana'
+            }
+        } catch { Write-Log "steam language: $_" }
+    }
+}
+
+function Start-Installer {
+    $ins = $script:Req.install
+    $file = $script:DlFile
+    $a = [string]$ins.args
+    if ($a -notmatch '^[A-Za-z0-9 /=_.:-]{0,100}$') { $a = '' }
+    $script:InstProc = $null
+    Set-LauncherLanguage ([string]$ins.launcher) $false
+    try {
+        if ($ins.elevate) {
+            # the agent is elevated already: no UAC prompt
+            if ($file.ToLower().EndsWith('.msi')) {
+                $script:InstProc = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\msiexec.exe') -ArgumentList ('/i "{0}" {1}' -f $file, $a) -PassThru
+            } elseif ($a) {
+                $script:InstProc = Start-Process -FilePath $file -ArgumentList $a -PassThru
+            } else {
+                $script:InstProc = Start-Process -FilePath $file -PassThru
+            }
+            try { [void]$script:InstProc.Handle } catch {}
+        } else {
+            Start-AsUser @{ type = 'exe'; path = $file; args = $a }
+        }
+    } catch {
+        Stop-Install ((T 'in_err_run') -f $_.Exception.Message)
+        return
+    }
+    Write-Log "installer started: $file $a"
+    $script:Phase = 'waitlauncher'
+    $script:PhaseStart = Get-Date
+    if ($ins.elevate -and $ins.silent -and $a) { Set-InstallStatus ((T 'in_installing_silent') -f $ins.launcher_name) $false }
+    else { Set-InstallStatus ((T 'in_installing_click') -f $ins.launcher_name) $true }
+}
+
+function Start-Trigger {
+    $ins = $script:Req.install
+    $exe = Get-LauncherExe ([string]$ins.launcher)
+    $t = $ins.trigger
+    $launch = $null
+    if ($t -and ([string]$t.type -eq 'riot') -and ([string]$t.product -match '^[a-z0-9_]{1,64}$') -and ([string]$t.patchline -match '^[a-z0-9_]{1,32}$')) {
+        $launch = @{ type = 'riot'; product = [string]$t.product; patchline = [string]$t.patchline }
+    } elseif ($t -and ([string]$t.type -eq 'uri') -and ([string]$t.target -match $TriggerSchemes) -and ([string]$t.target -notmatch '["\s]')) {
+        $launch = @{ type = 'uri'; target = [string]$t.target; fallback_exe = [string]$exe }
+    } elseif ($exe) {
+        $launch = @{ type = 'exe'; path = [string]$exe; args = '' }
+    }
+    if ($launch) {
+        try { Start-AsUser $launch } catch { Write-Log "trigger failed: $_" }
+    }
+}
+
+function Install-Step {
+    $script:Ticks++
+    $ins = $script:Req.install
+    $lid = [string]$ins.launcher
+    $phase = $script:Phase
+    if ($phase -eq 'start') {
+        Remove-Downloads
+        if ($ins.game -and ((Get-InstallState) -eq 2)) { Complete-Install ((T 'in_already') -f $script:Req.name); return }
+        if (Get-LauncherExe $lid) {
+            if ($ins.game) { $script:Phase = 'trigger'; $script:Wait = 1 }
+            else { Start-Trigger; Complete-Install ((T 'in_already') -f $ins.launcher_name) }
+            return
+        }
+        Start-Fetch
+    } elseif ($phase -eq 'download') {
+        if (-not $script:Dl.HasExited) {
+            if (((Get-Date) - $script:PhaseStart).TotalMinutes -gt 60) { try { $script:Dl.Kill() } catch {}; return }
+            if (($script:Ticks % 2) -eq 0) {
+                $mb = 0
+                try { $mb = [int]((New-Object IO.FileInfo($script:DlFile)).Length / 1mb) } catch {}
+                Set-InstallStatus ((T 'in_downloading') -f $ins.launcher_name, ('{0} MB' -f $mb)) $false
+            }
+            return
+        }
+        $code = -1
+        try { $code = [int]$script:Dl.ExitCode } catch {}
+        $len = 0
+        try { $len = (New-Object IO.FileInfo($script:DlFile)).Length } catch {}
+        if (($code -ne 0) -or ($len -lt 100kb)) {
+            $script:DlTry++
+            Write-Log "download failed: rc=$code size=$len try=$($script:DlTry)"
+            try { [IO.File]::Delete($script:DlFile) } catch {}
+            if ($script:DlTry -lt 6) {
+                # the network is often not up yet right after logon
+                $script:Phase = 'retry'
+                $script:Wait = 8
+                Set-InstallStatus ((T 'in_retry') -f $ins.launcher_name) $false
+            } else { Open-OfficialPage 'in_page_fallback' }
+            return
+        }
+        Write-Log "downloaded $len bytes"
+        $bad = Test-Installer $script:DlFile $lid
+        if ($bad) {
+            try { [IO.File]::Delete($script:DlFile) } catch {}
+            Stop-Install $bad
+            return
+        }
+        Start-Installer
+    } elseif ($phase -eq 'retry') {
+        $script:Wait--
+        if ($script:Wait -le 0) { Start-Fetch }
+    } elseif ($phase -eq 'waitlauncher') {
+        if ($script:InstProc -and (-not $script:InstProc.HasExited)) { return }
+        if (Get-LauncherExe $lid) {
+            $script:Found++
+            if ($script:Found -lt 4) { return }           # let an interactive installer finish its last steps
+            $elevated = [bool]$script:InstProc
+            $script:InstProc = $null
+            if ($elevated) { Set-LauncherLanguage $lid $true }   # our own fresh silent install: no earlier choice to respect
+            if (-not $ins.game) {
+                if ($elevated) { Start-Trigger }          # a silent installer does not open the launcher itself
+                Complete-Install ((T 'in_launcher_done') -f $ins.launcher_name)
+            } elseif ($ins.bundled) {
+                # Riot: the game's own installer goes on with the game inside the Riot Client
+                $script:Phase = 'watch'
+                Set-InstallStatus ((T 'in_login') -f $ins.launcher_name, $script:Req.name) $true
+            } else {
+                $script:Phase = 'trigger'
+                $script:Wait = 2
+            }
+            return
+        }
+        $script:Found = 0
+        $mins = ((Get-Date) - $script:PhaseStart).TotalMinutes
+        if ($script:InstProc -and ($mins -gt 1)) {
+            $code = -1
+            try { $code = [int]$script:InstProc.ExitCode } catch {}
+            $script:InstProc = $null
+            Stop-Install ((T 'in_err_installer') -f $ins.launcher_name, $code)
+        } elseif ($mins -gt 180) {
+            Stop-Install ((T 'in_timeout') -f $ins.launcher_name)
+        }
+    } elseif ($phase -eq 'trigger') {
+        $script:Wait--
+        if ($script:Wait -gt 0) { return }
+        Start-Trigger
+        $script:Phase = 'watch'
+        Set-InstallStatus ((T 'in_login') -f $ins.launcher_name, $script:Req.name) $true
+    } elseif ($phase -eq 'watch') {
+        if (($script:Ticks % 15) -ne 0) { return }        # every 30 seconds
+        if ((Get-InstallState) -eq 2) { Complete-Install ((T 'in_done') -f $script:Req.name) }
+    }
+}
+
+function Wait-ForInstall($req) {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    $script:Req = $req
+    $script:Seen = @()
+    $script:Dir = ''
+    $script:Phase = 'start'
+    $script:Ticks = 0
+    $script:Wait = 0
+    $script:Found = 0
+    $script:DlTry = 0
+    $script:Dl = $null
+    $script:DlFile = ''
+    $script:InstProc = $null
+    $script:LastSize = [long]-1
+    $script:Stable = 0
+    $script:AutoReturn = $false
+    $script:PhaseStart = Get-Date
+    $name = [string]$req.name
+
+    $tray = New-Object System.Windows.Forms.NotifyIcon
+    $tray.Icon = [System.Drawing.SystemIcons]::Application
+    $tip = (T 'in_tray_tip') -f $name
+    if ($tip.Length -gt 63) { $tip = $tip.Substring(0, 63) }
+    $tray.Text = $tip
+    $menu = New-Object System.Windows.Forms.ContextMenuStrip
+    $miGuide = $menu.Items.Add((T 'in_show_guide'))
+    $miReturn = $menu.Items.Add((T 'tray_return'))
+    $miAuto = New-Object System.Windows.Forms.ToolStripMenuItem((T 'in_auto_return'))
+    $miAuto.CheckOnClick = $true
+    [void]$menu.Items.Add($miAuto)
+    $miClose = $menu.Items.Add((T 'in_close'))
+    $script:MiAuto = $miAuto
+    $miGuide.add_Click({ Show-Guide })
+    $miReturn.add_Click({ Invoke-InstallReturn })
+    $miAuto.add_Click({ $script:GuideCheck.Checked = $script:MiAuto.Checked })
+    $miClose.add_Click({ Stop-Agent })
+    $tray.ContextMenuStrip = $menu
+    $tray.add_MouseClick({
+        param($s, $e)
+        if ($e.Button -eq [System.Windows.Forms.MouseButtons]::Left) { Show-Guide }
+    })
+    $tray.Visible = $true
+    $script:Tray = $tray
+
+    # small guide window in the bottom right corner: what is happening and what the user has to do
+    $f = New-Object System.Windows.Forms.Form
+    $f.Text = T 'in_title'
+    $f.ClientSize = New-Object System.Drawing.Size(460, 236)
+    $f.FormBorderStyle = 'FixedDialog'
+    $f.MaximizeBox = $false
+    $f.MinimizeBox = $false
+    $f.TopMost = $true
+    $f.StartPosition = 'Manual'
+    $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+    $f.Location = New-Object System.Drawing.Point(($wa.Right - $f.Width - 16), ($wa.Bottom - $f.Height - 16))
+    $head = New-Object System.Windows.Forms.Label
+    $head.SetBounds(16, 12, 428, 24)
+    $head.Font = New-Object System.Drawing.Font($f.Font.FontFamily, 11, [System.Drawing.FontStyle]::Bold)
+    $head.Text = (T 'in_head') -f $name
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.SetBounds(16, 44, 428, 108)
+    $lbl.Text = (T 'in_preparing') -f $name
+    $chk = New-Object System.Windows.Forms.CheckBox
+    $chk.SetBounds(16, 158, 428, 24)
+    $chk.Text = T 'in_auto_return'
+    $ret = New-Object System.Windows.Forms.Button
+    $ret.SetBounds(174, 194, 160, 30)
+    $ret.Text = T 'tray_return'
+    $hide = New-Object System.Windows.Forms.Button
+    $hide.SetBounds(344, 194, 100, 30)
+    $hide.Text = T 'in_hide'
+    $f.Controls.AddRange(@($head, $lbl, $chk, $ret, $hide))
+    $script:Guide = $f
+    $script:GuideLabel = $lbl
+    $script:GuideCheck = $chk
+    $chk.add_CheckedChanged({
+        $script:AutoReturn = $script:GuideCheck.Checked
+        $script:MiAuto.Checked = $script:GuideCheck.Checked
+        if ($script:AutoReturn -and ($script:Phase -eq 'done') -and (($null -eq $script:Prompt) -or $script:Prompt.IsDisposed)) {
+            $script:ReturnTextKey = 'in_return_text'
+            Show-ReturnPrompt
+        }
+    })
+    $ret.add_Click({ Invoke-InstallReturn })
+    $hide.add_Click({ $script:Guide.Hide() })
+    $f.add_FormClosing({
+        param($s, $e)
+        if ($e.CloseReason -eq [System.Windows.Forms.CloseReason]::UserClosing) { $e.Cancel = $true; $s.Hide() }
+    })
+
+    $timer = New-Object System.Windows.Forms.Timer
+    $timer.Interval = 2000
+    $timer.add_Tick({ try { Install-Step } catch { Write-Log "install step: $_" } })
+    $script:Timer = $timer
+
+    if (-not $Launchers.ContainsKey([string]$req.install.launcher)) {
+        Write-Log "unknown launcher: $($req.install.launcher)"
+        $tray.Visible = $false
+        $tray.Dispose()
+        return
+    }
+    $f.Show()
+    $timer.Start()
+    [System.Windows.Forms.Application]::Run()
 }
 
 # ---- waiting for the game to end ------------------------------------------------------------------
@@ -522,7 +1079,7 @@ function Show-ReturnPrompt {
     $f.TopMost = $true
     $lbl = New-Object System.Windows.Forms.Label
     $lbl.SetBounds(20, 20, 400, 50)
-    $lbl.Text = (T 'return_text') -f $script:Left
+    $lbl.Text = (T $script:ReturnTextKey) -f $script:Left
     $stay = New-Object System.Windows.Forms.Button
     $stay.SetBounds(150, 82, 130, 30)
     $stay.Text = T 'return_stay'
@@ -540,7 +1097,7 @@ function Show-ReturnPrompt {
         $script:Left--
         if ((Get-AliveNames $false).Count -gt 0) { $script:Decision = 'resume'; $script:Prompt.Close(); return }
         if ($script:Left -le 0) { $script:Decision = 'return'; $script:Prompt.Close(); return }
-        $script:PromptLabel.Text = (T 'return_text') -f $script:Left
+        $script:PromptLabel.Text = (T $script:ReturnTextKey) -f $script:Left
     })
     $stay.add_Click({ $script:Decision = 'stay'; $script:Prompt.Close() })
     $now.add_Click({ $script:Decision = 'return'; $script:Prompt.Close() })
@@ -656,15 +1213,17 @@ switch ($Mode) {
     'Agent' {
         $req = Read-Request
         if ($req) {
-            Write-Log "request: $($req.id) ($($req.launch.type))"
+            $isInstall = ([string]$req.type -eq 'install')
+            Write-Log "request: $($req.id) ($($req.launch.type)$($req.type))"
             $script:ReturnInfo = $req.return
             if ($req.return) { Set-ConfigValue 'last_return' $req.return }
-            try { Start-GameAsUser $req } catch { Write-Log "launch failed: $_" }
+            if (-not $isInstall) { try { Start-GameAsUser $req } catch { Write-Log "launch failed: $_" } }
         } else {
             try { [Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'BelowNormal' } catch {}
         }
         try { Export-Inventory } catch { Write-Log "inventory: $_" }
         Close-Esp
-        if ($req) { Wait-ForGame $req }
+        if ($req -and $isInstall) { Wait-ForInstall $req }
+        elseif ($req) { Wait-ForGame $req }
     }
 }

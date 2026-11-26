@@ -82,7 +82,7 @@ Window {
                 visible: wb.mode === "confirm" || wb.mode === "firstuse" || wb.mode === "offer"
                 enabled: wb.mode !== "offer" || wb.canSwitch
                 kind: "accent"
-                text: wb.mode === "confirm" ? "Windows로 전환" : wb.mode === "firstuse" ? "Windows로 이동" : "실제 Windows에서 실행"
+                text: wb.mode === "confirm" ? wb.confirmText : wb.mode === "firstuse" ? "Windows로 이동" : "실제 Windows에서 실행"
                 onClicked: wb.proceed()
             }
             SButton {

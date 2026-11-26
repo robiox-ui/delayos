@@ -434,3 +434,15 @@ def remove_argv(source, pkg):
     if source == "flathub":
         return ["flatpak", "uninstall", "-y", "--noninteractive", "--system", pkg]
     return ["pkexec", HELPER, "remove", pkg]
+
+
+# ---- Windows games (delay-winboot, docs/windows-switch.md) ---------------------------------
+def wingames():
+    """Data of the "Windows 게임" page: curated anti-cheat games and launchers that DelayOS can install
+    into the real Windows of this PC. available is False without a Windows install + its helper.
+    Cheap (cached inventory only, no root)."""
+    import sys
+    if "/usr/share/delayos/winboot" not in sys.path:
+        sys.path.append("/usr/share/delayos/winboot")
+    import wbgames
+    return wbgames.store_view()

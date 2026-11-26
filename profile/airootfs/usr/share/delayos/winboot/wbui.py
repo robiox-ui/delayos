@@ -43,12 +43,15 @@ class WinBoot(QObject):
 
     def __init__(self, action, game_id="", file="", yes=False, dry=False):
         super().__init__()
-        self._action = action            # game | offer | setup | add
+        self._action = action            # game | offer | setup | add | install | install-launcher
         self._id, self._file, self._yes, self._dry = game_id, file, yes, dry
         self._mode = "busy"
         self._title = self._message = self._note = self._steps = ""
         self._cfg = wb.settings()
-        self._game = wb.resolve(game_id) if game_id else None
+        self._game = wb.resolve(game_id) if game_id and action != "install-launcher" else None
+        self._plan = None                # (name, plan) for install / install-launcher
+        self._update = False             # the Windows helper is too old to install: offer the update
+        self._confirm_text = "Windows로 전환"
         self._st = None
         self._can_switch = False
         self._procs = []
@@ -61,6 +64,7 @@ class WinBoot(QObject):
     steps = Property(str, lambda s: s._steps, notify=changed)
     canSwitch = Property(bool, lambda s: s._can_switch, notify=changed)
     gameName = Property(str, lambda s: s._game["name"] if s._game else "", notify=changed)
+    confirmText = Property(str, lambda s: s._confirm_text, notify=changed)
     splashText = Property(bool, lambda s: s._cfg["splashText"], constant=True)
     hasFile = Property(bool, lambda s: bool(s._file), constant=True)
     winPath = Property(str, lambda s: to_windows_path(s._file) if s._file else "", constant=True)
@@ -103,6 +107,14 @@ class WinBoot(QObject):
         if self._action in ("game", "offer") and not self._game:
             self._set("error", "Windows로 전환할 수 없습니다", "알 수 없는 게임입니다: " + self._id)
             return
+        if self._action in ("install", "install-launcher"):
+            if self._action == "install" and self._game and self._game["installed"] is True:
+                self._action = "game"            # already there: just play
+            else:
+                self._plan = wb.install_plan("launcher" if self._action == "install-launcher" else "game", self._id)
+                if not self._plan:
+                    self._set("error", "설치할 수 없습니다", "이 항목은 DelayOS에서 설치할 수 없습니다: " + self._id)
+                    return
         # the login hook normally keeps the cache fresh; read the ESP now only if it never ran
         fresh = os.path.exists(wb.INVENTORY_CACHE)
         self._helper(["status", "--no-refresh"] if fresh else ["status"], self._on_status)
@@ -140,6 +152,31 @@ class WinBoot(QObject):
             self._helper(["install-helper"], self._on_installer)
             return
         need_ack = any(w["code"] == "bitlocker" for w in st.get("warnings", [])) and not self._cfg["bitlockerAck"]
+        if self._plan:
+            if not st["helper"].get("canInstall"):
+                self._update = True
+                self._helper(["install-helper"], self._on_installer)
+                return
+            name, plan = self._plan
+            ins = (self._game or {}).get("install") or {}
+            req = st.get("requirements") or wb.requirements()
+            unmet = [r["label"] for r in wb.requirement_status(ins.get("requires", []), req) if r["ok"] is False]
+            if (self._cfg["confirm"] or need_ack or unmet) and not self._yes:
+                msg = "Windows로 전환해서 설치합니다. 로그인은 직접 해야 합니다."
+                if plan["url"]:
+                    msg += ("\n\nPC가 Windows로 다시 시작되고, %s의 공식 설치 파일을 내려받아 서명을 확인한 뒤 설치를 시작합니다. "
+                            "설치가 끝나면 Windows 알림 영역의 DelayOS 아이콘에서 'DelayOS로 돌아가기'를 누르세요.") % plan["launcher_name"]
+                else:
+                    msg += "\n\nPC가 Windows로 다시 시작되고, 공식 다운로드 페이지가 브라우저에서 열립니다."
+                note = self._warnings()
+                if unmet:
+                    note = ("이 PC는 지금 %s이(가) 꺼져 있습니다. %s\n\n" % (", ".join(unmet), ins.get("anticheat_note", ""))).strip() \
+                        + ("\n\n" + note if note else "")
+                self._confirm_text = "Windows로 전환해서 설치"
+                self._set("confirm", name + "을(를) Windows에 설치할까요?", msg, note)
+                return
+            self._go(False)
+            return
         if (self._cfg["confirm"] or need_ack) and not self._yes:
             self._set("confirm", self._game["name"] + " 실행을 위해 Windows로 전환할까요?",
                       "열려 있는 앱이 닫히고 PC가 Windows로 다시 시작됩니다. 게임을 끝내면 자동으로 DelayOS로 돌아옵니다.",
@@ -155,7 +192,14 @@ class WinBoot(QObject):
             steps = ("Windows에서 할 일 (한 번만):\n1. 시작 버튼을 마우스 오른쪽 버튼으로 눌러 '터미널(관리자)'을 엽니다.\n"
                      "2. 다음 두 줄을 차례로 입력합니다.\n     mountvol S: /S\n     S:\\EFI\\DelayOS\\winboot\\setup.cmd")
         self._steps = steps
-        self._set("firstuse", "Windows 연동 도우미를 한 번 설치해야 합니다",
+        if self._update:
+            self._steps = steps.replace("(한 번만)", "(업데이트)")
+            self._set("firstuse", "Windows 연동 도우미를 업데이트해야 합니다",
+                      "Windows에 설치된 연동 도우미가 오래되어 게임을 설치하는 기능이 없습니다. 새 설치 파일을 준비해 두었습니다. "
+                      "Windows에서 한 번 다시 실행해 '다시 설치/업데이트'를 고른 뒤 DelayOS로 돌아와 설치를 다시 누르세요.",
+                      self._warnings())
+            return
+        self._set("firstuse","Windows 연동 도우미를 한 번 설치해야 합니다",
                   "게임을 자동으로 시작하고, 게임을 끝내면 DelayOS로 돌아오려면 Windows에 작은 도우미가 필요합니다. "
                   "설치 파일은 이미 준비해 두었습니다. 설치한 뒤에는 클릭 한 번으로 전환됩니다.",
                   self._warnings())
@@ -179,7 +223,13 @@ class WinBoot(QObject):
         if self._dry:
             QTimer.singleShot(4000, self.quitRequested.emit)
             return
-        args = ["arm", "--setup"] if setup else ["arm", self._game["id"], "--delay", str(self._cfg["returnDelay"])]
+        if setup:
+            args = ["arm", "--setup"]
+        elif self._plan:
+            args = ["arm", "--install-launcher" if self._action == "install-launcher" else "--install", self._id,
+                    "--delay", str(self._cfg["returnDelay"])]
+        else:
+            args = ["arm", self._game["id"], "--delay", str(self._cfg["returnDelay"])]
         # let the splash paint first, then write the request and select Windows for the next boot
         QTimer.singleShot(300, lambda: self._helper(args, self._on_armed))
 

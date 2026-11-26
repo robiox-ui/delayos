@@ -13,7 +13,7 @@
 param([switch]$Uninstall, [switch]$Unattended)
 
 $ErrorActionPreference = 'Continue'
-$Version = '1.0'
+$Version = '1.1'
 $Src = $PSScriptRoot
 $Base = Join-Path $env:ProgramData 'DelayOS\winboot'
 $TaskPath = '\DelayOS\'

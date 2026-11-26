@@ -1,6 +1,88 @@
 {
  "version": 1,
  "comment": "Curated games that need the real Windows (kernel anti-cheat). Fields: id, name (English), name_ko, icon (theme icon name), launch {type: riot|uri|exe, ...} = what the Windows helper starts, exit_processes = process names (without .exe) that mean 'the game is still running', aliases = ids the Windows helper reports for the same game (riot-<product>, steam-<appid>, epic-<appname>), exe_names = lower-case file name patterns the Windows Engine hands over to delay-winboot, featured = show in the Start menu before the Windows helper reported what is installed, reason = Korean explanation. Site additions: /etc/delayos/winboot/games.d/*.json (same format).",
+ "comment_install": "Installing from DelayOS (delay-winboot --install ID / --install-launcher ID, docs/windows-switch.md). launchers[]: id (steam|epic|riot|battlenet|ea|ubisoft), name, summary (Korean), account (Korean, whose login the user needs), url = OFFICIAL vendor installer (https, never a mirror; the Windows helper also checks the host against its own list and the Authenticode signer), page = official download page (opened in the browser when there is no url or the download fails), file = name to save as (.exe/.msi), publisher = expected signer (informational, the helper has its own list), args + silent = only switches the vendor supports, elevate = start the installer elevated (no UAC prompt). games[].install: launcher, optional url/page/file (Riot: the game's own installer, bundled = it installs the launcher AND the game), trigger = what starts the in-launcher install (same format as launch), detect = how the helper sees that the game is there ({type: steam, appid} | {type: epic, app} | {type: riot, product, min_gb}), size_gb, account, anticheat, anticheat_note (Korean), requires (tpm2, secureboot: needed on Windows 11). URLs last checked 2026-11-26.",
+ "launchers": [
+  {
+   "id": "steam",
+   "name": "Steam",
+   "icon": "steam",
+   "summary": "Valve의 게임 플랫폼",
+   "account": "Steam 계정",
+   "url": "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe",
+   "page": "https://store.steampowered.com/about/?l=koreana",
+   "file": "SteamSetup.exe",
+   "publisher": "Valve Corp.",
+   "args": "/S",
+   "silent": true,
+   "elevate": true
+  },
+  {
+   "id": "epic",
+   "name": "Epic Games Launcher",
+   "icon": "delayos-winboot-game",
+   "summary": "포트나이트와 Epic Games Store 게임",
+   "account": "Epic Games 계정",
+   "url": "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi",
+   "page": "https://store.epicgames.com/ko/download",
+   "file": "EpicGamesLauncherInstaller.msi",
+   "publisher": "Epic Games Inc.",
+   "args": "/qn /norestart",
+   "silent": true,
+   "elevate": true
+  },
+  {
+   "id": "riot",
+   "name": "Riot Client",
+   "icon": "delayos-winboot-game",
+   "summary": "발로란트, 리그 오브 레전드 등 Riot 게임 (게임 설치 파일에 포함)",
+   "account": "Riot 계정",
+   "page": "https://www.riotgames.com/ko",
+   "publisher": "Riot Games, Inc."
+  },
+  {
+   "id": "battlenet",
+   "name": "Battle.net",
+   "icon": "delayos-winboot-game",
+   "summary": "오버워치 2, 디아블로, 월드 오브 워크래프트",
+   "account": "Battle.net 계정",
+   "url": "https://downloader.battle.net/download/getInstallerForGame?os=win&gameProgram=BATTLENET_APP&version=Live",
+   "page": "https://download.battle.net/ko-kr/?product=bnetdesk",
+   "file": "Battle.net-Setup.exe",
+   "publisher": "Blizzard Entertainment, Inc.",
+   "args": "",
+   "silent": false,
+   "elevate": false
+  },
+  {
+   "id": "ea",
+   "name": "EA app",
+   "icon": "delayos-winboot-game",
+   "summary": "EA SPORTS FC, 배틀필드 등 EA 게임",
+   "account": "EA 계정",
+   "url": "https://origin-a.akamaihd.net/EA-Desktop-Client-Download/installer-releases/EAappInstaller.exe",
+   "page": "https://www.ea.com/ko-kr/ea-app",
+   "file": "EAappInstaller.exe",
+   "publisher": "Electronic Arts, Inc.",
+   "args": "",
+   "silent": false,
+   "elevate": false
+  },
+  {
+   "id": "ubisoft",
+   "name": "Ubisoft Connect",
+   "icon": "delayos-winboot-game",
+   "summary": "레인보우 식스, 어쌔신 크리드 등 Ubisoft 게임",
+   "account": "Ubisoft 계정",
+   "url": "https://static3.cdn.ubi.com/orbit/launcher_installer/UbisoftConnectInstaller.exe",
+   "page": "https://www.ubisoft.com/ko-kr/ubisoft-connect/download",
+   "file": "UbisoftConnectInstaller.exe",
+   "publisher": "UBISOFT ENTERTAINMENT INC.",
+   "args": "",
+   "silent": false,
+   "elevate": false
+  }
+ ],
  "games": [
   {
    "id": "valorant",
@@ -12,7 +94,21 @@
    "aliases": ["riot-valorant"],
    "exe_names": ["valorant.exe", "valorant-win64-shipping.exe", "install valorant*.exe"],
    "featured": true,
-   "reason": "발로란트는 Riot Vanguard(커널 안티치트)를 사용하며, Vanguard는 Linux에서 동작하지 않습니다."
+   "reason": "발로란트는 Riot Vanguard(커널 안티치트)를 사용하며, Vanguard는 Linux에서 동작하지 않습니다.",
+   "install": {
+    "launcher": "riot",
+    "url": "https://valorant.secure.dyn.riotcdn.net/channels/public/x/installer/current/live.live.kr.exe",
+    "page": "https://playvalorant.com/ko-kr/download/",
+    "file": "Install VALORANT.exe",
+    "bundled": true,
+    "trigger": { "type": "riot", "product": "valorant", "patchline": "live" },
+    "detect": { "type": "riot", "product": "valorant", "min_gb": 15 },
+    "size_gb": 40,
+    "account": "Riot 계정",
+    "anticheat": "Riot Vanguard",
+    "anticheat_note": "Windows 11에서는 TPM 2.0과 Secure Boot가 켜져 있어야 실행됩니다. Vanguard를 설치한 뒤 Windows를 한 번 다시 시작해야 게임이 시작됩니다.",
+    "requires": ["tpm2", "secureboot"]
+   }
   },
   {
    "id": "lol",
@@ -24,7 +120,21 @@
    "aliases": ["riot-league_of_legends"],
    "exe_names": ["leagueclient.exe", "league of legends.exe", "install league of legends*.exe"],
    "featured": true,
-   "reason": "리그 오브 레전드는 Riot Vanguard(커널 안티치트)를 사용하며, Vanguard는 Linux에서 동작하지 않습니다."
+   "reason": "리그 오브 레전드는 Riot Vanguard(커널 안티치트)를 사용하며, Vanguard는 Linux에서 동작하지 않습니다.",
+   "install": {
+    "launcher": "riot",
+    "url": "https://lol.secure.dyn.riotcdn.net/channels/public/x/installer/current/live.kr.exe",
+    "page": "https://www.leagueoflegends.com/ko-kr/download/",
+    "file": "Install League of Legends kr.exe",
+    "bundled": true,
+    "trigger": { "type": "riot", "product": "league_of_legends", "patchline": "live" },
+    "detect": { "type": "riot", "product": "league_of_legends", "min_gb": 8 },
+    "size_gb": 25,
+    "account": "Riot 계정",
+    "anticheat": "Riot Vanguard",
+    "anticheat_note": "Windows 11에서는 TPM 2.0이 켜져 있어야 실행됩니다 (Secure Boot 권장). Vanguard를 설치한 뒤 Windows를 한 번 다시 시작해야 할 수 있습니다.",
+    "requires": ["tpm2"]
+   }
   },
   {
    "id": "fortnite",
@@ -40,7 +150,17 @@
    "aliases": ["epic-fortnite"],
    "exe_names": ["fortniteclient-win64-shipping*.exe", "fortnitelauncher.exe"],
    "featured": true,
-   "reason": "포트나이트는 Linux에서 안티치트(Easy Anti-Cheat/BattlEye)를 허용하지 않아 실행할 수 없습니다."
+   "reason": "포트나이트는 Linux에서 안티치트(Easy Anti-Cheat/BattlEye)를 허용하지 않아 실행할 수 없습니다.",
+   "install": {
+    "launcher": "epic",
+    "trigger": { "type": "uri", "target": "com.epicgames.launcher://apps/Fortnite?action=install" },
+    "detect": { "type": "epic", "app": "Fortnite" },
+    "size_gb": 60,
+    "account": "Epic Games 계정",
+    "anticheat": "Easy Anti-Cheat / BattlEye",
+    "anticheat_note": "일반 플레이에는 추가 요구 사항이 없습니다. 대회에 참가하려면 TPM 2.0과 Secure Boot가 필요합니다.",
+    "requires": []
+   }
   },
   {
    "id": "pubg",
@@ -52,7 +172,17 @@
    "aliases": ["steam-578080"],
    "exe_names": ["tslgame.exe", "tslgame_be.exe"],
    "featured": false,
-   "reason": "배틀그라운드는 Linux에서 안티치트(BattlEye)를 허용하지 않아 실행할 수 없습니다."
+   "reason": "배틀그라운드는 Linux에서 안티치트(BattlEye)를 허용하지 않아 실행할 수 없습니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/578080" },
+    "detect": { "type": "steam", "appid": "578080" },
+    "size_gb": 40,
+    "account": "Steam 계정",
+    "anticheat": "BattlEye",
+    "anticheat_note": "추가 요구 사항이 없습니다.",
+    "requires": []
+   }
   },
   {
    "id": "apex",
@@ -64,7 +194,17 @@
    "aliases": ["steam-1172470"],
    "exe_names": ["r5apex.exe", "r5apex_dx12.exe"],
    "featured": false,
-   "reason": "에이펙스 레전드는 2024년부터 Linux에서의 실행을 막고 있습니다 (Easy Anti-Cheat)."
+   "reason": "에이펙스 레전드는 2024년부터 Linux에서의 실행을 막고 있습니다 (Easy Anti-Cheat).",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/1172470" },
+    "detect": { "type": "steam", "appid": "1172470" },
+    "size_gb": 75,
+    "account": "Steam 계정 (게임 안에서 EA 계정 연결)",
+    "anticheat": "Easy Anti-Cheat",
+    "anticheat_note": "추가 요구 사항이 없습니다.",
+    "requires": []
+   }
   },
   {
    "id": "r6siege",
@@ -76,7 +216,17 @@
    "aliases": ["steam-359550"],
    "exe_names": ["rainbowsix.exe", "rainbowsix_vulkan.exe", "rainbowsix_be.exe"],
    "featured": false,
-   "reason": "레인보우 식스 시즈는 Linux에서 안티치트(BattlEye)를 허용하지 않아 실행할 수 없습니다."
+   "reason": "레인보우 식스 시즈는 Linux에서 안티치트(BattlEye)를 허용하지 않아 실행할 수 없습니다.",
+   "install": {
+    "launcher": "steam",
+    "trigger": { "type": "uri", "target": "steam://install/359550" },
+    "detect": { "type": "steam", "appid": "359550" },
+    "size_gb": 85,
+    "account": "Steam 계정 (실행할 때 Ubisoft 계정 연결)",
+    "anticheat": "BattlEye",
+    "anticheat_note": "추가 요구 사항이 없습니다.",
+    "requires": []
+   }
   }
  ]
 }

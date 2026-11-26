@@ -9,6 +9,8 @@ Game sources, merged by catalog():
   windows   inventory exported by the Windows helper on every Windows boot (ESP -> root helper ->
             /var/cache/delayos/winboot/inventory.json): Steam, Epic, Riot, Ubisoft
   custom    ~/.config/delayos/winboot-games.json ("Windows 게임 추가")
+Curated games may carry an "install" block and the file a "launchers" list: what the Windows helper
+downloads and starts for delay-winboot --install (see install_plan(), store_view()).
 """
 import fnmatch
 import glob
@@ -37,22 +39,27 @@ BAD_SCHEMES = ("file", "javascript", "vbscript", "data", "shell", "ms-msdt", "se
 LAUNCH_TYPES = ("riot", "uri", "exe")
 _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 
+# installing from DelayOS (docs/windows-switch.md "Windows 게임 설치"). Only curated, root-owned
+# data ever becomes an install request: the Windows helper downloads and starts installers.
+LAUNCHER_IDS = ("steam", "epic", "riot", "battlenet", "ea", "ubisoft")
+INSTALL_MIN_HELPER = (1, 1)             # agent.ps1 version that understands "type": "install"
+URL_RE = re.compile(r"^https://[A-Za-z0-9.-]{4,100}/[A-Za-z0-9/_.~%?=&+-]{0,300}$")
+FILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,60}\.(exe|msi)$")
+ARGS_RE = re.compile(r"^[A-Za-z0-9 /=_.:-]{0,100}$")
+REQUIREMENTS = {"tpm2": "TPM 2.0", "secureboot": "Secure Boot"}
+
 
 # ---- validation -------------------------------------------------------------------------------
 def _s(v, limit=1024):
     return _CTRL.sub("", v).strip()[:limit] if isinstance(v, str) else ""
 
 
-def norm_game(d, source):
-    """Validated copy of a game description, or None. Everything that ends up in the launch
-    request for Windows goes through here (the root helper trusts nothing else)."""
-    if not isinstance(d, dict):
+def norm_launch(la):
+    """Validated copy of a launch description ({type: riot|uri|exe, ...}), or None."""
+    if not isinstance(la, dict):
         return None
-    gid = _s(d.get("id"), 64).lower()
-    name = _s(d.get("name_ko"), 100) or _s(d.get("name"), 100)
-    la = d.get("launch") if isinstance(d.get("launch"), dict) else {}
     typ = _s(la.get("type"), 16)
-    if not ID_RE.match(gid) or not name or typ not in LAUNCH_TYPES:
+    if typ not in LAUNCH_TYPES:
         return None
     launch = {"type": typ}
     if typ == "riot":
@@ -69,8 +76,78 @@ def norm_game(d, source):
     else:
         launch["path"] = _s(la.get("path"), 400)
         launch["args"] = _s(la.get("args"), 600)
-        if not re.match(r"^([A-Za-z]:\\|%[A-Za-z0-9_()]+%\\)", launch["path"]) or '"' in launch["path"]:
+        if not re.match(r"^([A-Za-z]:\|%[A-Za-z0-9_()]+%\)", launch["path"]) or '"' in launch["path"]:
             return None
+    return launch
+
+
+def _installer(d):
+    """The download part of a launcher or game install description (always a dict; url and page may
+    both be empty = nothing to install from)."""
+    url, page, file = _s(d.get("url"), 420), _s(d.get("page"), 420), _s(d.get("file"), 80)
+    args = _s(d.get("args"), 100)
+    if not URL_RE.match(page):
+        page = ""
+    if not URL_RE.match(url) or not FILE_RE.match(file):
+        url = file = ""
+    if not url or not ARGS_RE.match(args):
+        args = ""
+    return {"url": url, "page": page, "file": file, "args": args,
+            "silent": bool(url and args and d.get("silent")), "elevate": bool(url and d.get("elevate"))}
+
+
+def norm_launcher(d):
+    if not isinstance(d, dict):
+        return None
+    lid = _s(d.get("id"), 16).lower()
+    name = _s(d.get("name"), 60)
+    if lid not in LAUNCHER_IDS or not name:
+        return None
+    res = _installer(d)
+    res.update(id=lid, name=name, icon=_s(d.get("icon"), 200), summary=_s(d.get("summary"), 200),
+               account=_s(d.get("account"), 80), publisher=_s(d.get("publisher"), 80))
+    return res
+
+
+def norm_install(d):
+    """Validated games[].install, or None."""
+    if not isinstance(d, dict):
+        return None
+    lid = _s(d.get("launcher"), 16).lower()
+    if lid not in LAUNCHER_IDS:
+        return None
+    res = _installer(d)
+    det, detect = d.get("detect") if isinstance(d.get("detect"), dict) else {}, None
+    typ = _s(det.get("type"), 16)
+    if typ == "steam" and re.match(r"^[0-9]{1,12}$", _s(det.get("appid"), 16)):
+        detect = {"type": "steam", "appid": _s(det.get("appid"), 16)}
+    elif typ == "epic" and re.match(r"^[A-Za-z0-9_-]{1,64}$", _s(det.get("app"), 80)):
+        detect = {"type": "epic", "app": _s(det.get("app"), 80)}
+    elif typ == "riot" and re.match(r"^[a-z0-9_]{1,64}$", _s(det.get("product"), 80)):
+        gb = det.get("min_gb")
+        detect = {"type": "riot", "product": _s(det.get("product"), 80),
+                  "min_gb": max(0, min(500, gb)) if isinstance(gb, int) and not isinstance(gb, bool) else 0}
+    size = d.get("size_gb")
+    res.update(launcher=lid, bundled=bool(d.get("bundled") and res["url"]), trigger=norm_launch(d.get("trigger")),
+               detect=detect, size_gb=max(0, min(999, size)) if isinstance(size, int) and not isinstance(size, bool) else 0,
+               account=_s(d.get("account"), 80), anticheat=_s(d.get("anticheat"), 60),
+               anticheat_note=_s(d.get("anticheat_note"), 300),
+               requires=[r for r in (_s(x, 16).lower() for x in d.get("requires") or []) if r in REQUIREMENTS][:4])
+    if res["trigger"] and res["trigger"]["type"] == "exe":
+        res["trigger"] = None
+    return res
+
+
+def norm_game(d, source):
+    """Validated copy of a game description, or None. Everything that ends up in the launch
+    request for Windows goes through here (the root helper trusts nothing else)."""
+    if not isinstance(d, dict):
+        return None
+    gid = _s(d.get("id"), 64).lower()
+    name = _s(d.get("name_ko"), 100) or _s(d.get("name"), 100)
+    launch = norm_launch(d.get("launch"))
+    if not ID_RE.match(gid) or not name or not launch:
+        return None
     procs = []
     for p in d.get("exit_processes") or []:
         p = re.sub(r"\.exe$", "", _s(p, 80), flags=re.I)
@@ -85,6 +162,8 @@ def norm_game(d, source):
         "aliases": [a for a in (_s(x, 64).lower() for x in d.get("aliases") or []) if ID_RE.match(a)][:16],
         "exe_names": [_s(x, 100).lower() for x in d.get("exe_names") or [] if _s(x, 100)][:32],
         "featured": bool(d.get("featured")),
+        # only the curated (root-owned) list may describe an installer
+        "install": norm_install(d.get("install")) if source == "curated" else None,
     }
 
 
@@ -141,17 +220,19 @@ def save_custom(games):
 
 
 def load_inventory():
-    """{"helper": {...} or None, "games": [...]} from the cache the root helper keeps."""
+    """{"helper": {...} or None, "games": [...], "launchers": {id: installed?}} from the cache the
+    root helper keeps."""
     doc = _load_json(INVENTORY_CACHE)
     if not isinstance(doc, dict):
-        return {"helper": None, "games": []}
+        return {"helper": None, "games": [], "launchers": {}}
     games = []
     for d in _games_of(doc):
         g = norm_game(d, "windows")
         if g:
             games.append(g)
     helper = doc.get("helper") if isinstance(doc.get("helper"), dict) else None
-    return {"helper": helper, "games": games[:400]}
+    la = doc.get("launchers") if isinstance(doc.get("launchers"), dict) else {}
+    return {"helper": helper, "games": games[:400], "launchers": {k: bool(la.get(k)) for k in LAUNCHER_IDS}}
 
 
 def icon_file(g):
@@ -215,6 +296,118 @@ def match_exe(path):
             if fnmatch.fnmatchcase(base, pat):
                 return g["id"]
     return ""
+
+
+# ---- installing Windows games from DelayOS ----------------------------------------------------
+def load_launchers():
+    """{id: launcher} from the curated files (first definition wins)."""
+    res = {}
+    for path in [GAMES_FILE] + sorted(glob.glob(SYSTEM_GAMES_DIR + "/*.json")):
+        doc = _load_json(path)
+        for d in (doc.get("launchers") if isinstance(doc, dict) and isinstance(doc.get("launchers"), list) else []):
+            la = norm_launcher(d)
+            if la and la["id"] not in res:
+                res[la["id"]] = la
+    return res
+
+
+def helper_version(helper):
+    """(major, minor) of the Windows helper described by inventory/status data."""
+    m = re.match(r"^(\d{1,4})\.(\d{1,4})", str((helper or {}).get("version", "")))
+    return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+
+
+def helper_can_install(helper):
+    return helper_version(helper) >= INSTALL_MIN_HELPER
+
+
+def install_plan(kind, ident, home=None):
+    """What the Windows helper needs to install a curated game (kind "game") or a launcher
+    (kind "launcher"): (display name, plan dict), or None when DelayOS cannot install it."""
+    launchers = load_launchers()
+    ident = (ident or "").lower()
+    if kind == "launcher":
+        la, ins, name = launchers.get(ident), None, ""
+    else:
+        g = resolve(ident, home)
+        if not g or g["source"] != "curated" or not g.get("install"):
+            return None
+        ins, name = g["install"], g["name"]
+        la = launchers.get(ins["launcher"])
+    if not la:
+        return None
+    src = ins if ins and (ins["url"] or ins["page"]) else la     # Riot: the game's own installer
+    if not (src["url"] or src["page"]):
+        return None
+    plan = {"launcher": la["id"], "launcher_name": la["name"], "publisher": la["publisher"], "game": bool(ins), "lang": "ko",
+            "bundled": bool(ins and ins["bundled"] and src is ins),
+            "trigger": ins["trigger"] if ins else None, "detect": ins["detect"] if ins else None}
+    plan.update({k: src[k] for k in ("url", "page", "file", "args", "silent", "elevate")})
+    return (name or la["name"]), plan
+
+
+def tpm2():
+    """Is a TPM 2.0 visible? (the same chip Windows uses). None = cannot tell."""
+    try:
+        with open("/sys/class/tpm/tpm0/tpm_version_major", encoding="ascii") as f:
+            return f.read().strip() == "2"
+    except FileNotFoundError:
+        return False if os.path.isdir("/sys/class") else None
+    except Exception:
+        return None
+
+
+def secure_boot():
+    """Is Secure Boot on in the firmware? None = cannot tell."""
+    if not is_uefi():
+        return False
+    d = _efivar("SecureBoot")
+    return bool(d[0]) if d else None
+
+
+def requirements(helper=None):
+    """Firmware state the anti-cheat notes refer to. win11: True/False from the Windows helper, else None."""
+    build = (helper or {}).get("win_build")
+    return {"tpm2": tpm2(), "secureBoot": secure_boot(),
+            "win11": (build >= 22000) if isinstance(build, int) and not isinstance(build, bool) and build > 0 else None}
+
+
+def requirement_status(keys, req):
+    """[{key, label, ok}] for a game's "requires" list."""
+    return [{"key": k, "label": REQUIREMENTS[k], "ok": req.get("secureBoot" if k == "secureboot" else k)}
+            for k in keys if k in REQUIREMENTS]
+
+
+def store_view(home=None):
+    """Everything the Store's "Windows 게임" page shows. Cheap: reads the cached inventory only.
+    available = a Windows install was found AND its helper has reported in."""
+    inv = load_inventory()
+    helper = inv["helper"]
+    req = requirements(helper)
+    res = {"available": bool(helper is not None and windows_hint()), "canInstall": helper_can_install(helper),
+           "helperVersion": str((helper or {}).get("version", ""))[:20], "requirements": req, "games": [], "launchers": []}
+    if not res["available"]:
+        return res
+    launchers = load_launchers()
+    for g in catalog(home):
+        ins = g.get("install")
+        if g["source"] != "curated" or (not ins and g["installed"] is not True):
+            continue
+        la = launchers.get(ins["launcher"]) if ins else None
+        res["games"].append({
+            "id": g["id"], "name": g["name"], "icon": g.get("icon_file") or g["icon"] or "delayos-winboot-game",
+            "installed": g["installed"] is True, "installable": bool(ins and la and install_plan("game", g["id"], home)),
+            "launcher": la["name"] if la else "", "account": (ins["account"] if ins else "") or (la["account"] if la else ""),
+            "sizeGb": ins["size_gb"] if ins else 0, "anticheat": ins["anticheat"] if ins else "",
+            "anticheatNote": ins["anticheat_note"] if ins else "", "reason": g["reason"],
+            "requires": requirement_status(ins["requires"] if ins else [], req)})
+    for lid in LAUNCHER_IDS:
+        la = launchers.get(lid)
+        if la and (la["url"] or la["page"]):
+            res["launchers"].append({"id": lid, "name": la["name"], "icon": la["icon"] or "delayos-winboot-game",
+                                     "summary": la["summary"], "account": la["account"],
+                                     "installed": bool(inv["launchers"].get(lid)), "pageOnly": not la["url"]})
+    return res
 
 
 # ---- Start menu entries (generated per user) --------------------------------------------------

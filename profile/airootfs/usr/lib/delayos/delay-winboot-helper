@@ -9,6 +9,8 @@
 #                              /var/cache/delayos/winboot (world readable).
 #   arm ID [--delay N]         write the launch request and select Windows for the NEXT boot only
 #   arm --setup                copy the Windows helper installer and select Windows (no request)
+#   arm --install ID [--delay N]   request: install the curated game ID in Windows (official installer)
+#   arm --install-launcher LID     request: install a launcher (steam|epic|riot|battlenet|ea|ubisoft)
 #   install-helper             copy the Windows helper installer to the ESP (and C:\ if safe)
 #   disarm                     drop a pending request / one-time boot selection
 #
@@ -56,6 +58,9 @@ MSG = {
     "esp": "EFI 시스템 파티션에 접근하지 못했습니다.",
     "esp_full": "EFI 시스템 파티션에 남은 공간이 부족합니다.",
     "unknown_game": "알 수 없는 게임입니다.",
+    "no_install": "이 항목은 DelayOS에서 설치할 수 없습니다.",
+    "helper_missing": "Windows 연동 도우미가 설치되어 있지 않습니다. 설정 › 앱 지원 › Windows 전환에서 먼저 설치하세요.",
+    "helper_old": "Windows에 설치된 연동 도우미가 오래되어 게임을 설치할 수 없습니다. 설정 › 앱 지원 › Windows 전환 › '도우미 설치'로 업데이트하세요.",
     "usage": "잘못된 명령입니다.",
 }
 
@@ -309,7 +314,10 @@ def gather(refresh=True):
         st["helper"] = {"installed": True, "version": str(h.get("version", ""))[:20],
                         "autologon": bool(h.get("autologon")), "bootux": bool(h.get("bootux")),
                         "returnEntry": bool(h.get("return_entry")), "updated": str(h.get("updated", ""))[:40]}
+        st["helper"]["canInstall"] = wb.helper_can_install(h)
     st["games"] = len(inv["games"])
+    st["launchers"] = inv["launchers"]
+    st["requirements"] = wb.requirements(inv["helper"])      # TPM 2.0 / Secure Boot (anti-cheat notes)
     return st
 
 
@@ -430,6 +438,26 @@ def build_request(game, delay, st):
     }
 
 
+def build_install_request(kind, ident, delay, st):
+    """Request for the Windows helper (agent.ps1 >= 1.1) to install a curated game or a launcher.
+    It has no "launch" member on purpose: an older helper then ignores the request."""
+    if not st["helper"].get("installed"):
+        raise Fail("helper_missing")
+    if not st["helper"].get("canInstall"):
+        raise Fail("helper_old")
+    found = wb.install_plan(kind, ident, caller_home())
+    if not found:
+        raise Fail("no_install")
+    name, plan = found
+    cur = wb.current_efi(st["_entries"]) if st["uefi"] else None
+    return {
+        "version": 1, "type": "install", "id": ident, "name": name, "install": plan,
+        "return_delay": max(delay, 10), "created": int(time.time()), "nonce": os.urandom(8).hex(),
+        "return": {"label": cur["label"] if cur else "DelayOS", "path": cur["path"] if cur else "",
+                   "bootnum": cur["num"] if cur else ""},
+    }
+
+
 def place_request(st, req):
     data = (json.dumps(req, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
     if st["uefi"]:
@@ -543,10 +571,14 @@ def main(argv):
             else:
                 if len(ids) != 1 or not wb.ID_RE.match(ids[0]):
                     raise Fail("usage")
-                game = wb.resolve(ids[0], caller_home())
-                if not game:
-                    raise Fail("unknown_game")
-                place_request(st, build_request(game, delay, st))
+                if "--install" in argv or "--install-launcher" in argv:
+                    kind = "launcher" if "--install-launcher" in argv else "game"
+                    place_request(st, build_install_request(kind, ids[0], delay, st))
+                else:
+                    game = wb.resolve(ids[0], caller_home())
+                    if not game:
+                        raise Fail("unknown_game")
+                    place_request(st, build_request(game, delay, st))
             try:
                 method = select_windows(st)
             except Fail:

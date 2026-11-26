@@ -15,12 +15,15 @@ Window {
     title: "DelayOS Store"
     color: Theme.windowBg
 
-    property string view: "home"         // home | browse | installed | search | app
+    property string view: "home"         // home | browse | installed | wingames | search | app
     property string prevView: "home"
     property string category: "popular"
     property string query: ""
     property string appId: ""
     property var homeData: null
+    property var winData: null           // storeback.wingames(): Windows games page (only with a Windows install + helper)
+    readonly property bool hasWin: !!winData && winData.available === true
+    function loadWin() { call("storeback.wingames", [], function(r) { if (r && r.games) win.winData = r }) }
 
     function call(name, args, cb) {
         sys.call(name, args || [], function(s) {
@@ -35,6 +38,7 @@ Window {
     function handleArgs(a) {
         if (!a || !a.length) return
         if (a[0] === "--installed" || a[0] === "--updates") view = "installed"
+        else if (a[0] === "--windows") view = "wingames"
         else if (a[0] === "--search" && a.length > 1) search.text = a[1]
         else if (a[0].indexOf("-") !== 0) { appId = a[0].replace(/^appstream:\/*/, "").replace(/\.desktop$/, ""); view = "app" }
     }
@@ -88,6 +92,7 @@ Window {
     Component.onCompleted: {
         var _ac = sys.accent(); if (_ac) Theme.accent = _ac; Theme.dark = sys.dark()
         store.refreshInstalled()
+        loadWin()
         call("storeback.home", [], function(r) { if (r && r.essentials) win.homeData = r })
         handleArgs(appArgs)
     }
@@ -121,6 +126,7 @@ Window {
             x: 14; y: 76; spacing: 6
             Repeater {
                 model: [{ id: "home", label: "홈", icon: "go-home" }, { id: "browse", label: "둘러보기", icon: "view-app-grid-symbolic" }, { id: "installed", label: "설치됨", icon: "view-list-details" }]
+                       .concat(win.hasWin ? [{ id: "wingames", label: "Windows 게임", icon: "g:gamepad" }] : [])
                 Rectangle {
                     readonly property bool sel: win.view === modelData.id || (modelData.id === "home" && (win.view === "search") && false)
                     width: 202; height: 40; radius: 20
@@ -167,7 +173,7 @@ Window {
             anchors.fill: parent
             anchors.topMargin: 62
             sourceComponent: win.view === "home" ? homePage : win.view === "browse" ? browsePage : win.view === "installed" ? installedPage
-                           : win.view === "search" ? searchPage : appPage
+                           : win.view === "wingames" ? winPage : win.view === "search" ? searchPage : appPage
         }
         // install banner (§9.8 state 3)
         Rectangle {
@@ -315,6 +321,102 @@ Window {
                         SText { visible: !!parent.parent.job; text: parent.parent.job ? parent.parent.job.text : ""; role: "sub"; width: 160; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
                         SButton { text: "열기"; onClicked: store.launch(modelData) }
                         SButton { text: "제거"; visible: modelData.removable !== false; enabled: !parent.parent.job; onClicked: store.remove(modelData) } }
+                }
+            }
+        }
+    }
+    // "Windows 게임": anti-cheat games that only run in the real Windows of this PC (delay-winboot).
+    // Shown only when a Windows install and its DelayOS helper were found (storeback.wingames).
+    Component {
+        id: winPage
+        Scroller {
+            id: wp
+            readonly property var d: win.winData || ({})
+            readonly property var req: d.requirements || ({})
+            property string clicked: ""
+            function onOff(v) { return v === true ? "켜짐" : v === false ? "꺼짐" : "확인 불가" }
+            function run(flag, id) { clicked = id; unlock.restart(); sys.detach(["delay-winboot", flag, id]) }
+            Timer { id: unlock; interval: 6000; onTriggered: wp.clicked = "" }
+            Component.onCompleted: win.loadWin()
+
+            SText { text: "Windows 게임"; font.pixelSize: 28; font.weight: Font.DemiBold }
+            SText { width: content.width; visible: wp.d.available !== true; role: "sub"; font.pixelSize: 13; wrapMode: Text.Wrap; elide: Text.ElideNone
+                text: "이 PC에서 Windows 또는 Windows 연동 도우미를 찾지 못했습니다. 설정 › 앱 지원 › Windows 전환에서 도우미를 먼저 설치하세요." }
+            Rectangle {
+                width: content.width; height: infoCol.implicitHeight + 28; radius: 10; color: Theme.card
+                Column {
+                    id: infoCol
+                    x: 16; y: 14; width: parent.width - 32; spacing: 6
+                    SText { width: parent.width; text: "Windows로 전환해서 설치합니다. 로그인은 직접 해야 합니다."; font.pixelSize: 14; font.weight: Font.DemiBold; wrapMode: Text.Wrap; elide: Text.ElideNone }
+                    SText { width: parent.width; role: "sub"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone; lineHeight: 1.25
+                        text: "커널 안티치트 때문에 DelayOS에서 실행할 수 없는 게임입니다. '설치'를 누르면 PC가 이 컴퓨터의 Windows로 다시 시작되고, 공식 설치 파일(한국어)을 내려받아 서명을 확인한 뒤 설치를 시작합니다. 설치가 끝나면 Windows 알림 영역의 DelayOS 아이콘에서 'DelayOS로 돌아가기'를 누르세요." }
+                    SText { width: parent.width; role: "sub"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
+                        text: "이 PC: TPM 2.0 " + wp.onOff(wp.req.tpm2) + " · Secure Boot " + wp.onOff(wp.req.secureBoot) + (wp.req.win11 === true ? " · Windows 11" : wp.req.win11 === false ? " · Windows 10" : "") }
+                    SText { width: parent.width; visible: wp.d.available === true && wp.d.canInstall === false; color: "#E8BC6A"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
+                        text: "Windows에 설치된 연동 도우미가 오래되었습니다. '설치'를 누르면 업데이트 방법을 안내합니다." }
+                }
+            }
+
+            SText { text: "게임"; font.pixelSize: 17; font.weight: Font.DemiBold; topPadding: 6 }
+            Repeater {
+                model: wp.d.games || []
+                Rectangle {
+                    id: grow
+                    readonly property var g: modelData
+                    readonly property var unmet: (g.requires || []).filter(function(r) { return r.ok === false })
+                    width: content.width; height: Math.max(92, gcol.implicitHeight + 28); radius: 10; color: Theme.card
+                    SAppIcon { x: 16; y: 16; size: 44; source: grow.g.icon || ""; fallback: "delayos-winboot-game" }
+                    Column {
+                        id: gcol
+                        x: 76; y: 14; width: parent.width - 76 - 190; spacing: 3
+                        SText { width: parent.width; text: grow.g.name; font.pixelSize: 14; font.weight: Font.DemiBold }
+                        SText { width: parent.width; role: "sub"; font.pixelSize: 12
+                            text: [grow.g.launcher, grow.g.anticheat, grow.g.sizeGb > 0 ? "약 " + grow.g.sizeGb + "GB" : ""].filter(function(s) { return !!s }).join(" · ") }
+                        SText { width: parent.width; visible: !grow.g.installed && grow.g.installable; role: "sub"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
+                            text: "Windows로 전환해서 설치합니다. 로그인은 직접 해야 합니다." + (grow.g.account ? " (" + grow.g.account + ")" : "") }
+                        SText { width: parent.width; visible: text !== ""; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
+                            color: grow.unmet.length ? "#E8BC6A" : Theme.text2
+                            text: (grow.g.requires || []).length
+                                  ? grow.g.requires.map(function(r) { return r.label + " " + wp.onOff(r.ok) }).join(" · ") + " — " + grow.g.anticheatNote
+                                  : (grow.g.anticheatNote || "") }
+                    }
+                    SButton {
+                        anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter
+                        width: 150; implicitHeight: 34; radius: 8
+                        visible: grow.g.installed || grow.g.installable
+                        enabled: wp.clicked === ""
+                        kind: "accent"
+                        icon: grow.g.installed ? "media-playback-start" : "download"
+                        text: grow.g.installed ? "플레이" : "설치"
+                        onClicked: wp.run(grow.g.installed ? "--game" : "--install", grow.g.id)
+                    }
+                }
+            }
+
+            SText { text: "런처"; font.pixelSize: 17; font.weight: Font.DemiBold; topPadding: 6 }
+            SText { width: content.width; role: "sub"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
+                text: "다른 Windows 게임은 런처를 설치한 뒤 Windows에서 직접 설치하세요. Steam·Epic Games·Riot·Ubisoft 게임은 설치하면 시작 메뉴의 'Windows 게임'에 자동으로 나타납니다." }
+            Repeater {
+                model: wp.d.launchers || []
+                Rectangle {
+                    id: lrow
+                    readonly property var l: modelData
+                    width: content.width; height: 64; radius: 8; color: Theme.card
+                    SAppIcon { x: 14; anchors.verticalCenter: parent.verticalCenter; size: 36; source: lrow.l.icon || ""; fallback: "delayos-winboot-game" }
+                    Column { x: 62; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 62 - 190
+                        SText { width: parent.width; text: lrow.l.name; font.weight: Font.DemiBold }
+                        SText { width: parent.width; role: "sub"; font.pixelSize: 12
+                            text: lrow.l.installed ? lrow.l.summary : "Windows로 전환해서 설치합니다. 로그인은 직접 해야 합니다." + (lrow.l.account ? " (" + lrow.l.account + ")" : "") } }
+                    SText { visible: lrow.l.installed; anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter; text: "Windows에 설치됨"; role: "sub"; font.pixelSize: 12 }
+                    SButton {
+                        visible: !lrow.l.installed
+                        anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter
+                        width: 150; implicitHeight: 32; radius: 8
+                        enabled: wp.clicked === ""
+                        icon: "download"
+                        text: lrow.l.pageOnly ? "다운로드 페이지" : "설치"
+                        onClicked: wp.run("--install-launcher", lrow.l.id)
+                    }
                 }
             }
         }
