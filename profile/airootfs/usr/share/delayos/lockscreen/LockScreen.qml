@@ -112,18 +112,19 @@ Item {
         function onErrorMessageChanged() { var m = root.ko(authenticator.errorMessage); if (m) { root.info = m; root.uiVisible = true } }
         function onPromptChanged() { var m = root.ko(authenticator.prompt); if (m) root.info = m }
         function onPromptForSecretChanged() { root.busy = false; if (root.uiVisible && !root.noPassword) pw.forceActiveFocus() }
-        function onPamTimeoutChanged() {
-            if (!authenticator.pamTimeout && root.pendingPassword.length > 0) {
-                authenticator.respond(root.pendingPassword)
-                root.pendingPassword = ""
-            }
-        }
     }
 
     Sessions.SessionManagement { id: session; onAboutToSuspend: root.clearPassword() }
 
     // keeps the PAM conversation alive while the login part is shown (as Plasma's lock screen does)
-    Timer { interval: 1000; repeat: true; running: root.uiVisible && !authenticator.unlocked; onTriggered: authenticator.startAuthenticating() }
+    Timer {
+        interval: 1000; repeat: true; running: root.uiVisible && !authenticator.unlocked
+        onTriggered: {
+            authenticator.startAuthenticating()
+            // a password typed while PAM was restarting after a timeout
+            if (root.pendingPassword.length > 0 && !authenticator.pamTimeout) { authenticator.respond(root.pendingPassword); root.pendingPassword = "" }
+        }
+    }
     // back to the clock after 30 idle seconds with an empty field
     Timer { id: hideTimer; interval: 30000; onTriggered: { if (pw.text.length === 0 && !root.busy && !root.noPassword) root.uiVisible = false; else restart() } }
     Timer { id: infoTimer; interval: 5000; onTriggered: root.info = "" }

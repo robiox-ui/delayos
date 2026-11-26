@@ -1,6 +1,6 @@
 #!/bin/bash
 # delay-sys-helper: the only privileged entry point of the DelayOS system apps (Settings, Store, Drivers, Welcome).
-# Run through pkexec (polkit action org.delayos.syshelper). Arguments are validated; nothing is passed to a shell.
+# Run through pkexec (polkit actions org.delayos.syshelper.*, one per command). Arguments are validated; nothing is passed to a shell.
 #   install PKG...      pacman -S --needed (falls back to -Syu --needed when the sync DB is missing/stale);
 #                       also installs the Korean language pack of PKG where it is a separate package
 #   flatpak-lang        flatpak config (system): languages = ko;en, so installs pull the Korean locale
