@@ -9,6 +9,7 @@
 #                  -desktop   (arch "any", only into [delayos]; unchanged packages are skipped)
 #   pahole         CachyOS-patched pahole (the kernel needs it)                     -> [delayos]
 #   kernel         linux-delayos (generic) / linux-delayos-v3, -v4, -znver4         -> matching repo
+#   sb-general     delayos-sb-general for the linux-delayos in the pool (needs DELAYOS_KEYS) -> [delayos]
 #   curated        every package of packages/repo/curated.list, rebuilt per level   -> level repos
 #   pkg:<name>     one Arch package (by pkgbase), rebuilt per level                  -> level repos
 #   local:<dir>    a PKGBUILD directory below packages/                              -> [delayos]
@@ -46,13 +47,13 @@ while (( $# )); do
     --nocheck) NOCHECK=1 ;;
     --jobs) export DELAYOS_JOBS=${2:?}; shift ;;
     --proton-repack) PROTON_REPACK=1 ;;
-    -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown option $1" ;;
     *) TARGETS+=("$1") ;;
   esac
   shift
 done
-(( ${#TARGETS[@]} )) || { sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+(( ${#TARGETS[@]} )) || { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 if [[ ${TARGETS[*]} == list ]]; then
   for l in "${LEVELS[@]}"; do
@@ -352,6 +353,9 @@ run_target() {
     content) build_content ;;
     pahole)  build_pahole || true ;;
     kernel)  for l in ${sel:-generic}; do build_kernel "$l" || true; done ;;
+    sb-general) # the signed image for the linux-delayos that is in the pool (imported kernels)
+             ls "$(pool_dir generic)"/linux-delayos-[0-9]*.pkg.tar.zst >/dev/null 2>&1 || die "no linux-delayos in the [delayos] pool"
+             build_sb_general "$(pool_dir generic)" ;;
     curated) build_curated "${sel% }" ;;
     pkg:*)   pacman -Sy >/dev/null
              for l in ${sel:-v3}; do

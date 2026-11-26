@@ -260,7 +260,9 @@ efi_order_first() { # make the firmware entry "DelayOS" the first one in BootOrd
   have efibootmgr || return 0
   local out num order rest
   out=$(efibootmgr 2>/dev/null) || return 0
-  num=$(sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\? DelayOS\b.*/\1/p' <<<"$out" | head -n1)
+  # exactly "DelayOS" (not "DelayOS Recovery"); efibootmgr separates label and device path with a tab
+  num=$(awk -F'\t' '{ l = $1; sub(/^Boot[0-9A-Fa-f]+\*? /, "", l); sub(/ +$/, "", l) }
+                    $1 ~ /^Boot[0-9A-Fa-f]+/ && l == "DelayOS" { print substr($1, 5, 4); exit }' <<<"$out")
   order=$(sed -n 's/^BootOrder: //p' <<<"$out")
   [[ -n $num ]] || { warn "펌웨어에 DelayOS 부팅 항목이 없습니다"; return 1; }
   [[ $order == "$num"* ]] && { note "UEFI 부팅 순서: DelayOS가 첫 번째입니다"; return 0; }
@@ -504,7 +506,8 @@ cmd_apply() {
   if [[ -n $old && -s $old/etc/fstab ]]; then cp -a "$old/etc/fstab" "$top/@/etc/fstab"; else gen_fstab "$top/@" "$target" "$esp"; fi
   if [[ -n $overlay ]]; then
     [[ -d $overlay ]] || fail_apply "$overlay: 폴더가 없습니다"
-    cp -a "$overlay/." "$top/@/" || fail_apply "--overlay 폴더를 복사하지 못했습니다"
+    # entry by entry, so the folder's own owner and mode do not land on /
+    ( shopt -s dotglob nullglob; for a in "$overlay"/*; do cp -a "$a" "$top/@/" || exit 1; done ) || fail_apply "--overlay 폴더를 복사하지 못했습니다"
   fi
   [[ -f $top/@/etc/mkinitcpio.conf.d/archiso.conf ]] && live=1
   if (( live )); then

@@ -102,7 +102,7 @@ open_top() {
 }
 supported() { # the running system is on btrfs and uses the DelayOS subvolume layout
   local src; src=$(findmnt -fno FSTYPE,FSROOT / 2>/dev/null)
-  [[ $src == "btrfs /$SYS" ]] && return 0
+  [[ $src == "btrfs /$SYS" || $src == "btrfs /@old-"* ]] && return 0     # @old-*: rolled back, restart pending
   [[ -n $(booted_snapshot) ]]
 }
 is_subvol() { [[ -d $1 ]] && [[ $(stat -c %i "$1" 2>/dev/null) == 256 ]]; }
@@ -372,7 +372,9 @@ cmd_reset() {
   # 3. fresh system from the factory copy
   say "새 시스템을 만드는 중…"
   btrfs subvolume snapshot "$TOP/$FACTORY" "$TOP/@.new" >/dev/null || die "초기화용 사본에서 새 시스템을 만들지 못했습니다"
-  ( cd "$stash" && cp -a . "$TOP/@.new/" ) || warn "일부 설정을 옮기지 못했습니다"
+  # entry by entry: "cp -a stash/. target/" would also put the mode of the (private) stash folder on /
+  ( shopt -s dotglob nullglob; for f in "$stash"/*; do cp -a "$f" "$TOP/@.new/" || exit 1; done ) || warn "일부 설정을 옮기지 못했습니다"
+  chmod 755 "$TOP/@.new"
   rm -rf "$stash"
   rm -f "$TOP/@.new/var/lib/delay/firstboot.done"
   mkdir -p "$TOP/@.new/var/lib/delay" && printf 'reset-%s %s\n' "$mode" "$(date '+%F %T')" > "$TOP/@.new/var/lib/delay/snapshot-restored"

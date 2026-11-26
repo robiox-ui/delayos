@@ -10,6 +10,9 @@
 #   GITHUB_TOKEN=<token with "contents: write" on robiox-ui/delayos> \
 #   tools/repo-publish.sh [--level L[,L]|all] [--sign-only] [--dry-run] [--keep-old]
 #
+#   GITHUB_TOKEN=... tools/repo-publish.sh --upload-only   upload a pool that --sign-only signed earlier
+#                                                (no key on this machine; unsigned files are refused)
+#
 #   tools/repo-publish.sh --pull [--level ...]   fetch the published databases into an empty pool
 #                                                (no token needed; CI runners start without a pool)
 #
@@ -27,16 +30,17 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=tools/repo-common.sh
 . "$HERE/repo-common.sh"
 
-LEVELSEL=all; SIGN_ONLY=0; DRY=0; KEEP_OLD=0; PULL=0
+LEVELSEL=all; SIGN_ONLY=0; DRY=0; KEEP_OLD=0; PULL=0; UPLOAD_ONLY=0
 while (( $# )); do
   case "$1" in
     --level) LEVELSEL=${2:?}; shift ;;
     --level=*) LEVELSEL=${1#*=} ;;
     --sign-only) SIGN_ONLY=1 ;;
+    --upload-only) UPLOAD_ONLY=1 ;;
     --dry-run) DRY=1 ;;
     --keep-old) KEEP_OLD=1 ;;
     --pull) PULL=1 ;;
-    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
   shift
@@ -258,12 +262,26 @@ if (( DRY )) && [[ -z ${DELAYOS_REPO_KEY:-}${DELAYOS_REPO_KEY_DATA:-} ]]; then
   for l in $levels; do publish_level "$l"; done
   exit 0
 fi
-load_key
 check_sb_pair
-for l in $levels; do
-  pool_has_packages "$l" || continue
-  sign_level "$l"
-done
+if (( UPLOAD_ONLY )); then
+  # the pool was signed earlier (--sign-only) and the key is no longer on this machine:
+  # upload exactly those signatures, and refuse anything that has none
+  for l in $levels; do
+    pool_has_packages "$l" || continue
+    d=$(pool_dir "$l")
+    [[ -s $(db_file "$l").sig && -s $d/$(repo_name "$l").files.tar.gz.sig ]] || die "[$(repo_name "$l")] the database is not signed: run --sign-only with the key first"
+    while read -r n v f; do
+      [[ ! -f $d/$f || -s $d/$f.sig ]] || die "$f has no signature: run --sign-only with the key first"
+      [[ ! -f $d/$f ]] || (( $(stat -c %s "$d/$f") < MAX_ASSET )) || die "$f is larger than 2 GiB"
+    done < <(db_list "$(db_file "$l")")
+  done
+else
+  load_key
+  for l in $levels; do
+    pool_has_packages "$l" || continue
+    sign_level "$l"
+  done
+fi
 if (( SIGN_ONLY )); then log "Signed. Not uploaded (--sign-only)."; exit 0; fi
 (( DRY )) || [[ -n ${GITHUB_TOKEN:-} ]] || die "Set GITHUB_TOKEN (fine-grained token, Contents: read and write on $GH_OWNER/$GH_REPO)"
 for l in $levels; do publish_level "$l"; done
