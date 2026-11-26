@@ -12,5 +12,5 @@ Terminal=false
 NoDisplay=true
 StartupNotify=false
 StartupWMClass=org.delayos.MacApps
-Categories=System;Utility;
+Categories=Utility;
 MimeType=application/x-apple-diskimage;application/x-xar;application/vnd.apple.installer+xml;application/x-mach-binary;application/x-apple-app-bundle;

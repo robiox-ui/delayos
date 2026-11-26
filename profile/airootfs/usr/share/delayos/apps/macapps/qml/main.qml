@@ -153,7 +153,7 @@ Window {
                                  builtin: "DelayOS에 이미 들어 있는 기능입니다", link: "제작사가 Linux 버전을 제공합니다",
                                  alt: "Linux 버전은 없지만 대신 쓸 앱이 있습니다", win: "Windows 버전으로 실행할 수 있습니다",
                                  web: "웹 버전을 쓸 수 있습니다", cli: "명령줄 Mac 프로그램입니다",
-                                 none: "이 Mac 앱은 DelayOS에서 실행할 수 없습니다" })[win.verdict] || "" }
+                                 none: (win.info && win.info.error) ? win.info.error : (win.info && win.info.kind === "unknown") ? "Mac 앱 파일이 아닌 것 같습니다" : "이 Mac 앱은 DelayOS에서 실행할 수 없습니다" })[win.verdict] || "" }
                 }
                 SText { width: parent.width; role: "sub"; font.pixelSize: 13; wrapMode: Text.Wrap; elide: Text.ElideNone; lineHeight: 1.25
                     text: win.entry && win.entry.note ? win.entry.note
