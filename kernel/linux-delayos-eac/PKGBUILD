@@ -227,7 +227,7 @@ _minor=6
 #_rcver=rc8
 pkgver=${_major}.${_minor}
 _tagrel=1
-pkgrel=1
+pkgrel=2
 _srcname=cachyos-${_major}.${_minor}-${_tagrel}
 pkgdesc='DelayOS anti-cheat kernel (Easy Anti-Cheat Linux v2): linux-delayos with lockdown, signed modules, IOMMU and BPF LSM'
 _kernver="$pkgver-$pkgrel"
@@ -292,7 +292,7 @@ source=(
 )
 b2sums=('67e2a98ad5df5469afae493c34a3f2155932abb94b16c016a8782790bf3a305f91c03b126555294bd4f88d74952bb997f4839b5769980dafbcad08d0579ac7ea'
         'SKIP'
-        'e6fc382da6b317f14b0ffe1e22e120ea8c9efa03a95ee58360765629b7b81f89e98f04349134232215ae0ff8aa10c2200a7551a3c3aeb1e5d1fb1e4c5673f0e9')
+        '87c4aeb535c2d5d8997834cd2f6e7f53ad729f895c972757f4d310079a3828f9711fe73e83cebf32a694f46d1be2718967d704a08a19c288de4c4b5399a4e1a7')
 validpgpkeys=(
   E18447AC260021D31F3FF6C4C8A2A4774B8B63C4  # Eric Naim <dnaim@cachyos.org>
   E8B9AA39F054E30E8290D492C3C4820857F654FE  # Peter Jung <admin@ptr1337.dev>
