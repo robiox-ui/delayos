@@ -1,0 +1,13 @@
+# DelayOS boot time (docs/reports/optimize-rounds.md, round 2). Must sort after 99-systemd.rules.
+#
+# systemd mounts /sys/fs/fuse/connections and /sys/kernel/config from sysinit.target, and
+# 99-systemd.rules asks for the same two mount units again when the "fuse" and "configfs" modules
+# show up in udev. With both built into the kernel (linux-delayos) the mounts are done in the
+# first milliseconds, but the second request arrives with the udev coldplug, when PID 1 is not
+# starting mount jobs (mount-table events rate limited, up to 1 s). The second job does nothing,
+# yet sysinit.target is ordered after it and waited the whole time.
+#
+# Built-in modules have no "initstate" attribute in /sys/module/<name>. For those the extra
+# request is dropped; for a kernel that loads fuse or configfs as a module (linux-lts) nothing
+# changes, there the udev request is what mounts the file system after the module is loaded.
+SUBSYSTEM=="module", KERNEL=="fuse|configfs", TEST!="initstate", ENV{SYSTEMD_WANTS}=""

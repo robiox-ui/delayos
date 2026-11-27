@@ -101,6 +101,43 @@ echo 'GRUB_TOP_LEVEL="/boot/vmlinuz-linux-delayos"' >> /etc/default/grub
 # the snapshot menu of grub-btrfs is translated (delay-grub-ko; repeated by a pacman hook)
 /usr/lib/delayos/delay-grub-ko setup || true
 
+# ---- Boot time: mount the fstab file systems in the initramfs (docs/reports/optimize-rounds.md, round 2) ----
+# PID 1 stops starting mount jobs for up to a second once the mount table has changed more than
+# five times within a second, and the first moments of userspace always use that up. /home,
+# /var/log, the other btrfs subvolumes, /tmp and the EFI partition were then mounted about 0.9 s
+# after userspace began although the disk was ready after 0.3 s, and the login screen waited.
+# With x-initrd.mount the initramfs (systemd hook, see etc/calamares/modules/initcpiocfg.conf)
+# mounts them together with the root file system, so the real system finds them in place.
+#   - btrfs subvolumes on the device of / and the tmpfs on /tmp: x-initrd.mount
+#   - /boot/efi: x-initrd.mount and nofail (a missing or damaged EFI partition no longer stops the
+#     boot in emergency mode), fsck pass 0: the initramfs has no fsck.fat, and an fsck job would
+#     start the mount late enough to fall into the next rate-limited second. vfat is added to the
+#     initramfs for it; without the module the mount is simply done by the real system as before.
+# An initramfs without systemd ignores the option (mount(8) skips x-* options).
+if [[ -s /etc/fstab ]] && awk '$1 !~ /^#/ && $2 == "/" && $3 == "btrfs" { f = 1 } END { exit !f }' /etc/fstab; then
+  rootspec=$(awk '$1 !~ /^#/ && $2 == "/" { print $1; exit }' /etc/fstab)
+  if awk -v rd="$rootspec" '
+      $1 ~ /^#/ || NF < 4 { print; next }
+      { o = $4 }
+      $1 == rd && $3 == "btrfs" && $2 != "/" && o !~ /x-initrd\.mount/ { o = o ",x-initrd.mount" }
+      $2 == "/tmp" && $3 == "tmpfs" && o !~ /x-initrd\.mount/ { o = o ",x-initrd.mount" }
+      $2 == "/boot/efi" && $3 == "vfat" && o !~ /x-initrd\.mount/ {
+        if (o !~ /(^|,)nofail(,|$)/) o = o ",nofail"
+        o = o ",x-initrd.mount"; $6 = 0
+      }
+      o != $4 { $4 = o }
+      { print }' /etc/fstab > /etc/fstab.delay-new && [[ -s /etc/fstab.delay-new ]]; then
+    cat /etc/fstab.delay-new > /etc/fstab
+    mkdir -p /etc/mkinitcpio.conf.d
+    cat > /etc/mkinitcpio.conf.d/delayos-boot.conf <<'EOF'
+# DelayOS (delay-postinstall): /boot/efi is mounted in the initramfs (x-initrd.mount in /etc/fstab),
+# which needs the vfat module there. Code page 437 and the ascii charset are built into the kernel.
+MODULES+=(vfat)
+EOF
+  fi
+  rm -f /etc/fstab.delay-new
+fi
+
 # Services
 systemctl enable sddm NetworkManager bluetooth fstrim.timer irqbalance \
   ananicy-cpp power-profiles-daemon systemd-oomd delay-firstboot delay-eac-facts scx_loader rtkit-daemon 2>/dev/null || true
