@@ -3,6 +3,7 @@
 # Same sources, patches and options as CachyOS's default kernel. Changes vs upstream PKGBUILD:
 #   - package name linux-delayos (no -gcc/-lto suffix logic)
 #   - _processor_opt=generic_v1 so the ISO kernel runs on every x86-64 CPU (CachyOS default is -march=native)
+#   - _cpusched=bore (BORE is the scheduler when sched-ext is off; CachyOS default is EEVDF)
 #   - _tcp_bbr3=yes (BBRv3 + fq default)
 #   - KBUILD_BUILD_HOST=delayos
 # Build:  makepkg -s --skippgpcheck   (sources are pinned by b2sums)
@@ -28,7 +29,9 @@
 # 'eevdf' - select 'EEVDF Scheduler'
 # 'rt' - select EEVDF, but includes a series of realtime patches
 # 'rt-bore' - select Burst-Oriented Response Enhancer, but includes a series of realtime patches
-: "${_cpusched:=cachyos}"
+# DelayOS: bore. "cachyos" is plain EEVDF since CachyOS made that its default (it enables the
+# SCHED_BORE symbol below, but the patch that defines it is only fetched for bore/rt-bore/hardened).
+: "${_cpusched:=bore}"
 
 ### Tweak kernel options prior to a build via nconfig
 : "${_makenconfig:=no}"
@@ -880,3 +883,7 @@ b2sums=('67e2a98ad5df5469afae493c34a3f2155932abb94b16c016a8782790bf3a305f91c03b1
         'SKIP'
         'e6fc382da6b317f14b0ffe1e22e120ea8c9efa03a95ee58360765629b7b81f89e98f04349134232215ae0ff8aa10c2200a7551a3c3aeb1e5d1fb1e4c5673f0e9'
         'c992567bd7dd8553432be496ffa1c17e2f5ebe9c7edb51945cf977e1b742dd6517c210d8843bb82744ca705efd07f8027cd7dde41b50215ebd707a34aa81462e')
+# the BORE patch is appended to source by the scheduler case above (last entry)
+case "$_cpusched" in
+    bore|rt-bore|hardened) b2sums+=('355a279dea4edf0148cc6499b770bb6d07c55623ea334e6b0db52eba746454d5afafe58bbcf357c9bc53aaa1319a610cd167dba77f6c866835077aed85a2d45c');;
+esac

@@ -66,4 +66,5 @@ usr/lib/delayos/delay-render-detect
 usr/share/delayos/render-software/
 # boot time: initramfs hook (docs/reports/optimize-rounds.md, round 10)
 usr/lib/initcpio/install/delay-boot
+usr/lib/delayos/delay-boot-tune
 usr/share/delayos/initrd/

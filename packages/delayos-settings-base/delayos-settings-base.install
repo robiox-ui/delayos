@@ -4,4 +4,10 @@ post_upgrade() {
         systemctl daemon-reload >/dev/null 2>&1 || true
         sysctl -q --system >/dev/null 2>&1 || true
     fi
+    # systems installed before the boot-time work (docs/reports/optimize-rounds.md, rounds 2 and
+    # 10): fstab options and the initramfs hook, once, with a backup of /etc/fstab, and only on
+    # the layout the DelayOS installer creates. Rebuilds the initramfs images (about a minute).
+    if [ -x /usr/lib/delayos/delay-boot-tune ] && [ ! -e /var/lib/delay/boot-tune.migrated ]; then
+        /usr/lib/delayos/delay-boot-tune migrate || true
+    fi
 }

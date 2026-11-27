@@ -77,6 +77,7 @@ file_permissions=(
   ["/usr/lib/delayos/delay-grub-ko"]="0:0:755"
   ["/usr/lib/delayos/delay-splash-handoff"]="0:0:755"
   ["/usr/lib/delayos/delay-render-detect"]="0:0:755"
+  ["/usr/lib/delayos/delay-boot-tune"]="0:0:755"
   ["/usr/local/bin/delay-cpu-opt"]="0:0:755"
   ["/usr/local/bin/delay-gpu-setup"]="0:0:755"
   ["/usr/bin/delay-steam-compat"]="0:0:755"

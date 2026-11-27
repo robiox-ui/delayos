@@ -2,7 +2,7 @@
 # Based on CachyOS linux-cachyos-eac (https://github.com/CachyOS/linux-cachyos/tree/master/linux-cachyos-eac), GPL-2.0.
 # Same sources, patches and options as linux-delayos plus the EAC configuration of CachyOS. Changes vs upstream:
 #   - package name linux-delayos-eac (no -gcc/-lto suffix logic)
-#   - _processor_opt=generic_v1, _tcp_bbr3=yes, KBUILD_BUILD_HOST=delayos (same as linux-delayos)
+#   - _processor_opt=generic_v1, _cpusched=bore, _tcp_bbr3=yes, KBUILD_BUILD_HOST=delayos (same as linux-delayos)
 #   - out-of-tree modules built in this package: nvidia-open and r8125 (DKMS modules do not load under
 #     module.sig_enforce=1). ZFS and nvidia-580xx are off (not used by DelayOS).
 #   - nvidia-open follows the nvidia-utils version of the Arch repos at build time (see _nv_ver)
@@ -45,7 +45,9 @@
 # 'eevdf' - select 'EEVDF Scheduler'
 # 'rt' - select EEVDF, but includes a series of realtime patches
 # 'rt-bore' - select Burst-Oriented Response Enhancer, but includes a series of realtime patches
-: "${_cpusched:=cachyos}"
+# DelayOS: bore. "cachyos" is plain EEVDF since CachyOS made that its default (it enables the
+# SCHED_BORE symbol below, but the patch that defines it is only fetched for bore/rt-bore/hardened).
+: "${_cpusched:=bore}"
 
 ### Tweak kernel options prior to a build via nconfig
 : "${_makenconfig:=no}"
@@ -383,10 +385,10 @@ if [ "$_build_r8125" = "yes" ]; then
              '9fc1c5b6a1ebc8ef1f3ae67beae3b1f3d19aae3775486659ef55574de77db5026a9c0832c137f30292609c98178458bc00e1a976993f1dd7075a0e163ab03c91')
 fi
 
-## List of CachyOS schedulers (their patches are not pinned by checksum)
+## List of CachyOS schedulers (only the BORE patch, the one DelayOS uses, is pinned by checksum)
 case "$_cpusched" in
     bore|rt-bore|hardened) # CachyOS Scheduler (BORE)
-        source+=("${_patchsource}/sched/0001-bore-cachy.patch"); b2sums+=('SKIP');;&
+        source+=("${_patchsource}/sched/0001-bore-cachy.patch"); b2sums+=('355a279dea4edf0148cc6499b770bb6d07c55623ea334e6b0db52eba746454d5afafe58bbcf357c9bc53aaa1319a610cd167dba77f6c866835077aed85a2d45c');;&
     bmq) ## Project C Scheduler
         source+=("${_patchsource}/sched/0001-prjc-cachy.patch"); b2sums+=('SKIP');;
     hardened) ## Hardened Patches

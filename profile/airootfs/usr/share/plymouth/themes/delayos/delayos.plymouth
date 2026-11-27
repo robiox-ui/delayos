@@ -2,6 +2,12 @@
 Name=DelayOS
 Description=DelayOS boot splash: logo on a dark blue glow with a 3-dot pulse
 ModuleName=script
+# Fonts that mkinitcpio's plymouth hook copies into the initramfs (for the boot log shown with Esc;
+# the splash itself draws no text). Without these keys the hook takes the system's default Sans
+# and monospace fonts: Inter and two Noto Sans CJK collections, 53 MB of a 100 MB initramfs
+# (docs/reports/optimize-rounds.md, round 13). DejaVu is 1.4 MB for the three files.
+Font=DejaVu Sans
+MonospaceFont=DejaVu Sans Mono
 
 [script]
 ImageDir=/usr/share/plymouth/themes/delayos

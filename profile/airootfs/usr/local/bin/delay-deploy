@@ -161,6 +161,19 @@ gen_fstab() { # $1 root dir  $2 btrfs device  $3 ESP device (may be empty)
       printf 'UUID=%-36s %-14s vfat   defaults,umask=0077 0 2\n' "$o" /boot/efi
     fi
   } > "$r/etc/fstab"
+  boot_tune "$r"
+}
+# the boot-time options of the installer (x-initrd.mount, delay-boot initramfs hook); the caller
+# builds the initramfs afterwards. The helper of the system being set up is preferred: it matches
+# the hook files that system has. A system without the hook (older image) keeps the plain fstab.
+boot_tune() { # $1 root dir
+  local h
+  [[ -f $1/usr/lib/initcpio/install/delay-boot ]] || return 0
+  for h in "$1/usr/lib/delayos/delay-boot-tune" /usr/lib/delayos/delay-boot-tune; do
+    [[ -f $h ]] || continue
+    bash "$h" install "$1" && return 0
+  done
+  return 0
 }
 fstab_check() { # $1 root dir  $2 device of /  $3 ESP device (may be empty)
   local f=$1/etc/fstab real esp_real old changed=0 line spec mp fs tmp

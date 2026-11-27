@@ -1,0 +1,9 @@
+# DelayOS as a VMware guest: the virtual NVMe controller of VMware Workstation/Fusion/ESXi loses
+# completion interrupts now and then ("nvme nvme0: I/O tag ... timeout, completion polled"). The
+# data is there, but nobody is told, so the request sits until the 30 s I/O timeout of the kernel
+# polls for it: copies and installations hang for 30 s at a time. Seen with linux-delayos 7.3 and
+# with Arch's linux-lts 6.18 alike (docs/reports/optimize-rounds.md, rounds 0 and 12), so it is the
+# virtual device, not a kernel setting. For that device only, the timeout is 3 s: a lost interrupt
+# then costs 3 s instead of 30. Real NVMe drives are not matched and keep the kernel default.
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", \
+    ATTRS{model}=="VMware Virtual NVMe Disk*", ATTR{queue/io_timeout}="3000"

@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# DelayOS boot-time set-up of an installed system (docs/reports/optimize-rounds.md, rounds 2, 10, 12).
+# One place for what the installer (delay-postinstall), the recovery tool (delay-deploy) and the
+# package update of systems installed before these rounds (delayos-settings-base.install) do.
+#
+#   delay-boot-tune install [ROOT]   fstab options + mkinitcpio drop-in in ROOT (default /). The
+#                                    caller builds the initramfs afterwards.
+#   delay-boot-tune fstab [FILE]     only the fstab options (FILE default /etc/fstab)
+#   delay-boot-tune migrate          once, on a running installed system: checks that the layout is
+#                                    the one DelayOS installs, keeps /etc/fstab.delay-pre-boot-tune,
+#                                    does "install" and rebuilds the initramfs images
+#   delay-boot-tune status           what "migrate" would do, changes nothing
+#
+# Round 2, fstab. PID 1 stops starting mount jobs for up to a second once the mount table has
+# changed more than five times within a second, and the first moments of userspace always use that
+# up. /home, /var/log, the other btrfs subvolumes, /tmp and the EFI partition were then mounted
+# about 0.9 s after userspace began although the disk was ready after 0.3 s, and the login screen
+# waited. With x-initrd.mount the initramfs (systemd hook) mounts them together with the root file
+# system, so the real system finds them in place.
+#   - btrfs subvolumes on the device of / and the tmpfs on /tmp: x-initrd.mount
+#   - /boot/efi: x-initrd.mount and nofail (a missing or damaged EFI partition no longer stops the
+#     boot in emergency mode), fsck pass 0: the initramfs has no fsck.fat, and an fsck job would
+#     start the mount late enough to fall into the next rate-limited second. vfat is added to the
+#     initramfs for it; without the module the mount is simply done by the real system as before.
+# An initramfs without systemd ignores the option (mount(8) skips x-* options). Only a btrfs root
+# is touched.
+#
+# Round 10, initramfs. The delay-boot hook (/usr/lib/initcpio/install/delay-boot) keeps PID 1's
+# mount-table watch quiet in the initramfs, so the root file system and the x-initrd.mount entries
+# are mounted as soon as the disk is there (about 0.55 s earlier).
+set -u
+MARK=/var/lib/delay/boot-tune.migrated
+BACKUP=/etc/fstab.delay-pre-boot-tune
+
+root_is_btrfs() { # $1 = fstab
+  [[ -s $1 ]] && awk '$1 !~ /^#/ && $2 == "/" && $3 == "btrfs" { f = 1 } END { exit !f }' "$1"
+}
+
+# prints the tuned fstab; exit 1 when the file is not one this applies to
+fstab_tuned() { # $1 = fstab
+  local rootspec
+  root_is_btrfs "$1" || return 1
+  rootspec=$(awk '$1 !~ /^#/ && $2 == "/" { print $1; exit }' "$1")
+  awk -v rd="$rootspec" '
+      $1 ~ /^#/ || NF < 4 { print; next }
+      { o = $4 }
+      $1 == rd && $3 == "btrfs" && $2 != "/" && o !~ /x-initrd\.mount/ { o = o ",x-initrd.mount" }
+      $2 == "/tmp" && $3 == "tmpfs" && o !~ /x-initrd\.mount/ { o = o ",x-initrd.mount" }
+      $2 == "/boot/efi" && $3 == "vfat" && o !~ /x-initrd\.mount/ {
+        if (o !~ /(^|,)nofail(,|$)/) o = o ",nofail"
+        o = o ",x-initrd.mount"; $6 = 0
+      }
+      o != $4 { $4 = o }
+      { print }' "$1"
+}
+
+# 0 = fstab is (now) tuned, 1 = not applicable or failed (file untouched)
+do_fstab() { # $1 = fstab
+  local f=$1 new=$1.delay-new
+  fstab_tuned "$f" > "$new" && [[ -s $new ]] || { rm -f "$new"; return 1; }
+  cmp -s "$new" "$f" || cat "$new" > "$f"     # cat: keeps owner, mode and a bind-mounted inode
+  rm -f "$new"
+}
+
+efi_in_initrd() { # $1 = fstab
+  awk '$1 !~ /^#/ && $2 == "/boot/efi" && $3 == "vfat" && $4 ~ /x-initrd\.mount/ { f = 1 } END { exit !f }' "$1"
+}
+
+do_initcpio() { # $1 = root dir
+  local r=${1%/} d
+  d=$r/etc/mkinitcpio.conf.d
+  mkdir -p "$d" || return 1
+  cat > "$d/delayos-boot.conf" <<'EOF'
+# DelayOS (delay-boot-tune), boot time: docs/reports/optimize-rounds.md, rounds 2 and 10.
+# delay-boot: /usr/lib/initcpio/install/delay-boot (only with the systemd hook).
+case " ${HOOKS[*]} " in
+  *" systemd "*) if [[ -f /usr/lib/initcpio/install/delay-boot ]]; then HOOKS+=(delay-boot); fi ;;
+esac
+EOF
+  if [[ -s $r/etc/fstab ]] && efi_in_initrd "$r/etc/fstab"; then
+    cat >> "$d/delayos-boot.conf" <<'EOF'
+# /boot/efi is mounted in the initramfs (x-initrd.mount in /etc/fstab), which needs the vfat module
+# there. Code page 437 and the ascii charset are built into the kernel.
+MODULES+=(vfat)
+EOF
+  fi
+}
+
+do_install() { # $1 = root dir
+  local r=${1%/}
+  do_fstab "$r/etc/fstab" || true      # not a btrfs root: the hook alone still helps the root mount
+  do_initcpio "$r"
+}
+
+# ------------------------------------------------------------------ migration of an existing install
+uses_systemd_hook() ( # the HOOKS mkinitcpio would use
+  HOOKS=(); MODULES=(); BINARIES=(); FILES=()
+  # shellcheck disable=SC1090,SC1091
+  { . /etc/mkinitcpio.conf; for f in /etc/mkinitcpio.conf.d/*.conf; do [[ -r $f ]] && . "$f"; done; } >/dev/null 2>&1
+  [[ " ${HOOKS[*]} " == *" systemd "* ]]
+)
+
+# prints the reason when the system must be left alone; 0 = go ahead
+migrate_check() {
+  [[ -e $MARK ]] && { echo "already done ($MARK)"; return 1; }
+  [[ -d /run/archiso || -e /etc/mkinitcpio.conf.d/archiso.conf ]] && { echo "live medium"; return 1; }
+  [[ -e /etc/mkinitcpio.conf.d/delayos-boot.conf ]] && { echo "installed with the boot set-up already"; return 2; }
+  [[ -f /usr/lib/initcpio/install/delay-boot ]] || { echo "no delay-boot initramfs hook"; return 1; }
+  command -v mkinitcpio >/dev/null 2>&1 || { echo "no mkinitcpio"; return 1; }
+  ls /etc/mkinitcpio.d/*.preset >/dev/null 2>&1 || { echo "no mkinitcpio presets"; return 1; }
+  root_is_btrfs /etc/fstab || { echo "/ is not btrfs in /etc/fstab"; return 1; }
+  # the subvolume layout of the DelayOS installer: / is @, /home is @home, same device
+  awk '$1 !~ /^#/ && $2 == "/"     { r = $1; ro = $4 }
+       $1 !~ /^#/ && $2 == "/home" { h = $1; ho = $4 }
+       END { exit !(r != "" && r == h && ro ~ /subvol=\/?@(,|$)/ && ho ~ /subvol=\/?@home(,|$)/) }' /etc/fstab \
+    || { echo "not the DelayOS subvolume layout (@, @home)"; return 1; }
+  uses_systemd_hook || { echo "the initramfs does not use the systemd hook"; return 1; }
+  return 0
+}
+
+do_migrate() {
+  local why rc old new
+  why=$(migrate_check); rc=$?
+  if (( rc )); then
+    # nothing to do, now or later: remember it, except on the live medium / without the hook file
+    if (( rc == 2 )) || [[ $why == "/ is not btrfs"* || $why == "not the DelayOS"* || $why == "the initramfs does not"* ]]; then
+      mkdir -p "${MARK%/*}" && echo "skipped: $why" > "$MARK"
+    fi
+    echo "delay-boot-tune: nothing changed ($why)"; return 0
+  fi
+  [[ -e $BACKUP ]] || cp -a /etc/fstab "$BACKUP" || { echo "delay-boot-tune: cannot back up /etc/fstab, nothing changed"; return 0; }
+  # the new table must pass the same check as the old one
+  new=$(mktemp) || return 0
+  if ! fstab_tuned /etc/fstab > "$new" || [[ ! -s $new ]]; then rm -f "$new"; return 0; fi
+  if command -v findmnt >/dev/null 2>&1; then
+    findmnt --verify --tab-file /etc/fstab >/dev/null 2>&1; old=$?
+    findmnt --verify --tab-file "$new" >/dev/null 2>&1; rc=$?
+    if (( rc != 0 && old == 0 )); then
+      rm -f "$new"; mkdir -p "${MARK%/*}" && echo "skipped: findmnt --verify rejects the new fstab" > "$MARK"
+      echo "delay-boot-tune: nothing changed (findmnt --verify rejects the new fstab)"; return 0
+    fi
+  fi
+  cmp -s "$new" /etc/fstab || cat "$new" > /etc/fstab
+  rm -f "$new"
+  do_initcpio ""
+  echo "delay-boot-tune: faster boot set-up applied (previous fstab: $BACKUP), rebuilding the initramfs"
+  mkdir -p "${MARK%/*}"
+  if mkinitcpio -P >/dev/null 2>&1 || mkinitcpio -P; then
+    echo "done $(date -u +%F)" > "$MARK"
+  else
+    # The fstab options are harmless without the hook; take the drop-in back so the next
+    # kernel update builds what it built before.
+    rm -f /etc/mkinitcpio.conf.d/delayos-boot.conf
+    echo "failed: mkinitcpio -P" > "$MARK"
+    echo "delay-boot-tune: mkinitcpio failed, the initramfs set-up was taken back"
+  fi
+  return 0
+}
+
+case "${1:-}" in
+  install) do_install "${2:-/}" ;;
+  fstab)   do_fstab "${2:-/etc/fstab}" ;;
+  migrate) [[ $EUID == 0 ]] || { echo "delay-boot-tune: root only" >&2; exit 1; }; do_migrate ;;
+  status)  why=$(migrate_check) && echo "would migrate" || echo "would not migrate: $why" ;;
+  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
