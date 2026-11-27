@@ -17,6 +17,10 @@ work/
 *.tar.gz
 src/
 pkg/
+# personal ISOs (tools/make-personal-iso.sh): carry third-party software, never published
+*personal*
+out-personal/
+!tools/make-personal-iso.sh
 # local scratch
 *.log
 # internal working notes (local paths, test VM details)

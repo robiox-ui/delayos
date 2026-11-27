@@ -364,6 +364,72 @@ def tpm_bypass():
     return os.environ.get("DELAYOS_WINSETUP_SKIP_TPM") == "1" or os.path.exists(RUN + "/skip-tpm")
 
 
+BUNDLED_MNT = RUN + "/medium"
+
+
+def live_medium_devs():
+    """Block devices that can be the DelayOS live medium when it is still plugged in but no longer
+    mounted (copytoram: archiso unmounts /run/archiso/bootmnt after copying the system to RAM)."""
+    devs = []
+    cmdline = read_text("/proc/cmdline")
+    for opt, by in (("archisosearchuuid", "by-uuid"), ("archisodevice", ""), ("archisolabel", "by-label")):
+        m = re.search(r"(?:^|\s)%s=(\S+)" % opt, cmdline)
+        if not m:
+            continue
+        v = m.group(1)
+        if not by and v.startswith("UUID="):
+            by, v = "by-uuid", v[5:]
+        elif not by and v.startswith("LABEL="):
+            by, v = "by-label", v[6:]
+        link = "/dev/disk/%s/%s" % (by, v) if by else v
+        if link.startswith("/dev/") and os.path.exists(link):
+            devs.append(os.path.realpath(link))
+    for d in lsblk():
+        p = d.get("path") or ""
+        if p in devs and d.get("pkname"):
+            devs.append("/dev/" + d["pkname"])     # ISO written to a stick: the file system starts at the disk
+        elif p and (d.get("label") or "").upper().startswith("DELAYOS") and d.get("fstype") in ("iso9660", "udf", "vfat", "exfat", "ntfs"):
+            devs.append(p)
+    seen = []
+    for p in devs:
+        if p not in seen and not p.startswith("/dev/loop"):
+            seen.append(p)
+    return seen
+
+
+def bundled_isos():
+    """Windows ISO files that a personal build carries on the live medium in /windows/
+    (tools/make-personal-iso.sh, docs/windows-switch.md). Looks at the mounted medium; when archiso
+    has unmounted it (copytoram), the medium is mounted read-only at RUN/medium and stays mounted
+    while it holds such a file, so that the installer can read the ISO later. Live system only."""
+    def scan(base):
+        d = find_ci(base, "windows")
+        if not d or not os.path.isdir(d):
+            return []
+        try:
+            return sorted(os.path.join(d, n) for n in os.listdir(d)
+                          if n.lower().endswith(".iso") and os.path.isfile(os.path.join(d, n)))
+        except OSError:
+            return []
+    if not os.path.isdir("/run/archiso"):
+        return []
+    for base in ("/run/archiso/bootmnt", BUNDLED_MNT):
+        if os.path.ismount(base):
+            return scan(base)
+    if os.geteuid() != 0:
+        return []
+    for dev in live_medium_devs():
+        os.makedirs(BUNDLED_MNT, 0o755, exist_ok=True)
+        if run(["mount", "-o", "ro", dev, BUNDLED_MNT], quiet=True)[0] != 0:
+            continue
+        hits = scan(BUNDLED_MNT)
+        if hits:
+            log("Windows ISO on the live medium (%s): %s" % (dev, ", ".join(hits)))
+            return hits
+        run(["umount", BUNDLED_MNT], quiet=True)
+    return []
+
+
 def facts():
     live_src = ""
     rc, out = run(["findmnt", "-no", "SOURCE", "/run/archiso/bootmnt"], quiet=True)
@@ -389,6 +455,13 @@ def facts():
             continue
         if d.get("fstype") in ("udf", "iso9660") and p and not p.startswith("/dev/loop") and not (live_src and (live_src.startswith(p) or p.startswith(live_src))):
             media.append({"path": p, "label": (d.get("label") or "").strip(), "size_gb": round(int(d.get("size") or 0) / GIB, 1)})
+    # a Windows ISO carried by the live medium itself (personal build): listed first with source
+    # "bundled", the installer page preselects it (no download)
+    for iso in reversed(bundled_isos()):
+        try:
+            media.insert(0, {"path": iso, "label": os.path.basename(iso), "size_gb": round(os.path.getsize(iso) / GIB, 1), "source": "bundled"})
+        except OSError:
+            pass
     t = tpm_facts()
     return {
         "schema": 1,

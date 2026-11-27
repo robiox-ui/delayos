@@ -439,6 +439,37 @@ Microsoft 공식 Windows 11 이미지는 게임과 상관없는 앱과 백그라
 - 수정된 Windows 이미지의 재배포는 Microsoft 라이선스가 허용하지 않습니다. 이 기능은 **자기 PC에 자기 ISO를 쓰는 경우**를 위한 것이고,
   DelayOS는 어떤 Windows 이미지도 포함하거나 배포하지 않습니다.
 
+## 개인용 ISO에 Windows ISO 넣기 (배포 금지)
+
+자기 PC에만 쓸 **개인용 DelayOS ISO**에는 가지고 있는 Windows 설치 ISO를 함께 넣어 둘 수 있습니다. 그러면 설치 프로그램의 "Windows 게임 지원"이
+그 ISO를 바로 쓰고 아무것도 내려받지 않습니다(인터넷이 없어도 됩니다).
+
+> **이렇게 만든 ISO는 배포할 수 없습니다.** Windows 이미지(다른 회사의 소프트웨어)가 들어 있으므로 올리거나, 공유하거나, 릴리스에 붙이거나,
+> 저장소에 커밋하면 안 됩니다. DelayOS 저장소와 공식 ISO에는 어떤 Windows 이미지도 들어 있지 않고, 여기에는 넣는 방법만 있습니다.
+
+만들기(빌드한 PC에서 root로, `build.sh`가 만든 ISO를 가지고):
+
+```
+sudo tools/make-personal-iso.sh --iso out/delayos-YYYY.MM.DD-x86_64.iso \
+     --winiso /경로/Windows.iso --out /저장소-밖의-폴더/delayos-YYYY.MM.DD-x86_64-personal.iso
+```
+
+- Windows ISO가 라이브 미디어의 `/windows/<파일 이름>`으로 들어갑니다. 나머지(BIOS 부팅, UEFI Secure Boot 부팅 경로, 볼륨 UUID와 레이블)는
+  원래 ISO와 똑같습니다. 4GB가 넘는 ISO도 넣을 수 있습니다.
+- 스크립트는 결과를 **저장소 안에 쓰는 것을 거부**하고, 파일 이름에 `personal`이 들어가야 합니다. `.gitignore`와 `build.sh`는 그 이름을 건너뜁니다.
+  끝나면 SHA-256과 배포 금지 경고를 출력합니다.
+- USB에 쓸 때는 ISO 이미지를 그대로 기록하세요(`dd`, Rufus의 DD 모드). 파일을 복사하는 방식(FAT32)은 4GB가 넘는 파일을 담지 못합니다.
+
+설치할 때:
+
+- 설치 프로그램을 열 때 `delay-winsetup probe`가 라이브 미디어의 `/windows/*.iso`를 찾습니다. 라이브 시스템이 RAM으로 복사되어(copytoram) 미디어가
+  분리된 경우에는 미디어를 읽기 전용으로 다시 연결해서 찾습니다. **설치가 끝날 때까지 USB를 뽑지 마세요.**
+- "Windows 게임" 단계에서 ISO 칸이 그 파일로 **미리 채워져 있고** "USB에 들어 있는 Windows ISO 사용" 버튼이 선택되어 있습니다.
+  "Windows 게임 지원 설치"만 켜면 됩니다. 버튼을 다시 눌러 칸을 비우면 평소처럼 Microsoft에서 받습니다.
+- 그 뒤는 위의 "직접 가지고 있는 Windows ISO 쓰기"와 같습니다: Microsoft가 공개한 SHA-256과 일치하면 공식 파일로 확인하고, 일치하지 않으면
+  확인되지 않은 ISO라는 경고를 남기고 그대로 쓰며 게이밍 정리는 건너뜁니다("확인되지 않은 ISO에도 게이밍 정리 적용"으로 켤 수 있음).
+- 설치된 시스템에서 나중에 다시 시도할 때(`delay-winsetup retry`)는 미디어의 ISO를 자동으로 찾지 않습니다. USB를 꽂고 `--iso <경로>`로 지정하세요.
+
 ## Secure Boot
 
 Secure Boot는 PC 전체에 하나뿐인 펌웨어 설정입니다. 발로란트를 하려면 켜야 하고, 켜면 DelayOS도 서명된 부트로더와 커널로 부팅해야 합니다.

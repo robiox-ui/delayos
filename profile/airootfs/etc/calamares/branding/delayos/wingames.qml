@@ -27,6 +27,20 @@ Rectangle {
     // extends it to an ISO that could not be verified ("on")
     property bool cleanup: true
     property bool cleanupCustom: false
+    // a Windows ISO carried by the live medium itself (personal build, tools/make-personal-iso.sh):
+    // probe lists it in win_media with source "bundled"; it is preselected, nothing is downloaded
+    readonly property string bundledIso: {
+        if (known && f.win_media !== undefined)
+            for (var i = 0; i < f.win_media.length; i++) if (f.win_media[i].source === "bundled") return f.win_media[i].path
+        return ""
+    }
+    property bool bundledApplied: false
+    function applyBundled() {
+        if (bundledApplied || bundledIso === "" || !isoField) return
+        bundledApplied = true
+        if (isoField.text.trim() === "") isoField.text = bundledIso
+    }
+    onBundledIsoChanged: applyBundled()
     readonly property int stageGb: known ? f.stage_gb : 10
     readonly property int minRootGb: known ? f.min_root_gb : 20
     readonly property real bestDisk: {
@@ -53,7 +67,7 @@ Rectangle {
         Global.insert("delayos_win_iso", isoField.text.trim())
         Global.insert("delayos_win_cleanup", !cleanup ? "off" : ((cleanupCustom && isoField.text.trim() !== "") ? "on" : "auto"))
     }
-    Component.onCompleted: publish()
+    Component.onCompleted: { applyBundled(); publish() }
     onEnableChanged: publish()
     onSizeGbChanged: publish()
     onEditionChanged: publish()
@@ -94,7 +108,7 @@ Rectangle {
                 Column {
                     x: 16; anchors.verticalCenter: parent.verticalCenter; spacing: 3
                     Text { text: "Windows 게임 지원 설치"; color: ts.text1; font.family: ts.font; font.pixelSize: 14; font.weight: Font.DemiBold }
-                    Text { text: "Windows 11을 Microsoft에서 받거나(약 6~9GB) 가진 ISO를 씁니다. 다시 시작한 뒤 20~40분 더 걸립니다."; color: ts.text2; font.family: ts.font; font.pixelSize: 12 }
+                    Text { text: page.bundledIso !== "" ? "이 USB에 들어 있는 Windows ISO를 씁니다(다운로드 없음). 다시 시작한 뒤 20~40분 더 걸립니다." : "Windows 11을 Microsoft에서 받거나(약 6~9GB) 가진 ISO를 씁니다. 다시 시작한 뒤 20~40분 더 걸립니다."; color: ts.text2; font.family: ts.font; font.pixelSize: 12 }
                 }
                 Rectangle {
                     id: tog
@@ -293,7 +307,7 @@ Rectangle {
                         Rectangle {
                             width: mediaText.implicitWidth + 24; height: 28; radius: 8; color: ts.card
                             border.width: isoField.text.trim() === modelData.path ? 1.5 : 0; border.color: ts.accent
-                            Text { id: mediaText; anchors.centerIn: parent; text: "드라이브의 디스크 사용: " + modelData.path + (modelData.label !== "" ? " (" + modelData.label + ")" : ""); color: ts.text1; font.family: ts.font; font.pixelSize: 12 }
+                            Text { id: mediaText; anchors.centerIn: parent; text: modelData.source === "bundled" ? "USB에 들어 있는 Windows ISO 사용" + (modelData.size_gb > 0 ? " (" + modelData.size_gb + "GB)" : "") : "드라이브의 디스크 사용: " + modelData.path + (modelData.label !== "" ? " (" + modelData.label + ")" : ""); color: ts.text1; font.family: ts.font; font.pixelSize: 12 }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: isoField.text = (isoField.text.trim() === modelData.path ? "" : modelData.path) }
                         }
                     }

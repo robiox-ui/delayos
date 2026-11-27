@@ -381,7 +381,8 @@ mkdir -p "$PROFILE/airootfs/etc/skel/Desktop"
 log "Building ISO (this takes a while)"
 mkarchiso -v -r -w "$WORK/archiso-tmp" -o "$OUT" "$PROFILE"
 
-ISO=$(ls -t "$OUT"/delayos-*.iso | head -1)
+# never a personal ISO (tools/make-personal-iso.sh: carries third-party software, not for publishing)
+ISO=$(ls -t "$OUT"/delayos-*.iso | grep -vi personal | head -1)
 
 # ------------------------------------------- Secure Boot for the live/install medium itself
 # docs/secure-boot.md. mkarchiso wrote an ISO that starts through the unsigned systemd-boot (UEFI
