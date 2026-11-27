@@ -82,7 +82,7 @@ GitHub Pages를 쓰지 않은 이유는 크기 제한입니다. Pages는 사이�
 - 버전은 빌드 시각(`2026.11.26.0909`)입니다. 내용 해시가 그대로인 패키지는 다시 빌드하지 않으므로 사용자는 바뀐 패키지만 받습니다.
 - Python 바이트코드는 패키지에 들어 있습니다(checked-hash).
 
-**ISO 빌드:** `build.sh`가 `tools/repo-build.sh --no-chroot content`로 같은 패키지를 만들어 로컬 저장소에 넣고, 조립한 프로필의 `airootfs`에서 패키지가 가진 파일과 그 `file_permissions` 항목을 뺍니다(`content-pkgs.sh strip`). `packages.x86_64`에 패키지 이름이 있으므로 pacstrap이 설치합니다. 저장소 키가 없으면 `delayos-keyring`과 `delayos-desktop`을 빼고 경고합니다. 이 경우 설치된 시스템은 `[delayos]`를 쓰지 않습니다.
+**ISO 빌드:** `build.sh`가 `tools/repo-build.sh --no-chroot content`로 같은 패키지를 **게시용 풀(`$DELAYOS_REPO_STATE`, 기본 `/var/lib/delayos-repo`)에서** 만들어 로컬 저장소에 넣고(내용이 그대로인 패키지는 저장소에 이미 있는 버전을 그대로 씁니다. 빌드마다 따로 풀을 쓰던 때는 ISO에만 새 버전이 들어가 설치한 PC의 `pacman -Syu`가 "local is newer"라고 경고했습니다. 바뀐 패키지는 `repo-publish.sh`를 돌릴 때까지 저장소보다 새것이므로 ISO를 만든 뒤에는 바로 게시합니다), 조립한 프로필의 `airootfs`에서 패키지가 가진 파일과 그 `file_permissions` 항목을 뺍니다(`content-pkgs.sh strip`). `packages.x86_64`에 패키지 이름이 있으므로 pacstrap이 설치합니다. 저장소 키가 없으면 `delayos-keyring`과 `delayos-desktop`을 빼고 경고합니다. 이 경우 설치된 시스템은 `[delayos]`를 쓰지 않습니다.
 
 **설치된 시스템:** Calamares가 라이브 이미지를 복사하므로 pacman DB도 함께 넘어가고 파일은 패키지 소유가 됩니다. `delay-postinstall`이 `delay-cpu-opt repo-setup`을 불러 `[delayos]` 블록을 `[core]` 위에 넣습니다(키링과 미러 목록이 있을 때만).
 

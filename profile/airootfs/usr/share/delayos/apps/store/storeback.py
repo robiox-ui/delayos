@@ -56,6 +56,14 @@ POPULAR_BY_CAT = {
     "Education": ["org.kde.marble", "net.ankiweb.Anki", "org.geogebra.GeoGebra", "org.stellarium.Stellarium"],
     "Utility": ["com.github.tchx84.Flatseal", "io.github.flattool.Warehouse", "com.usebottles.bottles", "org.kde.kcalc"],
 }
+# Flathub apps that DelayOS ships (or its welcome wizard installs) as a native package which Arch's
+# AppStream data does not know: flatpak id (lower case) -> (package, desktop file id). Without this
+# the Store offered "설치" for the Chrome that is already there and installed a second copy.
+NATIVE = {
+    "com.google.chrome": ("google-chrome", "google-chrome"),
+}
+
+
 CATEGORIES = [  # chip id, label, appstream categories
     ("popular", "인기", None), ("trending", "트렌딩", None), ("Game", "게임", ["Game"]), ("Office", "오피스", ["Office"]),
     ("Graphics", "사진 및 디자인", ["Graphics", "Photography"]), ("AudioVideo", "음악 및 동영상", ["AudioVideo", "Audio", "Video"]),
@@ -270,6 +278,7 @@ def _lite(a, inst=None):
     r = {k: a.get(k) for k in ("id", "name", "summary", "dev", "icon", "source", "pkg", "verified")}
     if inst is not None:
         r["installed"] = _is_installed(a, inst)
+        _native(a, inst, r)
     return r
 
 
@@ -307,6 +316,13 @@ def installed_set():
         return res
 
 
+def _native(a, inst, r):
+    """The native package stands in for the Flathub app (open, remove) when only that one is installed."""
+    nat = NATIVE.get(a["id"].lower())
+    if nat and nat[0] in inst["repo"] and a["pkg"].lower() not in inst["flatpak"]:
+        r["source"], r["pkg"] = "repo", nat[0]
+
+
 def _is_installed(a, inst):
     if a["source"] == "flathub" and a["pkg"].lower() in inst["flatpak"]:
         return True
@@ -314,6 +330,9 @@ def _is_installed(a, inst):
         return True
     alt = a.get("alt")
     if alt and alt["pkg"] in inst["repo"]:
+        return True
+    nat = NATIVE.get(a["id"].lower())
+    if nat and nat[0] in inst["repo"]:
         return True
     return False
 
@@ -399,6 +418,7 @@ def details(app_id):
     inst = installed_set()
     d = dict(a)
     d["installed"] = _is_installed(a, inst)
+    _native(a, inst, d)
     d["catLabels"] = [c[1] for c in CATEGORIES[2:] if c[2] and any(x in a["cats"] for x in c[2])]
     return d
 
@@ -412,7 +432,8 @@ def installed_apps():
         if _is_installed(a, inst):
             x = _lite(a, inst)
             if not (a["source"] == "flathub" and a["pkg"].lower() in inst["flatpak"]):
-                x["source"], x["pkg"] = "repo", (a.get("alt") or {}).get("pkg", a["pkg"])
+                nat = NATIVE.get(a["id"].lower())
+                x["source"], x["pkg"] = "repo", nat[0] if nat and nat[0] in inst["repo"] else (a.get("alt") or {}).get("pkg", a["pkg"])
             x["removable"] = not (x["source"] == "repo" and PROTECTED.match(x["pkg"]))
             res.append(x)
     res.sort(key=lambda x: x["name"].lower())
@@ -435,6 +456,9 @@ def launch_argv(app_id, source, pkg):
         return ["flatpak", "run", pkg]
     a = _get(app_id)
     did = (a["id"] if a else app_id)
+    nat = NATIVE.get(did.lower())
+    if nat and nat[0] in inst["repo"]:
+        did = nat[1]
     return ["gtk-launch", did]
 
 

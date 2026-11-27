@@ -80,6 +80,7 @@ DelayOS는 Microsoft가 직접 서명해 준 부트로더가 없으므로, 대�
 - USB에는 공개 인증서만 들어 있습니다. 서명에 쓰는 개인 키는 빌드 서버에만 있고 저장소·ISO·패키지 어디에도 들어가지 않습니다.
 - Secure Boot가 꺼진 UEFI에서는 같은 경로(shim → GRUB → 커널)가 검증 없이 그대로 부팅됩니다. BIOS(레거시)에서는 예전처럼 syslinux로 부팅합니다.
 - 부팅 메뉴는 보이지 않고 바로 시작합니다(대기 시간 0). `Shift`를 누른 채로 부팅하면 한국어 메뉴(시작, UEFI 펌웨어 설정, 다시 시작, 끄기)가 나옵니다. 단, 키 상태를 알려 주는 펌웨어에서만 동작합니다(가상 머신에서는 확인하지 못했습니다).
+- GRUB은 Secure Boot가 켜져 있으면(shim lock) 디스크의 글꼴 파일을 열지 않습니다(`prohibited by secure boot policy`). 그래서 한글 글꼴(GNU Unifont)과 작은 `grub.cfg`가 서명된 GRUB 이미지 안(memdisk)에 들어 있습니다. memdisk가 있는 이미지는 `prefix`가 `(memdisk)/boot/grub`로 시작하므로, 그 안의 `grub.cfg`가 부팅한 파티션의 `EFI/DelayOS/grub.cfg`로 넘겨 줍니다. 글꼴이 없던 2026.11.26 빌드에서는 Secure Boot를 켠 PC의 부팅 메뉴가 영어와 `?` 테두리로 나왔고, 설치 USB를 시작할 때 위 오류가 잠깐 보였습니다.
 
 ### 설치된 시스템
 
@@ -107,6 +108,7 @@ Secure Boot가 켜진 채로 설치하면 설치 프로그램(Calamares의 `dela
         --opts "$(grep -o "^LIVE_OPTS='.*'" build.sh | cut -d"'" -f2)"
    ```
 4. 확인: `sbverify --list` / `sbverify --cert delayos-general-ca.crt`로 `grubx64.efi`와 커널을, 가상 머신(Secure Boot 켬)에서 실제 부팅을 확인합니다.
+   `delayos-sb-general`을 다시 만든 뒤에는 가상 머신(Secure Boot 켬)에서 (1) 키를 누르지 않았을 때 바로 부팅되는지(`grub>` 프롬프트에서 멈추면 memdisk의 `grub.cfg`가 빠진 것입니다), (2) Esc로 연 부팅 메뉴가 한글인지 꼭 확인합니다.
 
 ### SBAT (부트로더 폐기 목록)
 

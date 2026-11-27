@@ -1,5 +1,6 @@
 # Secure Boot (DelayOS general key): after mkinitcpio copied the kernel image to /boot, put the
-# DelayOS-signed image back when it belongs to the installed kernel. Does nothing unless
+# DelayOS-signed image back when it belongs to the installed kernel, and after an update of
+# delayos-sb-general copy its signed GRUB to the EFI partition. Does nothing unless
 # /etc/delayos/winsetup.conf says SB='1'.
 [Trigger]
 Type = Path
@@ -9,6 +10,6 @@ Target = usr/lib/modules/*/vmlinuz
 Target = usr/share/delayos/secureboot/general/*
 
 [Action]
-Description = DelayOS Secure Boot: installing the signed kernel image...
+Description = DelayOS Secure Boot: installing the signed kernel image and boot loader...
 When = PostTransaction
 Exec = /usr/bin/python3 /usr/local/bin/delay-winsetup sb-kernel

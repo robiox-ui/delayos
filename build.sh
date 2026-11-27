@@ -196,8 +196,16 @@ fi
 # system owns these files through pacman and receives updates from the [delayos] repository.
 # The same script builds them for the repository (tools/repo-build.sh content).
 log "Building the DelayOS content packages (delayos-shell, delayos-apps, ...)"
-CPOOL="$WORK/repo/pool/delayos"
-DELAYOS_REPO_STATE="$WORK/repo" bash "$HERE/tools/repo-build.sh" --no-chroot content \
+# They are built in the pool that tools/repo-publish.sh uploads ($DELAYOS_REPO_STATE, default
+# /var/lib/delayos-repo), not in a pool of this build: a package whose content did not change keeps
+# the version that is already in the repository. With its own pool (wiped by --clean) the ISO carried
+# new build-time versions of unchanged packages, and every installed system then printed
+# "local (2026.11.26.2255-1) is newer than delayos (2026.11.26.1907-1)" on pacman -Syu.
+# Packages that did change are newer than the published ones until tools/repo-publish.sh has run:
+# publish after every ISO build (the last lines of this script say so).
+REPO_STATE="${DELAYOS_REPO_STATE:-/var/lib/delayos-repo}"
+CPOOL="$REPO_STATE/pool/delayos"
+DELAYOS_REPO_STATE="$REPO_STATE" bash "$HERE/tools/repo-build.sh" --no-chroot content \
   || die "The DelayOS content packages failed to build"
 CONTENT_NAMES=(delayos-settings-base delayos-branding delayos-shell delayos-apps delayos-winboot delayos-mirrorlist)
 HAVE_KEYRING=0
@@ -405,4 +413,5 @@ fi
 ( cd "$OUT" && sha256sum "$(basename "$ISO")" > "$(basename "$ISO").sha256" )
 log "Done: $ISO"
 (( ISO_SB )) && log "Secure Boot: the ISO starts with Secure Boot on. First start on a PC: MokManager > Enroll key from disk > delayos-general-ca.cer"
+log "Publish the packages of this ISO now (tools/repo-publish.sh): until then the [delayos] repository can be older than what this ISO installs"
 log "Write it to a USB stick with Rufus/Ventoy (Windows) or: dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync"

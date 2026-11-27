@@ -23,8 +23,8 @@ DelayOS가 고장 났을 때 쓰는 세 가지를 설명합니다.
 │    @docker      /var/lib/docker   ┘
 │    @snapshots   /.snapshots       스냅샷 (snapper 형식: <번호>/snapshot, <번호>/info.xml)
 │    @factory     설치 직후의 읽기 전용 사본 ("이 PC 초기화"의 원본)
-├─ DELAYOS-RE (ext4, 2 GiB)   복구 환경. 파일 관리자에 보이지 않음
-└─ (선택) 숨겨진 Windows 파티션 (docs/windows-switch.md). 복구 기능은 절대 건드리지 않습니다
+├─ (선택) 숨겨진 Windows 파티션 (docs/windows-switch.md). 복구 기능은 절대 건드리지 않습니다
+└─ DELAYOS-RE (ext4, 2 GiB)   복구 환경. 디스크의 맨 끝. 파일 관리자에 보이지 않음
 ```
 
 시스템 파티션이 btrfs가 아니면(설치할 때 ext4/xfs를 고른 경우) 스냅샷, 초기화, 복구 파티션이 없습니다. 그 경우에도 설치 USB에서 `delay-deploy boot`로 부팅을 고칠 수 있습니다.
@@ -147,7 +147,7 @@ Ctrl+Alt+F2에는 root 셸이 따로 있습니다.
 
 ### 복구 파티션
 
-- Calamares 모듈 `delayos_recoverypart`가 `partition`(그리고 `delayos_winparts`) 다음, `mount` 전에 만듭니다. 방금 만든 빈 시스템 파티션의 끝에서 2 GiB를 떼어 ext4(`DELAYOS-RE`)로 포맷하고 `/usr/share/delayos/recovery/image`의 복구 환경을 복사합니다. 실제 작업은 `delay-deploy recovery create`.
+- Calamares 모듈 `delayos_recoverypart`가 `partition` 다음, `delayos_winparts`와 `mount` 전에 만듭니다(숨겨진 Windows를 함께 설치하면 임시 설치 파티션이 시스템 파티션 바로 뒤에 놓여, Windows 설치가 끝난 뒤 그 10 GB가 시스템 파티션으로 돌아옵니다). 방금 만든 빈 시스템 파티션의 끝에서 2 GiB를 떼어 ext4(`DELAYOS-RE`)로 포맷하고 `/usr/share/delayos/recovery/image`의 복구 환경을 복사합니다. 실제 작업은 `delay-deploy recovery create`.
 - 만들지 않는 경우(설치는 계속됩니다): 디스크가 64 GB 미만, 시스템이 btrfs가 아님, LVM/RAID, 주 파티션 자리가 없는 MBR 디스크, 복구 환경 없이 빌드한 ISO.
 - GPT에서는 파티션 이름 `DELAYOS-RE`와 "필수 파티션" 속성을 붙입니다. udev 규칙 `62-delayos-recovery.rules`(`UDISKS_IGNORE`)로 파일 관리자에 보이지 않습니다.
 - 나중에 만들거나 고치기: 설정 › 시스템 › 복구 › 복구 파티션의 "만들기/업데이트" 또는
@@ -229,7 +229,7 @@ sudo delay-deploy apply delayos.dimg /dev/nvme0n1p2 --replace-system   # @만 �
 | `recovery/profile`, `recovery/build-recovery.sh` | 복구 환경의 archiso 프로필과 빌드 스크립트 |
 | `/etc/snapper/configs/root`, `/etc/mkinitcpio.conf.d/delayos-snapshots.conf` | `delay-snapshot setup`이 씀 |
 
-설치 프로그램 설정에서 바뀐 것: `mount.conf`의 `btrfsSubvolumes`에 `/.snapshots → @snapshots`, `/var/lib/docker → @docker` 두 줄, `settings.conf`의 실행 순서에 `delayos_recoverypart`(`delayos_winparts` 다음)와 `delayos_factory`(`umount` 직전).
+설치 프로그램 설정에서 바뀐 것: `mount.conf`의 `btrfsSubvolumes`에 `/.snapshots → @snapshots`, `/var/lib/docker → @docker` 두 줄, `settings.conf`의 실행 순서에 `delayos_recoverypart`(`partition` 다음, `delayos_winparts` 앞)와 `delayos_factory`(`umount` 직전).
 
 ## 한계
 

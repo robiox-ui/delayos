@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # DelayOS hidden Windows, stage 1: after Calamares created and formatted the DelayOS partitions
-# and before they are mounted, take space from the end of the new (still empty) root partition
-# for the Windows partition and the temporary setup partition. All work is done by
+# and delayos_recoverypart put the recovery partition at the end of the disk, and before anything
+# is mounted, take space from the end of the new (still empty) root partition for the temporary
+# setup partition (next to the root, which gets that space back later) and the Windows partition. All work is done by
 # /usr/local/bin/delay-winsetup; a failure never fails the DelayOS installation, it only
 # turns the Windows option off (the reason is shown on the last page).
 #

@@ -7,7 +7,7 @@ QWidget {
     color: #F2F3F5;
     font-family: "Inter", "Noto Sans CJK KR";
     font-size: 13px;
-    selection-background-color: #4A1A2B;
+    selection-background-color: #2B3A7E;
     selection-color: #FFFFFF;
 }
 
@@ -30,7 +30,7 @@ QComboBox QAbstractItemView {
     background-color: #1E2129;
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 8px;
-    selection-background-color: #4A1A2B;
+    selection-background-color: #2B3A7E;
     outline: 0;
 }
 
@@ -71,7 +71,7 @@ QListView, QTreeView, QTableView, QListWidget {
 }
 QListView::item, QTreeView::item { padding: 6px 8px; border-radius: 6px; }
 QListView::item:hover, QTreeView::item:hover { background-color: #1B1F28; }
-QListView::item:selected, QTreeView::item:selected { background-color: #4A1A2B; color: #FFFFFF; }
+QListView::item:selected, QTreeView::item:selected { background-color: #2B3A7E; color: #FFFFFF; }
 QHeaderView::section { background-color: #151821; color: #9AA0AA; border: none; padding: 6px 8px; }
 
 QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }
@@ -100,3 +100,11 @@ QToolTip { background-color: #1E2129; color: #F2F3F5; border: 1px solid rgba(255
 /* execution page: the log button's text is a hard-coded English string in Calamares ("Toggle log") */
 QToolBar { background: transparent; border: none; }
 QToolBar QToolButton { qproperty-text: "설치 기록"; }
+
+/* Legend under the partition bars (PartitionLabelsView). Calamares paints each name with a dark
+   pen meant for a light window, whatever colour is set here: on the dark page the names could not
+   be read. The legend gets a light strip instead. */
+PartitionLabelsView {
+    background-color: #E9EBF0;
+    border-radius: 8px;
+}

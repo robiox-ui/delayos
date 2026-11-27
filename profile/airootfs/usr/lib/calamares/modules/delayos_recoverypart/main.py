@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# DelayOS recovery partition: after Calamares created and formatted the DelayOS partitions (and
-# delayos_winparts took its space) and before they are mounted, take 2 GiB from the end of the new,
+# DelayOS recovery partition: after Calamares created and formatted the DelayOS partitions and
+# before they are mounted (and before delayos_winparts takes its space in front of it), take 2 GiB from the end of the new,
 # still empty btrfs root partition, make the hidden recovery partition there (ext4, label
 # DELAYOS-RE) and copy the recovery environment (/usr/share/delayos/recovery/image) onto it.
 # All work is done by /usr/local/bin/delay-deploy recovery create; docs/recovery.md.

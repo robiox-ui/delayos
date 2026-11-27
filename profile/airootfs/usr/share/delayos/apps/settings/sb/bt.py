@@ -1,4 +1,5 @@
 """Bluetooth through bluetoothctl."""
+import os
 import re
 from syskit import sh, out
 
@@ -21,7 +22,19 @@ def _info(mac):
             "battery": (re.findall(r"\((\d+)\)", d.get("Battery Percentage", "")) or [""])[0]}
 
 
+def _adapter():
+    """True when the kernel has a Bluetooth controller. Without one bluetooth.service does not run
+    (ConditionPathIsDirectory=/sys/class/bluetooth) and every bluetoothctl call would wait for it
+    until its timeout: the page stood still for 5 seconds on PCs without Bluetooth."""
+    try:
+        return any(n.startswith("hci") for n in os.listdir("/sys/class/bluetooth"))
+    except OSError:
+        return False
+
+
 def state():
+    if not _adapter():
+        return {"available": False, "powered": False, "devices": []}
     rc, show = sh(["bluetoothctl", "show"], 5)
     if rc != 0 or "Controller" not in show:
         return {"available": False, "powered": False, "devices": []}
@@ -36,6 +49,8 @@ def state():
 
 
 def power(on):
+    if not _adapter():
+        return state()
     if on:
         sh(["rfkill", "unblock", "bluetooth"])
     sh(["bluetoothctl", "power", "on" if on else "off"], 8)
@@ -43,6 +58,8 @@ def power(on):
 
 
 def scan(seconds=8):
+    if not _adapter():
+        return state()
     sh(["bluetoothctl", "--timeout", str(int(seconds)), "scan", "on"], int(seconds) + 5)
     return state()
 

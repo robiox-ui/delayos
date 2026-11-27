@@ -383,6 +383,10 @@ def facts():
     media = []
     for d in lsblk():
         p = d.get("path") or ""
+        # never the DelayOS medium itself: on an installed system (or a live system copied to RAM)
+        # nothing is mounted at /run/archiso/bootmnt and the DVD or USB stick was offered as Windows media
+        if (d.get("label") or "").upper().startswith(("DELAYOS", "ARCHISO")):
+            continue
         if d.get("fstype") in ("udf", "iso9660") and p and not p.startswith("/dev/loop") and not (live_src and (live_src.startswith(p) or p.startswith(live_src))):
             media.append({"path": p, "label": (d.get("label") or "").strip(), "size_gb": round(int(d.get("size") or 0) / GIB, 1)})
     t = tpm_facts()
@@ -1074,10 +1078,47 @@ def sb_kernel(root="/"):
     return True
 
 
+def sb_refresh_grub():
+    """After an update of delayos-sb-general: put its signed GRUB on the EFI partition, where sb_setup
+    put the one of the installation (pacman only replaces the copy under /usr/share). Replaces existing
+    files only, and EFI/BOOT only while DelayOS's shim is the fallback loader there."""
+    src = SB_DIR + "/grubx64.efi"
+    if not os.path.isfile(src):
+        return False
+    try:
+        esp, _dev = find_esp("/")
+    except Fail:
+        return False
+    want, done = sha256_file(src), False
+    for sub in ("EFI/DelayOS", "EFI/BOOT"):
+        d = find_ci(esp, sub)
+        dst = find_ci(d, "grubx64.efi") if d else None
+        shim = find_ci(d, "shimx64.efi" if sub == "EFI/DelayOS" else "BOOTX64.EFI") if d else None
+        if not dst or not shim or sha256_file(dst) == want:
+            continue
+        if not os.path.isfile(SHIM_DIR + "/shimx64.efi") or sha256_file(shim) != sha256_file(SHIM_DIR + "/shimx64.efi"):
+            continue                                   # not the boot chain sb_setup installed
+        if DRY:
+            log("would update the signed GRUB in %s" % sub)
+            continue
+        try:
+            shutil.copyfile(src, dst + ".new")
+            if sha256_file(dst + ".new") != want:
+                raise OSError("short write")
+            os.replace(dst + ".new", dst)
+            done = True
+            log("sb: signed GRUB updated in %s" % sub)
+        except OSError as e:
+            log("sb: could not update the signed GRUB in %s: %s" % (sub, e))
+            remove_file(dst + ".new")
+    return done
+
+
 def cmd_sb_kernel(a):
     conf = load_conf()
     if conf.get("SB") == "1":
         sb_kernel("/")
+        sb_refresh_grub()
     return 0
 
 

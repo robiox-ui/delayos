@@ -43,7 +43,7 @@ _grub_modules=(
     gzio halt help iso9660 jpeg keystatus linux loadenv loopback ls lsefi lsefimmap lsefisystab
     luks luks2 lvm mdraid09 mdraid1x memdisk minicmd normal ntfs part_gpt part_msdos password_pbkdf2
     pbkdf2 png probe read reboot regexp search search_fs_file search_fs_uuid search_label sleep smbios
-    test tpm true udf video xfs zstd
+    tar test tpm true udf video xfs zstd
 )
 
 # Must match delay-winsetup (sb_setup): GRUB reads <ESP>/EFI/DelayOS/grub.cfg
@@ -102,7 +102,44 @@ build() {
     for m in "${_grub_modules[@]}"; do
         if [ -f "/usr/lib/grub/x86_64-efi/${m}.mod" ]; then mods+=("$m"); else warning "GRUB module $m does not exist, leaving it out"; fi
     done
-    grub-mkimage -O x86_64-efi -p "$_esp_prefix" --sbat sbat.csv -o grubx64.efi "${mods[@]}"
+    # Fonts. Under shim lock GRUB refuses to open a font file from disk ("prohibited by secure boot
+    # policy", kern/efi/sb.c): with Secure Boot on the boot menu fell back to the text console, with
+    # English titles and a frame of "?" characters, and the live medium printed that error at every
+    # start. A font named without a path is looked up in (memdisk)/fonts first, and files in the
+    # memdisk are part of the signed image: GNU Unifont (Hangul) goes in there.
+    # An image with a memdisk starts with prefix=(memdisk)/boot/grub whatever -p says (seen with
+    # grub 2.16: without the file below it stops at the "grub>" prompt), so the memdisk also holds
+    # a grub.cfg that hands over to <boot device>$_esp_prefix/grub.cfg, where the image without a
+    # memdisk looked.
+    local memdisk=()
+    if [ -s /usr/share/grub/unicode.pf2 ]; then
+        rm -rf memdisk memdisk.tar; mkdir -p memdisk/fonts memdisk/boot/grub
+        cp /usr/share/grub/unicode.pf2 memdisk/fonts/unicode.pf2
+        cat > memdisk/boot/grub/grub.cfg <<MEMDISKCFG
+# Built into the signed DelayOS GRUB image. Continue with the configuration on the partition
+# this GRUB was started from.
+set delayos_dev=
+regexp --set=1:delayos_dev '^\\(([^)]+)\\)' "\${cmdpath}"
+if [ -n "\${delayos_dev}" ]; then
+    set root="\${delayos_dev}"
+fi
+set prefix="(\${root})${_esp_prefix}"
+if [ -f "\${prefix}/grub.cfg" ]; then
+    configfile "\${prefix}/grub.cfg"
+elif [ -f "\${cmdpath}/grub.cfg" ]; then
+    set prefix="\${cmdpath}"
+    configfile "\${cmdpath}/grub.cfg"
+else
+    echo "DelayOS: ${_esp_prefix}/grub.cfg was not found on \${root}."
+fi
+MEMDISKCFG
+        tar -C memdisk --format=ustar --owner=0 --group=0 --numeric-owner --mtime='2026-01-01 00:00:00Z' \
+            -cf memdisk.tar boot fonts
+        memdisk=(-m memdisk.tar)
+    else
+        warning "/usr/share/grub/unicode.pf2 is missing: the boot menu will be English with Secure Boot on"
+    fi
+    grub-mkimage -O x86_64-efi -p "$_esp_prefix" --sbat sbat.csv "${memdisk[@]}" -o grubx64.efi "${mods[@]}"
     sbsign --key "$DELAYOS_SBG_KEY" --cert "$DELAYOS_SBG_CERT" --output grubx64.signed.efi grubx64.efi
     sbverify --cert "$DELAYOS_SBG_CA" grubx64.signed.efi
 
