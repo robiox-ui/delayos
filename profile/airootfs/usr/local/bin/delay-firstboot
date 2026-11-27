@@ -18,6 +18,12 @@ if grep -q archisobasedir /proc/cmdline && ! id live >/dev/null 2>&1; then
   install -d -o live -g live /home/live/.config
   printf '[Daemon]\nAutolock=false\nLockOnResume=false\n' > /home/live/.config/kscreenlockerrc
   chown live:live /home/live/.config/kscreenlockerrc
+  # No password also means pam_kwallet cannot open a wallet at login: the first start of Chrome
+  # (or anything else that stores a secret) then shows the "KDE 지갑 서비스" dialog asking the user
+  # to invent a wallet password. The live session keeps nothing, so the wallet is off there.
+  # Installed systems log in with a password and kwallet-pam opens the wallet without asking.
+  printf '[Wallet]\nEnabled=false\nFirst Use=false\n' > /home/live/.config/kwalletrc
+  chown live:live /home/live/.config/kwalletrc
 fi
 
 # ---- Low-memory desktop profile (under ~3 GB RAM), checked on every boot ----

@@ -25,7 +25,8 @@ Rectangle {
         r.push("Windows 및 Android 앱 지원은 처음 로그인할 때 추가할 수 있습니다.")
         if (gs("delayos_win_enable", false) === true)
             r.push("Windows 게임 지원: 보이지 않는 파티션(" + gs("delayos_win_size_gb", 100) + "GB)에 Windows 11 " + (gs("delayos_win_edition", "home") === "pro" ? "Pro" : "Home") + "을 설치합니다. "
-                   + (gs("delayos_win_iso", "") !== "" ? "직접 지정한 Windows ISO(" + gs("delayos_win_iso", "") + ")를 사용합니다. Microsoft 공식 파일로 확인되지 않으면 확인 없이 그대로 설치하고 게이밍 정리는 " + (gs("delayos_win_cleanup", "auto") === "on" ? "적용합니다. " : "건너뜁니다. ")
+                   + (gs("delayos_win_iso", "") !== "" ? (gs("delayos_win_iso_bundled", false) === true ? "이 USB에 들어 있는 Windows ISO를 사용합니다(다운로드 없음). " : "직접 지정한 Windows ISO(" + gs("delayos_win_iso", "") + ")를 사용합니다. ")
+                      + "Microsoft 공식 파일로 확인되지 않으면 확인 없이 그대로 설치하고 게이밍 정리는 " + (gs("delayos_win_cleanup", "auto") === "on" ? "적용합니다. " : "건너뜁니다. ")
                                                        : "Windows 설치 파일을 Microsoft에서 내려받으므로 시간이 더 걸립니다. " + (gs("delayos_win_cleanup", "auto") === "off" ? "" : "게이밍 정리(기본 앱·광고·불필요한 백그라운드 기능 끄기)를 적용합니다. "))
                    + "DelayOS 설치가 끝난 뒤 다시 시작하면 자동으로 진행됩니다(약 20~40분).")
         var user = gs("username", "")

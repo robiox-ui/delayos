@@ -1557,13 +1557,16 @@ def fill_staging(iso, stg_dev, win_dev, st, edition, key, opts, p0, p1):
             # the first-run screens altogether: the account comes from the answer file anyway.
             skip_oobe = not verified
             log("answer file: first-run experience (OOBE) %s" % ("skipped (custom image)" if skip_oobe else "hidden pages, Microsoft default"))
-            # Korean progress text in Windows PE needs a Korean console font. Microsoft's Korean medium
-            # has one; a custom boot image may not (the text then shows as empty boxes): English there.
+            # Korean progress text in Windows PE needs a Korean CONSOLE font: the console window of
+            # code page 949 draws with GulimChe (gulim.ttc; the "TrueTypeFont" list of the console).
+            # Microsoft's Korean medium has it; a custom boot image may not, and the text then shows
+            # as empty boxes: English there. Malgun Gothic alone is not enough: it draws the window
+            # title, not the console text (seen with a custom image in the 2026.11.27 ISO test).
             bidx0 = wim_boot_index(bw)
-            ko_fonts = [f for f in ("malgun.ttf", "gulim.ttc", "malgunsl.ttf", "batang.ttc", "gulimche.ttf")
+            ko_fonts = [f for f in ("gulim.ttc", "gulimche.ttf", "gulimche.ttc")
                         if wim_has(bw, bidx0, "/Windows/Fonts/" + f)]
             kofont = verified or bool(ko_fonts)
-            log("boot image: Korean fonts %s -> %s messages" % (ko_fonts or "none found", "Korean" if kofont else "English"))
+            log("boot image: Korean console font %s -> %s messages" % (ko_fonts or "not found", "Korean" if kofont else "English"))
             sub = {"NONCE": nonce, "INDEX": index, "WIMFILE": wimfile, "SWM": swm, "KOFONT": "1" if kofont else "",
                    "PRODUCT_KEY": "<ProductKey>%s</ProductKey>" % gkey if gkey else "<!-- no generic key for this edition -->",
                    "OOBE_SKIP": "<SkipMachineOOBE>true</SkipMachineOOBE>\r\n        <SkipUserOOBE>true</SkipUserOOBE>" if skip_oobe

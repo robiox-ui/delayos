@@ -423,7 +423,7 @@ Microsoft 공식 Windows 11 이미지는 게임과 상관없는 앱과 백그라
 | ISO에 들어 있는 `autounattend.xml`, `sources\$OEM$` | 쓰지 않습니다. DelayOS는 Windows 설치 프로그램(setup.exe)을 실행하지 않고 이미지를 직접 적용하기 때문입니다 |
 | ISO의 설치 환경(Windows PE)이 **자체 설치 프로그램**을 띄우도록 바뀐 경우 (`winpeshl.exe`를 바꿔치기했거나 레지스트리의 `Setup\CmdLine`을 바꾼 ISO) | 그대로 두면 DelayOS 스크립트 대신 그 설치 프로그램이 실행되어 디스크를 직접 나누려고 할 수 있습니다. DelayOS는 준비 단계에서 부팅 이미지를 검사해, 표준 셸(1MB 미만의 `winpeshl.exe`)이 아니면 부팅 이미지 레지스트리의 `Setup\CmdLine`을 제자리에서 `cmd /c d.cmd`(DelayOS 스크립트)로 바꿉니다. 바꿀 수 없으면 그 ISO를 **거부**합니다(디스크는 건드리지 않음) |
 | 첫 실행 화면(OOBE)을 빼거나 바꾼 이미지 | 확인되지 않은 이미지에는 응답 파일에 `SkipMachineOOBE`/`SkipUserOOBE`를 넣어 첫 실행 화면을 통째로 건너뜁니다(없으면 "왜 PC가 다시 시작되었나요?" 화면에서 멈춤). 계정은 응답 파일이 만듭니다. Microsoft 공식 이미지에는 넣지 않습니다 |
-| Windows PE에 한국어 글꼴이 없는 ISO | 설치 중 검은 화면의 진행 문구가 영어로 나옵니다(한글이 빈 네모로 보이는 것을 피함) |
+| Windows PE에 한국어 콘솔 글꼴(굴림체, `gulim.ttc`)이 없는 ISO | 설치 중 검은 화면의 진행 문구가 영어로 나옵니다(한글이 빈 네모로 보이는 것을 피함). 맑은 고딕만 들어 있는 설치 환경도 여기에 해당합니다(콘솔 창은 굴림체로 그립니다) |
 | 이미지 **안에** 들어 있는 응답 파일 (`Windows\Panther\Unattend\`, `Windows\Panther\unattend.xml`, `Windows\System32\Sysprep\unattend.xml`, `C:\unattend.xml`, 레지스트리의 `Setup\UnattendFile`) | Windows가 DelayOS의 응답 파일보다 먼저 읽을 수 있으므로 `*.iso-bak`으로 이름을 바꿔 **옆에 보관**하고 DelayOS의 응답 파일(계정 `DelayOS`, 자동 로그인, 연동 도우미)이 쓰이게 합니다 |
 | 이미지의 `SetupComplete.cmd`, `OOBE.cmd`, 레지스트리에 미리 넣어 둔 설정, 미리 설치된 프로그램 | **그대로 동작합니다.** 이미지 고유의 설정과 DelayOS의 설정이 함께 적용됩니다 |
 | PowerShell 모듈, Defender, 정품 인증 WMI 등이 빠진 이미지 | `finish.ps1`과 연동 도우미는 단계마다 따로 실패를 넘깁니다(예: 작업 등록은 `schtasks.exe`로 대체). 건너뛴 단계는 `done.json`의 `skipped`와 `delay-winsetup status`에 나옵니다. 연동 도우미만 설치되면 성공으로 봅니다 |

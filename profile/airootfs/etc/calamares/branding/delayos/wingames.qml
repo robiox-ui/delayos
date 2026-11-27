@@ -65,6 +65,8 @@ Rectangle {
         Global.insert("delayos_win_edition", edition)
         Global.insert("delayos_win_key", keyField.text.trim().toUpperCase())
         Global.insert("delayos_win_iso", isoField.text.trim())
+        // the summary page words the ISO line differently for the ISO carried by the live medium
+        Global.insert("delayos_win_iso_bundled", bundledIso !== "" && isoField.text.trim() === bundledIso)
         Global.insert("delayos_win_cleanup", !cleanup ? "off" : ((cleanupCustom && isoField.text.trim() !== "") ? "on" : "auto"))
     }
     Component.onCompleted: { applyBundled(); publish() }
