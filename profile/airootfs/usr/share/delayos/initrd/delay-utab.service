@@ -1,0 +1,10 @@
+# Initramfs only (mkinitcpio hook "delay-boot"): see /usr/lib/initcpio/install/delay-boot.
+[Unit]
+Description=DelayOS: create /run/mount/utab.event before anything else writes to /run
+DefaultDependencies=no
+Before=systemd-journald.service systemd-udevd.service kmod-static-nodes.service systemd-modules-load.service systemd-tmpfiles-setup-dev-early.service systemd-tmpfiles-setup-dev.service systemd-tmpfiles-setup.service systemd-vconsole-setup.service sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/systemd-tmpfiles --create /usr/lib/delayos/utab.conf

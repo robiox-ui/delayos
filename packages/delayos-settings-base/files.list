@@ -64,3 +64,6 @@ usr/share/polkit-1/actions/org.delayos.recovery.policy
 etc/xdg/plasma-workspace/env/delay-render.sh
 usr/lib/delayos/delay-render-detect
 usr/share/delayos/render-software/
+# boot time: initramfs hook (docs/reports/optimize-rounds.md, round 10)
+usr/lib/initcpio/install/delay-boot
+usr/share/delayos/initrd/

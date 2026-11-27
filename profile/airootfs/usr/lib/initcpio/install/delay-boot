@@ -1,0 +1,36 @@
+#!/bin/bash
+# mkinitcpio install hook of DelayOS (docs/reports/optimize-rounds.md, round 10). Needs the "systemd" hook.
+#
+# PID 1 watches the mount table through libmount. As long as /run/mount/utab.event does not exist,
+# libmount watches the directory above it for the file to appear, which in a fresh /run means every
+# file or directory created directly in /run wakes the watch. systemd allows that watch five
+# wake-ups per second; after that it starts no mount job until the second is over. In the
+# initramfs the limit was used up within 0.4 s, so the fstab mounts (and before the fstab change of
+# round 2 the root file system itself) waited about 0.55 s for nothing.
+#
+#   - delay-utab.service creates /run/mount/utab.event before anything else writes to /run, so the
+#     watch sits on that file from the start. /run is kept when the real system takes over, so its
+#     PID 1 starts with the watch in the right place as well.
+#   - The initramfs copies of journald, tmpfiles and vconsole-setup run without the credential
+#     directory systemd would mount (and unmount) for each of them: four to nine mount-table
+#     changes before the root file system. The real system is not changed, there the same
+#     services still receive credentials (systemd-creds, SMBIOS, boot loader).
+build() {
+    local u
+    for u in systemd-journald systemd-tmpfiles-setup-dev-early systemd-tmpfiles-setup-dev \
+             systemd-tmpfiles-setup systemd-vconsole-setup; do
+        add_file /usr/share/delayos/initrd/no-credentials.conf \
+                 "/etc/systemd/system/$u.service.d/10-delay-no-credentials.conf" 644
+    done
+    add_file /usr/share/delayos/initrd/utab.conf /usr/lib/delayos/utab.conf 644
+    add_file /usr/share/delayos/initrd/delay-utab.service /usr/lib/systemd/system/delay-utab.service 644
+    add_symlink /usr/lib/systemd/system/sysinit.target.wants/delay-utab.service ../delay-utab.service
+}
+
+help() {
+    cat <<HELPEOF
+DelayOS: keeps systemd's mount-table watch quiet in the initramfs, so that the root file system
+and the x-initrd.mount entries of /etc/fstab are mounted as soon as the disk is there.
+Only useful together with the "systemd" hook.
+HELPEOF
+}

@@ -101,6 +101,20 @@ echo 'GRUB_TOP_LEVEL="/boot/vmlinuz-linux-delayos"' >> /etc/default/grub
 # the snapshot menu of grub-btrfs is translated (delay-grub-ko; repeated by a pacman hook)
 /usr/lib/delayos/delay-grub-ko setup || true
 
+# ---- Boot time: initramfs hook (docs/reports/optimize-rounds.md, round 10) ----
+# delay-boot keeps PID 1's mount-table watch quiet in the initramfs, so the root file system and the
+# x-initrd.mount entries below are mounted as soon as the disk is there (about 0.55 s earlier).
+# The reasons are in /usr/lib/initcpio/install/delay-boot. Calamares builds the initramfs after
+# this script (initcpio module), with the systemd hook (initcpiocfg.conf: useSystemdHook).
+mkdir -p /etc/mkinitcpio.conf.d
+cat > /etc/mkinitcpio.conf.d/delayos-boot.conf <<'EOF'
+# DelayOS (delay-postinstall), boot time: docs/reports/optimize-rounds.md, rounds 2 and 10.
+# delay-boot: /usr/lib/initcpio/install/delay-boot (only with the systemd hook).
+case " ${HOOKS[*]} " in
+  *" systemd "*) if [[ -f /usr/lib/initcpio/install/delay-boot ]]; then HOOKS+=(delay-boot); fi ;;
+esac
+EOF
+
 # ---- Boot time: mount the fstab file systems in the initramfs (docs/reports/optimize-rounds.md, round 2) ----
 # PID 1 stops starting mount jobs for up to a second once the mount table has changed more than
 # five times within a second, and the first moments of userspace always use that up. /home,
@@ -128,10 +142,9 @@ if [[ -s /etc/fstab ]] && awk '$1 !~ /^#/ && $2 == "/" && $3 == "btrfs" { f = 1 
       o != $4 { $4 = o }
       { print }' /etc/fstab > /etc/fstab.delay-new && [[ -s /etc/fstab.delay-new ]]; then
     cat /etc/fstab.delay-new > /etc/fstab
-    mkdir -p /etc/mkinitcpio.conf.d
-    cat > /etc/mkinitcpio.conf.d/delayos-boot.conf <<'EOF'
-# DelayOS (delay-postinstall): /boot/efi is mounted in the initramfs (x-initrd.mount in /etc/fstab),
-# which needs the vfat module there. Code page 437 and the ascii charset are built into the kernel.
+    cat >> /etc/mkinitcpio.conf.d/delayos-boot.conf <<'EOF'
+# /boot/efi is mounted in the initramfs (x-initrd.mount in /etc/fstab), which needs the vfat module
+# there. Code page 437 and the ascii charset are built into the kernel.
 MODULES+=(vfat)
 EOF
   fi
